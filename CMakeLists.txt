@@ -545,7 +545,7 @@ set (PBRT_SOURCE
 
   src/pbrt/cmd/pspec_gpu.cpp
   )
-  
+
 if (MSVC)
     set (PBRT_SOURCE ${PBRT_SOURCE} src/pbrt/visualstudio.natvis)
 endif ()
@@ -572,7 +572,7 @@ set (PBRT_SOURCE_HEADERS
   src/pbrt/scene.h
   src/pbrt/shapes.h
   src/pbrt/textures.h
-  )  
+  )
 
 SET (PBRT_CPU_SOURCE
   src/pbrt/cpu/aggregates.cpp
@@ -773,6 +773,11 @@ if (PBRT_CUDA_ENABLED)
   cuda_compile_and_embed (PBRT_EMBEDDED_PTX src/pbrt/gpu/optix.cu optix.cu)
 endif ()
 
+set(GRAPH
+        src/pbrt/graph/graph.h
+        src/pbrt/graph/graph.cpp
+)
+
 source_group ("Source Files" FILES ${PBRT_SOURCE})
 source_group ("Header Files" FILES ${PBRT_SOURCE_HEADERS})
 source_group ("Source Files/cpu" FILES ${PBRT_CPU_SOURCE})
@@ -785,6 +790,7 @@ if (PBRT_CUDA_ENABLED)
   source_group ("Source Files/gpu" FILES ${PBRT_GPU_SOURCE})
   source_group ("Header Files/gpu" FILES ${PBRT_GPU_SOURCE_HEADERS})
 endif ()
+source_group ("Graph files" FILES ${GRAPH})
 
 ###########################################################################
 # pbrt libraries and executables
@@ -836,6 +842,7 @@ add_library (pbrt_lib STATIC
   ${PBRT_WAVEFRONT_SOURCE_HEADERS}
   ${PBRT_GPU_SOURCE}
   ${PBRT_GPU_SOURCE_HEADERS}
+  ${GRAPH}
 
   src/ext/gtest/gtest-all.cc
   src/ext/lodepng/lodepng.cpp
@@ -930,7 +937,7 @@ target_link_libraries (rgb2spec_opt PRIVATE ${CMAKE_THREAD_LIBS_INIT} pbrt_opt p
 
 if (NOT PBRT_USE_PREGENERATED_RGB_TO_SPECTRUM_TABLES)
   add_custom_command (OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rgbspectrum_aces.cpp
-      COMMAND rgb2spec_opt 64 ${CMAKE_CURRENT_BINARY_DIR}/rgbspectrum_aces.cpp ACES2065_1 
+      COMMAND rgb2spec_opt 64 ${CMAKE_CURRENT_BINARY_DIR}/rgbspectrum_aces.cpp ACES2065_1
       DEPENDS rgb2spec_opt)
 
   add_custom_command (OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rgbspectrum_dci_p3.cpp
@@ -964,6 +971,21 @@ set_target_properties (pbrt_exe PROPERTIES OUTPUT_NAME pbrt)
 add_sanitizers (pbrt_exe)
 
 set_property (TARGET pbrt_exe PROPERTY FOLDER "cmd")
+
+######################
+# Graph test
+
+add_executable(graph_test src/pbrt/cmd/graph_test.cpp)
+add_executable(pbrt::graph_test ALIAS graph_test)
+
+target_compile_definitions(graph_test PRIVATE ${PBRT_DEFINITIONS})
+target_compile_options(graph_test PRIVATE ${PBRT_CXX_FLAGS})
+target_include_directories(graph_test PRIVATE src src/ext)
+target_link_libraries(graph_test PRIVATE ${ALL_PBRT_LIBS} pbrt_opt pbrt_warnings)
+
+add_sanitizers(graph_test)
+
+set_property(TARGET graph_test PROPERTY FOLDER "cmd")
 
 ######################
 # imgtool
