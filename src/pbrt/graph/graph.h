@@ -3,6 +3,8 @@
 #include <vector>
 #include <pbrt/util/vecmath.h>
 #include <optional>
+#include <iostream>
+#include <fstream>
 
 namespace graph {
 
@@ -29,11 +31,23 @@ struct Edge {
     Vertex* from = nullptr;
     Vertex* to = nullptr;
     EdgeData* data = nullptr;
+
+    bool operator==(const Edge& other) const {
+        return id == other.id;
+    }
 };
 
 struct Path {
     int id = -1;
     std::vector<Edge*> edges;
+
+    bool operator==(const Path& other) const {
+        return id == other.id;
+    }
+};
+
+struct StreamFlags {
+    bool useCoors;
 };
 
 class Graph {
@@ -46,12 +60,15 @@ public:
 
     virtual Vertex* AddVertex(pbrt::Point3f& p) = 0;
 
-    std::optional<Edge*> AddEdge(Vertex* from, Vertex* to);
-    std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data);
+    std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
+    std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
 
     void AddPath(Path& path);
 
 protected:
+    void WriteToStream(std::ostream& out, StreamFlags flags);
+    void ReadFromStream(std::istream& in);
+
     std::vector<Vertex*> vertices;
     std::vector<Edge*> edges;
     std::vector<Path*> paths;
@@ -65,6 +82,9 @@ public:
     UniformGraph(UniformGraph& other) = default;
 
     Vertex* AddVertex(pbrt::Point3f& p) override;
+
+    friend std::ostream& operator<<(std::ostream& out, UniformGraph& v);
+    friend std::istream& operator>>(std::istream& in, UniformGraph& v);
 
 private:
     [[nodiscard]] std::tuple<pbrt::Point3i, pbrt::Point3f> FitToGraph(pbrt::Point3f& p) const;
@@ -84,6 +104,9 @@ public:
     }
 
     [[nodiscard]] UniformGraph* ToUniform(float spacing);
+
+    friend std::ostream& operator<<(std::ostream& out, FreeGraph& v);
+    friend std::istream& operator>>(std::istream& in, FreeGraph& v);
 };
 
 class ClusterableGraph : public FreeGraph {

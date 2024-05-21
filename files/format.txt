@@ -1,0 +1,10 @@
+extra meta    super class
+
+flags         base class
+base meta
+vertices
+...
+edges
+...
+paths
+...
