@@ -39,7 +39,7 @@ std::optional<Edge*> Graph::GetEdge(int id) {
 
 std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, graph::EdgeData* data, bool checkValid) {
     if (checkValid) {
-        bool hasFrom, hasTo;
+        bool hasFrom = false, hasTo = false;
 
         for (auto v: vertices) {
             if (v == from)
@@ -63,7 +63,7 @@ std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, grap
 
 std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, graph::EdgeData* data) {
     Vertex* from, *to;
-    bool hasFrom, hasTo;
+    bool hasFrom = false, hasTo = false;
 
     for (auto v : vertices) {
         if (v->id == fromId) {
@@ -100,7 +100,7 @@ void Graph::AddPath(graph::Path& path) {
 
     for (auto edge : path.edges) {
         curTo = AddVertex(edge->to->point);
-        Edge* newEdge = AddEdge(curFrom, curTo, edge->data, false).value();
+        Edge* newEdge = AddEdge(curFrom, curTo, edge->data, true).value();
         newPath->edges.push_back(newEdge);
 
         curFrom = curTo;
