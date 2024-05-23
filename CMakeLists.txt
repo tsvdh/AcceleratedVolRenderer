@@ -786,35 +786,6 @@ if (PBRT_CUDA_ENABLED)
   source_group ("Header Files/gpu" FILES ${PBRT_GPU_SOURCE_HEADERS})
 endif ()
 
-######################
-# Graph lib
-
-set(GRAPH
-        src/pbrt/graph/graph.h
-        src/pbrt/graph/graph.cpp
-        src/pbrt/graph/integrator.h
-        src/pbrt/graph/integrator.cpp
-)
-
-source_group ("Graph files" FILES ${GRAPH})
-
-add_library(graph_lib STATIC
-        ${GRAPH}
-)
-add_library(pbrt::graph_lib ALIAS graph_lib)
-
-add_dependencies(graph_lib pbrt_soa_generated)
-
-target_compile_definitions(graph_lib PRIVATE ${PBRT_DEFINITIONS})
-
-target_include_directories(graph_lib PUBLIC src)
-
-target_compile_options(graph_lib PUBLIC ${PBRT_CXX_FLAGS})
-
-target_link_libraries(graph_lib PRIVATE pbrt_warnings pbrt_opt)
-
-add_sanitizers(graph_lib)
-
 ###########################################################################
 # pbrt libraries and executables
 
@@ -845,6 +816,50 @@ set (PBRT_SOA_GENERATED ${PBRT_SOA_GENERATED} ${CMAKE_CURRENT_BINARY_DIR}/wavefr
 add_custom_target (pbrt_soa_generated DEPENDS ${PBRT_SOA_GENERATED})
 
 set_property (TARGET soac PROPERTY FOLDER "cmd")
+
+######################
+# Graph lib
+
+set(GRAPH
+        src/pbrt/graph/graph.h
+        src/pbrt/graph/graph.cpp
+        src/pbrt/graph/integrator.h
+        src/pbrt/graph/integrator.cpp
+)
+
+source_group ("Graph files" FILES ${GRAPH})
+
+add_library(graph_lib STATIC
+        ${GRAPH}
+)
+add_library(pbrt::graph_lib ALIAS graph_lib)
+
+add_dependencies(graph_lib pbrt_soa_generated)
+
+target_compile_definitions(graph_lib PRIVATE ${PBRT_DEFINITIONS})
+
+target_include_directories(graph_lib PUBLIC
+        src
+        src/ext
+        ${STB_INCLUDE}
+        ${QOI_INCLUDE}
+        ${OPENEXR_INCLUDE}
+        ${ZLIB_INCLUDE_DIRS}
+        ${LIBDEFLATE_INCLUDE_DIRS}
+        ${FILESYSTEM_INCLUDE}
+        ${PTEX_INCLUDE}
+        ${DOUBLE_CONVERSION_INCLUDE}
+        ${NANOVDB_INCLUDE}
+        ${CMAKE_CURRENT_BINARY_DIR}
+        ${GLFW_INCLUDE}
+        ${GLAD_INCLUDE}
+)
+
+target_compile_options(graph_lib PUBLIC ${PBRT_CXX_FLAGS})
+
+target_link_libraries(graph_lib PRIVATE pbrt_warnings pbrt_opt)
+
+add_sanitizers(graph_lib)
 
 ######################
 # pbrt_lib

@@ -8,12 +8,14 @@
 
 namespace graph {
 
+using namespace pbrt;
+
 struct Edge;
 
 struct Vertex {
     int id = -1;
-    pbrt::Point3f point;
-    std::optional<pbrt::Point3i> coors;
+    Point3f point;
+    std::optional<Point3i> coors;
     std::vector<Edge*> inEdges;
     std::vector<Edge*> outEdges;
 
@@ -58,7 +60,7 @@ public:
     std::optional<Vertex*> GetVertex(int id);
     std::optional<Edge*> GetEdge(int id);
 
-    virtual Vertex* AddVertex(pbrt::Point3f& p) = 0;
+    virtual Vertex* AddVertex(Point3f& p) = 0;
 
     std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
     std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
@@ -81,13 +83,13 @@ public:
     explicit UniformGraph(float spacing) : spacing(spacing) {};
     UniformGraph(UniformGraph& other) = default;
 
-    Vertex* AddVertex(pbrt::Point3f& p) override;
+    Vertex* AddVertex(Point3f& p) override;
 
     friend std::ostream& operator<<(std::ostream& out, UniformGraph& v);
     friend std::istream& operator>>(std::istream& in, UniformGraph& v);
 
 private:
-    [[nodiscard]] std::tuple<pbrt::Point3i, pbrt::Point3f> FitToGraph(pbrt::Point3f& p) const;
+    [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(Point3f& p) const;
 
     float spacing;
 };
@@ -97,7 +99,7 @@ public:
     FreeGraph() = default;
     FreeGraph(FreeGraph &other) = default;
 
-    Vertex* AddVertex(pbrt::Point3f& p) override {
+    Vertex* AddVertex(Point3f& p) override {
         auto newVertex = new Vertex{curId++, p};
         vertices.push_back(newVertex);
         return newVertex;
