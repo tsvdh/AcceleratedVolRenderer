@@ -773,11 +773,6 @@ if (PBRT_CUDA_ENABLED)
   cuda_compile_and_embed (PBRT_EMBEDDED_PTX src/pbrt/gpu/optix.cu optix.cu)
 endif ()
 
-set(GRAPH
-        src/pbrt/graph/graph.h
-        src/pbrt/graph/graph.cpp
-)
-
 source_group ("Source Files" FILES ${PBRT_SOURCE})
 source_group ("Header Files" FILES ${PBRT_SOURCE_HEADERS})
 source_group ("Source Files/cpu" FILES ${PBRT_CPU_SOURCE})
@@ -790,7 +785,35 @@ if (PBRT_CUDA_ENABLED)
   source_group ("Source Files/gpu" FILES ${PBRT_GPU_SOURCE})
   source_group ("Header Files/gpu" FILES ${PBRT_GPU_SOURCE_HEADERS})
 endif ()
+
+######################
+# Graph lib
+
+set(GRAPH
+        src/pbrt/graph/graph.h
+        src/pbrt/graph/graph.cpp
+        src/pbrt/graph/integrator.h
+        src/pbrt/graph/integrator.cpp
+)
+
 source_group ("Graph files" FILES ${GRAPH})
+
+add_library(graph_lib STATIC
+        ${GRAPH}
+)
+add_library(pbrt::graph_lib ALIAS graph_lib)
+
+add_dependencies(graph_lib pbrt_soa_generated)
+
+target_compile_definitions(graph_lib PRIVATE ${PBRT_DEFINITIONS})
+
+target_include_directories(graph_lib PUBLIC src)
+
+target_compile_options(graph_lib PUBLIC ${PBRT_CXX_FLAGS})
+
+target_link_libraries(graph_lib PRIVATE pbrt_warnings pbrt_opt)
+
+add_sanitizers(graph_lib)
 
 ###########################################################################
 # pbrt libraries and executables
@@ -842,7 +865,6 @@ add_library (pbrt_lib STATIC
   ${PBRT_WAVEFRONT_SOURCE_HEADERS}
   ${PBRT_GPU_SOURCE}
   ${PBRT_GPU_SOURCE_HEADERS}
-  ${GRAPH}
 
   src/ext/gtest/gtest-all.cc
   src/ext/lodepng/lodepng.cpp
@@ -903,7 +925,9 @@ set (ALL_PBRT_LIBS
   utf8proc
   glfw
   glad
-  OpenGL::GL)
+  OpenGL::GL
+  graph_lib
+)
 
 if (PBRT_CUDA_ENABLED)
   set_property (TARGET pbrt_lib PROPERTY CUDA_SEPARABLE_COMPILATION ON)

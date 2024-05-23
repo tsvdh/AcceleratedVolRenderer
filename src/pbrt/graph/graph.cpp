@@ -1,4 +1,4 @@
-#include <pbrt/graph/graph.h>
+#include "graph.h"
 #include <stdexcept>
 #include <iostream>
 
