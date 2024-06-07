@@ -1,6 +1,7 @@
 #include "integrator.h"
 
 #include <pbrt/materials.h>
+#include <iostream>
 
 namespace graph {
 
@@ -9,6 +10,14 @@ using namespace pbrt;
 STAT_COUNTER("Integrator/Volume interactions", volumeInteractions)
 STAT_COUNTER("Integrator/Surface interactions", surfaceInteractions)
 STAT_PERCENT("Integrator/Regularized BSDFs", regularizedBSDFs, totalBSDFs)
+
+FreeGraph pathGraph;
+
+void GraphVolPathIntegrator::WorkFinished() {
+    std::ofstream file("files/one_pixel.txt");
+    file << pathGraph;
+    file.close();
+}
 
 // GraphVolPathIntegrator Method Definitions
 SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
@@ -19,8 +28,11 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
     bool specularBounce = false, anyNonSpecularBounces = false;
     int depth = 0;
     Float etaScale = 1;
-
     LightSampleContext prevIntrContext;
+
+    // Init graph path variables
+    Path* path = pathGraph.AddPath();
+    Vertex* curVertex = nullptr;
 
     while (true) {
         // Sample segment of volumetric scattering path
@@ -28,6 +40,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                                       depth, L, beta)
                 .c_str());
         pstd::optional<ShapeIntersection> si = Intersect(ray);
+
         if (ray.medium) {
             // Sample the participating medium
             bool scattered = false, terminated = false;
@@ -38,7 +51,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             RNG rng(hash0, hash1);
 
             SampledSpectrum T_maj = SampleT_maj(
-                    ray, tMax, sampler.Get1D(), rng, lambda,
+                    ray, tMax, sampler.Get1D(), rng, lambda, // NOLINT(*-slicing)
                     [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj,
                         SampledSpectrum T_maj) {
                         // Handle medium scattering event for ray
@@ -70,6 +83,17 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                         // Sample medium scattering event type and update path
                         Float um = rng.Uniform<Float>();
                         int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+
+                        // add edge to graph
+                        if (mode == 0 || mode == 1) {
+                            auto newVertex = pathGraph.AddVertex(p);
+                            if (curVertex) {
+                                auto edge = pathGraph.AddEdge(curVertex, newVertex, nullptr, false);
+                                path->edges.push_back(edge.value());
+                            }
+                            curVertex = newVertex;
+                        }
+
                         if (mode == 0) {
                             // Handle absorption along ray path
                             terminated = true;
@@ -92,6 +116,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                                 // Sample direct lighting at volume-scattering event
                                 MediumInteraction intr(p, -ray.d, ray.time, ray.medium,
                                                        mp.phase);
+
                                 L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
 
                                 // Sample new direction at real-scattering event
@@ -137,6 +162,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             r_u *= T_maj / T_maj[0];
             r_l *= T_maj / T_maj[0];
         }
+
         // Handle surviving unscattered rays
         // Add emitted light at volume path vertex or from the environment
         if (!si) {
@@ -154,9 +180,9 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                     }
                 }
             }
-
             break;
         }
+
         SurfaceInteraction& isect = si->intr;
         if (SampledSpectrum Le = isect.Le(-ray.d, lambda); Le) {
             // Add contribution of emission from intersected surface
@@ -264,21 +290,21 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                 Ray r = base.SpawnRayTo(probeSeg->p1);
                 if (r.d == Vector3f(0, 0, 0))
                     break;
-                pstd::optional<ShapeIntersection> si = Intersect(r, 1);
-                if (!si)
+                pstd::optional<ShapeIntersection> ssi = Intersect(r, 1);
+                if (!ssi)
                     break;
-                base = si->intr;
-                if (si->intr.material == isect.material)
-                    interactionSampler.Add(SubsurfaceInteraction(si->intr), 1.f);
+                base = ssi->intr; // NOLINT(*-slicing)
+                if (ssi->intr.material == isect.material)
+                    interactionSampler.Add(SubsurfaceInteraction(ssi->intr), 1.f);
             }
 
             if (!interactionSampler.HasSample())
                 break;
 
             // Convert probe intersection to _BSSRDFSample_
-            SubsurfaceInteraction ssi = interactionSampler.GetSample();
+            SubsurfaceInteraction sssi = interactionSampler.GetSample();
             BSSRDFSample bssrdfSample =
-                    bssrdf.ProbeIntersectionToSample(ssi, scratchBuffer);
+                    bssrdf.ProbeIntersectionToSample(sssi, scratchBuffer);
             if (!bssrdfSample.Sp || !bssrdfSample.pdf)
                 break;
 
@@ -286,7 +312,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             Float pdf = interactionSampler.SampleProbability() * bssrdfSample.pdf[0];
             beta *= bssrdfSample.Sp / pdf;
             r_u *= bssrdfSample.pdf / bssrdfSample.pdf[0];
-            SurfaceInteraction pi = ssi;
+            SurfaceInteraction pi = sssi;
             pi.wo = bssrdfSample.wo;
             prevIntrContext = LightSampleContext(pi);
             // Possibly regularize subsurface BSDF
@@ -302,16 +328,16 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             L += SampleLd(pi, &Sw, lambda, sampler, beta, r_u);
 
             // Sample ray for indirect subsurface scattering
-            Float u = sampler.Get1D();
-            pstd::optional<BSDFSample> bs = Sw.Sample_f(pi.wo, u, sampler.Get2D());
-            if (!bs)
+            Float ssu = sampler.Get1D();
+            pstd::optional<BSDFSample> ssbs = Sw.Sample_f(pi.wo, ssu, sampler.Get2D());
+            if (!ssbs)
                 break;
-            beta *= bs->f * AbsDot(bs->wi, pi.shading.n) / bs->pdf;
-            r_l = r_u / bs->pdf;
+            beta *= ssbs->f * AbsDot(ssbs->wi, pi.shading.n) / ssbs->pdf;
+            r_l = r_u / ssbs->pdf;
             // Don't increment depth this time...
             DCHECK(!IsInf(beta.y(lambda)));
-            specularBounce = bs->IsSpecular();
-            ray = RayDifferential(pi.SpawnRay(bs->wi));
+            specularBounce = ssbs->IsSpecular();
+            ray = RayDifferential(pi.SpawnRay(ssbs->wi));
         }
 
         // Possibly terminate volumetric path with Russian roulette
@@ -329,6 +355,10 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
         }
     }
     return L;
+}
+
+void GraphVolPathIntegrator::VolTrace() {
+
 }
 
 SampledSpectrum GraphVolPathIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,
@@ -399,10 +429,10 @@ SampledSpectrum GraphVolPathIntegrator::SampleLd(const Interaction& intr, const 
         // Update transmittance for current ray segment
         if (lightRay.medium) {
             Float tMax = si ? si->tHit : (1 - ShadowEpsilon);
-            Float u = rng.Uniform<Float>();
+            Float mediumU = rng.Uniform<Float>();
             SampledSpectrum T_maj =
-                    SampleT_maj(lightRay, tMax, u, rng, lambda,
-                                [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj,
+                    SampleT_maj(lightRay, tMax, mediumU, rng, lambda,
+                                [&](Point3f p, MediumProperties& mp, SampledSpectrum sigma_maj,
                                     SampledSpectrum T_maj) {
                                     // Update ray transmittance estimate at sampled point
                                     // Update _T_ray_ and PDFs using ratio-tracking estimator
@@ -458,12 +488,15 @@ std::string GraphVolPathIntegrator::ToString() const {
 
 std::unique_ptr<GraphVolPathIntegrator> GraphVolPathIntegrator::Create(
         const ParameterDictionary& parameters, Camera camera, Sampler sampler,
-        Primitive aggregate, std::vector<Light> lights, const FileLoc* loc) {
+        Primitive aggregate, std::vector<Light> lights)
+{
     int maxDepth = parameters.GetOneInt("maxdepth", 5);
     std::string lightStrategy = parameters.GetOneString("lightsampler", "bvh");
     bool regularize = parameters.GetOneBool("regularize", false);
-    return std::make_unique<GraphVolPathIntegrator>(maxDepth, camera, sampler, aggregate,
-                                               lights, lightStrategy, regularize);
+
+    return std::make_unique<GraphVolPathIntegrator>(
+            maxDepth, std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights),
+            lightStrategy, regularize);
 }
 
 }

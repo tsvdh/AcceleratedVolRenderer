@@ -107,8 +107,14 @@ void Graph::AddPath(graph::Path& path) {
     }
 }
 
+Path* Graph::AddPath() {
+    auto path = new Path{curId++};
+    paths.push_back(path);
+    return path;
+}
+
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
-    out << flags.useCoors << NEW;
+    out << (flags.useCoors ? "True" : "False") << NEW;
 
     out << curId << SEP <<
            vertices.size() << SEP <<
@@ -137,7 +143,11 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
 
 void Graph::ReadFromStream(std::istream& in) {
     StreamFlags flags{};
-    in >> flags.useCoors;
+
+    std::string useCoors;
+    in >> useCoors;
+    if (useCoors == "True")
+        flags.useCoors = true;
 
     int verticesCap, edgesCap, pathsCap;
     in >> curId >> verticesCap >> edgesCap >> pathsCap;
@@ -214,14 +224,15 @@ inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(pbrt::P
 }
 
 std::ostream& operator<<(std::ostream& out, UniformGraph& g) {
-    out << g.spacing << NEW;
+    out << "uniform" << SEP << g.spacing << NEW;
 
     g.WriteToStream(out, StreamFlags{true});
     return out;
 }
 
 std::istream& operator>>(std::istream& in, UniformGraph& g) {
-    in >> g.spacing;
+    std::string name;
+    in >> name >> g.spacing;
 
     g.ReadFromStream(in);
     return in;
@@ -249,11 +260,16 @@ UniformGraph* FreeGraph::ToUniform(float spacing) {
 }
 
 std::ostream& operator<<(std::ostream& out, FreeGraph& g) {
+    out << "free" << NEW;
+
     g.WriteToStream(out, StreamFlags{false});
     return out;
 }
 
 std::istream& operator>>(std::istream& in, FreeGraph& g) {
+    std::string name;
+    in >> name;
+
     g.ReadFromStream(in);
     return in;
 }

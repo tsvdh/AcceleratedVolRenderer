@@ -1,7 +1,11 @@
 #pragma once
 
+#include "graph.h"
+
 #include <pbrt/pbrt.h>
 #include <pbrt/cpu/integrators.h>
+
+#include <utility>
 
 namespace graph {
 
@@ -11,23 +15,27 @@ class GraphVolPathIntegrator : public RayIntegrator {
 public:
     // GraphVolPathIntegrator Public Methods
     GraphVolPathIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate,
-                      std::vector<Light> lights,
-                      const std::string &lightSampleStrategy = "bvh",
-                      bool regularize = false)
-            : RayIntegrator(camera, sampler, aggregate, lights),
-              maxDepth(maxDepth),
-              lightSampler(LightSampler::Create(lightSampleStrategy, lights, Allocator())),
-              regularize(regularize) {}
+                           std::vector<Light> lights,
+                           const std::string &lightSampleStrategy = "bvh",
+                           bool regularize = false)
+            : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
+            maxDepth(maxDepth),
+            lightSampler(LightSampler::Create(lightSampleStrategy, lights, Allocator())),
+            regularize(regularize) {}
+
+    static void WorkFinished();
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
-                       VisibleSurface *visibleSurface) const;
+                       VisibleSurface *visibleSurface) const override;
+
+    void VolTrace();
 
     static std::unique_ptr<GraphVolPathIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
-            Primitive aggregate, std::vector<Light> lights, const FileLoc *loc);
+            Primitive aggregate, std::vector<Light> lights);
 
-    std::string ToString() const;
+    [[nodiscard]] std::string ToString() const override;
 
 private:
     // GraphVolPathIntegrator Private Methods

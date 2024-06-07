@@ -1,10 +1,13 @@
 #pragma once
 
 #include <vector>
-#include <pbrt/util/vecmath.h>
 #include <optional>
 #include <iostream>
 #include <fstream>
+
+#include <pbrt/util/vecmath.h>
+#include <pbrt/util/spectrum.h>
+#include <pbrt/lights.h>
 
 namespace graph {
 
@@ -16,8 +19,9 @@ struct Vertex {
     int id = -1;
     Point3f point;
     std::optional<Point3i> coors;
-    std::vector<Edge*> inEdges;
-    std::vector<Edge*> outEdges;
+    std::vector<Edge*> inEdges, outEdges;
+
+    // explicit Vertex(Point3f point) : point(point) {}
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
@@ -25,7 +29,14 @@ struct Vertex {
 };
 
 struct EdgeData {
-
+    SampledSpectrum L{0.f}, beta{1.f}, r_u{1.f}, r_l{1.f};
+    bool specularBounce = false, anyNonSpecularBounces = false;
+    int depth = 0;
+    Float etaScale = 1;
+    LightSampleContext prevIntrContext;
+    
+    EdgeData() = default;
+    EdgeData(EdgeData& edgeData) = default;
 };
 
 struct Edge {
@@ -33,6 +44,9 @@ struct Edge {
     Vertex* from = nullptr;
     Vertex* to = nullptr;
     EdgeData* data = nullptr;
+
+    // explicit Edge(Vertex* from, Vertex* to, EdgeData* data)
+    //     : from(from), to(to), data(data) {}
 
     bool operator==(const Edge& other) const {
         return id == other.id;
@@ -49,7 +63,7 @@ struct Path {
 };
 
 struct StreamFlags {
-    bool useCoors;
+    bool useCoors = false;
 };
 
 class Graph {
@@ -66,6 +80,7 @@ public:
     std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
 
     void AddPath(Path& path);
+    Path* AddPath();
 
 protected:
     void WriteToStream(std::ostream& out, StreamFlags flags);

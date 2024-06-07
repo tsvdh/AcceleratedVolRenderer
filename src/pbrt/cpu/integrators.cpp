@@ -40,6 +40,8 @@
 #include <pbrt/util/stats.h>
 #include <pbrt/util/string.h>
 
+#include <pbrt/graph/integrator.h>
+
 #include <algorithm>
 
 namespace pbrt {
@@ -61,6 +63,8 @@ std::string RandomWalkIntegrator::ToString() const {
 
 // Integrator Method Definitions
 Integrator::~Integrator() {}
+
+std::string curIntegratorName;
 
 // ImageTileIntegrator Method Definitions
 void ImageTileIntegrator::Render() {
@@ -194,6 +198,10 @@ void ImageTileIntegrator::Render() {
         if (waveStart == spp)
             progress.Done();
 
+        // notify graph integrator to clean up
+        if (curIntegratorName == "graphvolpath")
+            graph::GraphVolPathIntegrator::WorkFinished();
+
         // Optionally write current image to disk
         if (waveStart == spp || Options->writePartialImages || referenceImage) {
             LOG_VERBOSE("Writing image with spp = %d", waveStart);
@@ -256,8 +264,13 @@ void RayIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler
         ++nCameraRays;
         // Evaluate radiance along camera ray
         bool initializeVisibleSurface = camera.GetFilm().UsesVisibleSurface();
+
+        // auto start = std::chrono::high_resolution_clock::now();
         L = cameraRay->weight * Li(cameraRay->ray, lambda, sampler, scratchBuffer,
                                    initializeVisibleSurface ? &visibleSurface : nullptr);
+        // auto stop = std::chrono::high_resolution_clock::now();
+        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+        // std::cout << "whole ray: " << duration.count() << std::endl << std::endl;
 
         // Issue warning if unexpected radiance value is returned
         if (L.HasNaNs()) {
@@ -3647,6 +3660,8 @@ std::unique_ptr<Integrator> Integrator::Create(
     const std::string &name, const ParameterDictionary &parameters, Camera camera,
     Sampler sampler, Primitive aggregate, std::vector<Light> lights,
     const RGBColorSpace *colorSpace, const FileLoc *loc) {
+    curIntegratorName = name;
+
     std::unique_ptr<Integrator> integrator;
     if (name == "path")
         integrator =
@@ -3679,6 +3694,8 @@ std::unique_ptr<Integrator> Integrator::Create(
     else if (name == "sppm")
         integrator = SPPMIntegrator::Create(parameters, colorSpace, camera, sampler,
                                             aggregate, lights, loc);
+    else if (name == "graphvolpath")
+        integrator = graph::GraphVolPathIntegrator::Create(parameters, camera, sampler, aggregate, lights);
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
 
