@@ -265,12 +265,8 @@ void RayIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler
         // Evaluate radiance along camera ray
         bool initializeVisibleSurface = camera.GetFilm().UsesVisibleSurface();
 
-        // auto start = std::chrono::high_resolution_clock::now();
         L = cameraRay->weight * Li(cameraRay->ray, lambda, sampler, scratchBuffer,
                                    initializeVisibleSurface ? &visibleSurface : nullptr);
-        // auto stop = std::chrono::high_resolution_clock::now();
-        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-        // std::cout << "whole ray: " << duration.count() << std::endl << std::endl;
 
         // Issue warning if unexpected radiance value is returned
         if (L.HasNaNs()) {

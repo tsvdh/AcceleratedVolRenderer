@@ -14,7 +14,7 @@ STAT_PERCENT("Integrator/Regularized BSDFs", regularizedBSDFs, totalBSDFs)
 FreeGraph pathGraph;
 
 void GraphVolPathIntegrator::WorkFinished() {
-    std::ofstream file("files/one_pixel.txt");
+    std::ofstream file("files/graphs/one_pixel.txt");
     file << pathGraph;
     file.close();
 }
