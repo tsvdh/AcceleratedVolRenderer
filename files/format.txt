@@ -1,4 +1,5 @@
-extra meta	string-name float-spacing           super class    		
+graph desc  string-description
+extra meta	string-name (float-spacing)         super class
 
 flags 		bool(int)-useCoors			        base class
 base meta	int-curId,vertices,edges,paths

@@ -14,7 +14,19 @@ STAT_PERCENT("Integrator/Regularized BSDFs", regularizedBSDFs, totalBSDFs)
 FreeGraph pathGraph;
 
 void GraphVolPathIntegrator::WorkFinished() {
+    // Set the first edge of each path to length 10
+    // First edge from camera is only for direction illustration
+    for (auto path : pathGraph.GetPaths()) {
+        Vertex* from = path->edges[0]->from;
+        Vertex* to = path->edges[0]->to;
+
+        Vector3f edge = from->point - to->point;
+        Vector3f newEdge = Normalize(edge) * 10;
+        from->point = to->point + newEdge;
+    }
+
     std::ofstream file("files/graphs/one_pixel.txt");
+    file << "full_paths" << std::endl;
     file << pathGraph;
     file.close();
 }
@@ -33,6 +45,17 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
     // Init graph path variables
     Path* path = pathGraph.AddPath();
     Vertex* curVertex = nullptr;
+
+    auto AddNewVertex = [&](Point3f p) {
+        auto newVertex = pathGraph.AddVertex(p);
+        if (curVertex) {
+            auto edge = pathGraph.AddEdge(curVertex, newVertex, nullptr, false);
+            path->edges.push_back(edge.value());
+        }
+        curVertex = newVertex;
+    };
+
+    AddNewVertex(ray.o);
 
     while (true) {
         // Sample segment of volumetric scattering path
@@ -86,12 +109,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
 
                         // add edge to graph
                         if (mode == 0 || mode == 1) {
-                            auto newVertex = pathGraph.AddVertex(p);
-                            if (curVertex) {
-                                auto edge = pathGraph.AddEdge(curVertex, newVertex, nullptr, false);
-                                path->edges.push_back(edge.value());
-                            }
-                            curVertex = newVertex;
+                            AddNewVertex(p);
                         }
 
                         if (mode == 0) {

@@ -71,6 +71,10 @@ public:
     Graph() = default;
     Graph(Graph& other) = default;
 
+    std::vector<Vertex*> GetVertices() { return vertices; }
+    std::vector<Edge*> GetEdges() { return edges; }
+    std::vector<Path*> GetPaths() { return paths; }
+
     std::optional<Vertex*> GetVertex(int id);
     std::optional<Edge*> GetEdge(int id);
 
