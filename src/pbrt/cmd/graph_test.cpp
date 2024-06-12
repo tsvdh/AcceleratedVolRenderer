@@ -5,34 +5,67 @@
 #include <fstream>
 #include <iomanip>
 
+#include "pbrt/util/args.h"
+#include "pbrt/scene.h"
+
+using namespace pbrt;
+
 int main(int argc, char* argv[]) {
-    graph::FreeGraph g;
+    std::vector<std::string> args = GetCommandLineArguments(argv);
 
-    auto v1 = graph::Vertex{0, pbrt::Point3f{1, 1, 1}};
-    auto v2 = graph::Vertex{0, pbrt::Point3f{2, 2, 2}};
-    auto v3 = graph::Vertex{0, pbrt::Point3f{3, 3, 3}};
-    auto v4 = graph::Vertex{0, pbrt::Point3f{4, 4, 4}};
+    if (args.size() != 1) {
+        std::cout << "Error: expected exactly one argument" << std::endl;
+        return 0;
+    }
 
-    auto e1 = graph::Edge{0, &v1, &v2};
-    auto e2 = graph::Edge{0, &v2, &v3};
-    auto e3 = graph::Edge{0, &v3, &v4};
+    PBRTOptions options;
+    options.disablePixelJitter = true;
+    options.disableWavelengthJitter = true;
+    InitPBRT(options);
 
-    graph::Path path;
-    path.edges = {&e1, &e2, &e3};
-    g.AddPath(path);
+    BasicScene scene;
+    BasicSceneBuilder builder(&scene);
+    ParseFiles(&builder, args);
 
-    std::ofstream oFile1("files/test.txt");
-    oFile1 << g;
-    oFile1.close();
+    Medium medium = scene.CreateMedia()["cloud"];
+    Camera camera = scene.GetCamera();
 
-    // graph::UniformGraph g2;
-    // std::ifstream iFile("files/test.txt");
-    // iFile >> g2;
-    // iFile.close();
-    //
-    // std::ofstream oFile2("files/test2.txt");
-    // oFile2 << g2;
-    // oFile2.close();
+    SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
+
+    Point2i pPixel(600, 350);
+
+    CameraSample cameraSample;
+    cameraSample.pFilm = pPixel + Vector2f(0.5f, 0.5f);
+    cameraSample.time = 0.5f;
+    cameraSample.pLens = Point2f(0.5f, 0.5f);
+    cameraSample.filterWeight = 1;
+
+    Ray ray = camera.GenerateRay(cameraSample, lambda).value().ray;
+
+    ScratchBuffer buffer;
+    RayMajorantIterator iter = medium.SampleRay(ray, Infinity, lambda, buffer);
+    Point3f pointOnMedium = ray(iter.Next().value().tMin);
+
+    NamedTextures textures = scene.CreateTextures();
+    std::map<int, pstd::vector<Light>*> shapeIndexToAreaLights;
+    std::vector<Light> lights = scene.CreateLights(textures, &shapeIndexToAreaLights);
+
+    if (lights.size() != 1){
+        std::cout << "Error: expected one light source" << std::endl;
+        return 0;
+    }
+
+    Light light = lights[0];
+    if (light.Type() != LightType::DeltaDirection) {
+        std::cout << "Error: expected a directional light" << std::endl;
+    }
+    auto distantLight = light.Cast<DistantLight>();
+
+    Vector3f lightDir = Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
+    std::cout << lightDir << std::endl;
+
+    // graph::FreeGraph graph;
+    // graph.AddVertex();
 
     return 0;
 }

@@ -173,6 +173,8 @@ class LightBase {
         return SampledSpectrum(0.f);
     }
 
+    Transform GetRenderFromLight() { return renderFromLight; }
+
   protected:
     // LightBase Protected Methods
     static const DenselySampledSpectrum *LookupSpectrum(Spectrum s);
