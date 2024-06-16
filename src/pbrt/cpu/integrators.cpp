@@ -40,7 +40,7 @@
 #include <pbrt/util/stats.h>
 #include <pbrt/util/string.h>
 
-#include <pbrt/graph/integrator.h>
+#include <pbrt/graph/graph_integrator.h>
 
 #include <algorithm>
 
@@ -63,8 +63,6 @@ std::string RandomWalkIntegrator::ToString() const {
 
 // Integrator Method Definitions
 Integrator::~Integrator() {}
-
-std::string curIntegratorName;
 
 // ImageTileIntegrator Method Definitions
 void ImageTileIntegrator::Render() {
@@ -197,10 +195,6 @@ void ImageTileIntegrator::Render() {
             nextWaveSize = std::min(2 * nextWaveSize, 64);
         if (waveStart == spp)
             progress.Done();
-
-        // notify graph integrator to clean up
-        if (curIntegratorName == "graphvolpath")
-            graph::GraphVolPathIntegrator::WorkFinished();
 
         // Optionally write current image to disk
         if (waveStart == spp || Options->writePartialImages || referenceImage) {
@@ -3656,7 +3650,6 @@ std::unique_ptr<Integrator> Integrator::Create(
     const std::string &name, const ParameterDictionary &parameters, Camera camera,
     Sampler sampler, Primitive aggregate, std::vector<Light> lights,
     const RGBColorSpace *colorSpace, const FileLoc *loc) {
-    curIntegratorName = name;
 
     std::unique_ptr<Integrator> integrator;
     if (name == "path")

@@ -78,13 +78,15 @@ public:
     std::optional<Vertex*> GetVertex(int id);
     std::optional<Edge*> GetEdge(int id);
 
-    virtual Vertex* AddVertex(Point3f& p) = 0;
+    virtual Vertex* AddVertex(Point3f p) = 0;
 
     std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
     std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
 
-    void AddPath(Path& path);
+    void AddPath(const Path& path);
     Path* AddPath();
+
+    void WriteToDisk(const std::string& fileName, const std::string& desc);
 
 protected:
     void WriteToStream(std::ostream& out, StreamFlags flags);
@@ -102,13 +104,13 @@ public:
     explicit UniformGraph(float spacing) : spacing(spacing) {};
     UniformGraph(UniformGraph& other) = default;
 
-    Vertex* AddVertex(Point3f& p) override;
+    Vertex* AddVertex(Point3f p) override;
 
     friend std::ostream& operator<<(std::ostream& out, UniformGraph& v);
     friend std::istream& operator>>(std::istream& in, UniformGraph& v);
 
 private:
-    [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(Point3f& p) const;
+    [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(const Point3f& p) const;
 
     float spacing;
 };
@@ -118,7 +120,7 @@ public:
     FreeGraph() = default;
     FreeGraph(FreeGraph &other) = default;
 
-    Vertex* AddVertex(Point3f& p) override {
+    Vertex* AddVertex(Point3f p) override {
         auto newVertex = new Vertex{curId++, p};
         vertices.push_back(newVertex);
         return newVertex;

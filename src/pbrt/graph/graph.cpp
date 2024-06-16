@@ -88,7 +88,7 @@ std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, graph::EdgeDat
     return newEdge;
 }
 
-void Graph::AddPath(graph::Path& path) {
+void Graph::AddPath(const graph::Path& path) {
     auto newPath = new Path{curId++};
     paths.push_back(newPath);
 
@@ -197,8 +197,22 @@ void Graph::ReadFromStream(std::istream& in) {
     }
 }
 
+void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
+    std::ofstream file("files/graphs/" + fileName + ".txt");
+    file << desc << NEW;
+
+    auto asUniform = dynamic_cast<UniformGraph*>(this);
+    auto asFree = dynamic_cast<FreeGraph*>(this);
+    if (asUniform)
+        file << *asUniform;
+    if (asFree)
+        file << *asFree;
+
+    file.close();
+}
+
 // UniformGraph implementations
-Vertex* UniformGraph::AddVertex(pbrt::Point3f& p) {
+Vertex* UniformGraph::AddVertex(pbrt::Point3f p) {
     auto [coors, fittedPoint] = FitToGraph(p);
 
     for (auto vertex : vertices) {
@@ -211,7 +225,7 @@ Vertex* UniformGraph::AddVertex(pbrt::Point3f& p) {
     return newVertex;
 }
 
-inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(pbrt::Point3f& p) const {
+inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(const pbrt::Point3f& p) const {
     pbrt::Point3i coors;
     pbrt::Point3f fittedPoint;
 

@@ -457,6 +457,9 @@ class CloudMedium {
           wispiness(wispiness),
           frequency(frequency) {}
 
+    Bounds3f GetBounds() { return bounds; }
+    Transform GetRenderFromMedium() { return renderFromMedium; }
+
     PBRT_CPU_GPU
     bool IsEmissive() const { return false; }
 
@@ -610,6 +613,9 @@ class NanoVDBMedium {
                   Float sigmaScale, Float g, nanovdb::GridHandle<NanoVDBBuffer> dg,
                   nanovdb::GridHandle<NanoVDBBuffer> tg, Float LeScale,
                   Float temperatureOffset, Float temperatureScale, Allocator alloc);
+
+    Bounds3f GetBounds() { return bounds; }
+    Transform GetRenderFromMedium() { return renderFromMedium; }
 
     PBRT_CPU_GPU
     bool IsEmissive() const { return temperatureFloatGrid && LeScale > 0; }

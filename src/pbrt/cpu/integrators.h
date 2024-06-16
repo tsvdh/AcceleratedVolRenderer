@@ -84,7 +84,7 @@ class ImageTileIntegrator : public Integrator {
                         std::vector<Light> lights)
         : Integrator(aggregate, lights), camera(camera), samplerPrototype(sampler) {}
 
-    void Render();
+    void Render() override;
 
     virtual void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
                                      ScratchBuffer &scratchBuffer) = 0;
@@ -104,7 +104,7 @@ class RayIntegrator : public ImageTileIntegrator {
         : ImageTileIntegrator(camera, sampler, aggregate, lights) {}
 
     void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
-                             ScratchBuffer &scratchBuffer) final;
+                             ScratchBuffer &scratchBuffer);
 
     virtual SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda,
                                Sampler sampler, ScratchBuffer &scratchBuffer,

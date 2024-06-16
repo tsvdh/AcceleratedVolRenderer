@@ -823,8 +823,11 @@ set_property (TARGET soac PROPERTY FOLDER "cmd")
 set(GRAPH
         src/pbrt/graph/graph.h
         src/pbrt/graph/graph.cpp
-        src/pbrt/graph/integrator.h
-        src/pbrt/graph/integrator.cpp
+        src/pbrt/graph/graph_integrator.h
+        src/pbrt/graph/graph_integrator.cpp
+        src/pbrt/graph/vol_boundary.h
+        src/pbrt/graph/vol_boundary.cpp
+        src/pbrt/graph/graph_T_sampler.h
 )
 
 source_group ("Graph files" FILES ${GRAPH})
