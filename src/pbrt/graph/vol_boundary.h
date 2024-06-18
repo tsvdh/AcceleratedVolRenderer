@@ -2,6 +2,7 @@
 
 #include <pbrt/pbrt.h>
 #include <pbrt/util/vecmath.h>
+#include <pbrt/cpu/primitive.h>
 #include "graph.h"
 
 namespace graph {
@@ -10,14 +11,15 @@ using namespace pbrt;
 
 class VolBoundary {
 public:
-    VolBoundary(Medium& medium, Point3f center)
-        : medium(medium), center(center) {}
+    explicit VolBoundary(Primitive& accel, SampledWavelengths lambda);
 
-    void CaptureBoundary(UniformGraph& graph, int horizontalStep, int verticalStep);
+    UniformGraph* CaptureBoundary(float graphSpacing, int horizontalStep, int verticalStep);
 
 private:
-    Medium& medium;
-    Point3f center;
+    SampledWavelengths lambda;
+    Medium medium;
+    Point3f boundsCenter;
+    float maxDistToCenter;
 };
 
 }

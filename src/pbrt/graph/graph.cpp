@@ -240,7 +240,7 @@ inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(const p
 std::ostream& operator<<(std::ostream& out, UniformGraph& g) {
     out << "uniform" << SEP << g.spacing << NEW;
 
-    g.WriteToStream(out, StreamFlags{true});
+    g.WriteToStream(out, StreamFlags{false});
     return out;
 }
 
