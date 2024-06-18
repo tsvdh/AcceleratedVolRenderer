@@ -41,6 +41,8 @@ class BVHAggregate {
     pstd::optional<ShapeIntersection> Intersect(const Ray &ray, Float tMax) const;
     bool IntersectP(const Ray &ray, Float tMax) const;
 
+    std::vector<Primitive>& GetPrimitives() { return primitives; }
+
   private:
     // BVHAggregate Private Methods
     BVHBuildNode *buildRecursive(ThreadLocal<Allocator> &threadAllocators,

@@ -55,6 +55,8 @@ class GeometricPrimitive {
     pstd::optional<ShapeIntersection> Intersect(const Ray &r, Float tMax) const;
     bool IntersectP(const Ray &r, Float tMax) const;
 
+  MediumInterface& GetMediumInterface() { return mediumInterface; }
+
   private:
     // GeometricPrimitive Private Members
     Shape shape;
