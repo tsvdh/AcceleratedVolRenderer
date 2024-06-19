@@ -134,7 +134,8 @@ void GraphVolPathIntegrator::Render() {
                        });
     }
 
-    FreeGraph surfaceGraph;
+    // FreeGraph surfaceGraph;
+    FreeGraph pathGraph;
 
     // Render image in waves
     while (waveStart < spp) {
@@ -154,7 +155,7 @@ void GraphVolPathIntegrator::Render() {
                 for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
                     threadSampleIndex = sampleIndex;
                     sampler.StartPixelSample(pPixel, sampleIndex);
-                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer, surfaceGraph);
+                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer, pathGraph);
                     scratchBuffer.Reset();
                 }
 
@@ -223,7 +224,19 @@ void GraphVolPathIntegrator::Render() {
         }
     }
 
-    surfaceGraph.WriteToDisk("camera_surface", "surface");
+    // surfaceGraph.WriteToDisk("camera_surface", "surface");
+
+    // Set the first edge of each path to length 1-
+    // First edge from camera is only for direction illustration
+    for (auto pair : pathGraph.GetPaths()) {
+        Path* path = pair.second;
+        Vertex* from = path->edges[0]->from;
+        Vertex* to = path->edges[1]->from;
+
+        Vector3f edge = from->point - to->point;
+        from->point = to->point + Normalize(edge) * 10;
+    }
+    pathGraph.WriteToDisk("one_pixel", "full_paths");
 
     if (mseOutFile)
         fclose(mseOutFile);
@@ -308,19 +321,19 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
     LightSampleContext prevIntrContext;
 
     // Init graph path variables
-    // Path* path = pathGraph.AddPath();
-    // Vertex* curVertex = nullptr;
-    //
-    // auto AddNewVertex = [&](Point3f p) {
-    //     auto newVertex = pathGraph.AddVertex(p);
-    //     if (curVertex) {
-    //         auto edge = pathGraph.AddEdge(curVertex, newVertex, nullptr, false);
-    //         path->edges.push_back(edge.value());
-    //     }
-    //     curVertex = newVertex;
-    // };
-    //
-    // AddNewVertex(ray.o);
+    Path* path = graph.AddPath();
+    Vertex* curVertex = nullptr;
+
+    auto AddNewVertex = [&](Point3f p) {
+        auto newVertex = graph.AddVertex(p);
+        if (curVertex) {
+            auto edge = graph.AddEdge(curVertex, newVertex, nullptr, false);
+            path->edges.push_back(edge.value());
+        }
+        curVertex = newVertex;
+    };
+
+    AddNewVertex(ray.o);
 
     while (true) {
         // Sample segment of volumetric scattering path
@@ -379,9 +392,9 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                         int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
 
                         // add edge to graph
-                        // if (mode == 0 || mode == 1) {
-                        //     AddNewVertex(p);
-                        // }
+                        if (mode == 0 || mode == 1) {
+                            AddNewVertex(p);
+                        }
 
                         if (mode == 0) {
                             // Handle absorption along ray path
@@ -441,8 +454,6 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                             return beta && r_u;
                         }
                     });
-
-            return SampledSpectrum(0);
 
             // Handle terminated, scattered, and unscattered medium rays
             if (terminated || !beta || !r_u)

@@ -22,38 +22,31 @@ std::istream& operator>>(std::istream& in, pbrt::Point3<T>& p) {
 
 // Graph implementations
 std::optional<Vertex*> Graph::GetVertex(int id) {
-    for (auto v: vertices) {
-        if (v->id == id)
-            return v;
-    }
-    return {};
+    auto result = vertices.find(id);
+    if (result == vertices.end())
+        return {};
+
+    return result->second;
 }
 
 std::optional<Edge*> Graph::GetEdge(int id) {
-    for (auto& e : edges) {
-        if (e->id == id)
-            return e;
-    }
-    return {};
+    auto result = edges.find(id);
+    if (result == edges.end())
+        return {};
+
+    return result->second;
 }
 
 std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, graph::EdgeData* data, bool checkValid) {
     if (checkValid) {
-        bool hasFrom = false, hasTo = false;
-
-        for (auto v: vertices) {
-            if (v == from)
-                hasFrom = true;
-            if (v == to)
-                hasTo = true;
-        }
-
-        if (!hasFrom || !hasTo)
+        if (vertices.find(from->id) == vertices.end())
+            return {};
+        if (vertices.find(to->id) == vertices.end())
             return {};
     }
 
-    auto newEdge = new Edge{curId++, from, to, data};
-    edges.push_back(newEdge);
+    auto newEdge = new Edge{++curId, from, to, data};
+    edges.insert({curId, newEdge});
 
     from->outEdges.push_back(newEdge);
     to->inEdges.push_back(newEdge);
@@ -62,35 +55,26 @@ std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, grap
 }
 
 std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, graph::EdgeData* data) {
-    Vertex* from, *to;
-    bool hasFrom = false, hasTo = false;
-
-    for (auto v : vertices) {
-        if (v->id == fromId) {
-            hasFrom = true;
-            from = v;
-        }
-        if (v->id == toId) {
-            hasTo = true;
-            to = v;
-        }
-    }
-
-    if (!hasFrom || !hasTo)
+    auto fromResult = vertices.find(fromId);
+    if (fromResult == vertices.end())
         return {};
 
-    auto newEdge = new Edge{id, from, to, data};
-    edges.push_back(newEdge);
+    auto toResult = vertices.find(toId);
+    if (toResult == vertices.end())
+        return {};
 
-    from->outEdges.push_back(newEdge);
-    to->inEdges.push_back(newEdge);
+    auto newEdge = new Edge{id, fromResult->second, toResult->second, data};
+    edges[id] = newEdge;
+
+    fromResult->second->outEdges.push_back(newEdge);
+    toResult->second->inEdges.push_back(newEdge);
 
     return newEdge;
 }
 
 void Graph::AddPath(const graph::Path& path) {
-    auto newPath = new Path{curId++};
-    paths.push_back(newPath);
+    auto newPath = new Path{++curId};
+    paths[curId] = newPath;
 
     if (path.edges.empty())
         return;
@@ -98,7 +82,7 @@ void Graph::AddPath(const graph::Path& path) {
     Vertex* curFrom = AddVertex(path.edges[0]->from->point);
     Vertex* curTo;
 
-    for (auto edge : path.edges) {
+    for (Edge* edge : path.edges) {
         curTo = AddVertex(edge->to->point);
         Edge* newEdge = AddEdge(curFrom, curTo, edge->data, true).value();
         newPath->edges.push_back(newEdge);
@@ -108,8 +92,8 @@ void Graph::AddPath(const graph::Path& path) {
 }
 
 Path* Graph::AddPath() {
-    auto path = new Path{curId++};
-    paths.push_back(path);
+    auto path = new Path{++curId};
+    paths[curId] = path;
     return path;
 }
 
@@ -121,20 +105,23 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
            edges.size() << SEP <<
            paths.size() << NEW;
 
-    for (auto vertex : vertices) {
+    for (auto pair : vertices) {
+        Vertex* vertex = pair.second;
         out << vertex->id << SEP << vertex->point ;
         if (flags.useCoors)
             out << vertex->coors.value();
         out << NEW;
     }
 
-    for (auto edge : edges) {
+    for (auto pair : edges) {
+        Edge* edge = pair.second;
         out << edge->id << SEP << edge->from->id << SEP << edge->to->id << NEW;
     }
 
-    for (auto path : paths) {
+    for (auto pair : paths) {
+        Path* path = pair.second;
         out << path->id << SEP << path->edges.size() << SEP;
-        for (auto edge : path->edges) {
+        for (Edge* edge : path->edges) {
             out << edge->id << SEP;
         }
         out << NEW;
@@ -160,7 +147,7 @@ void Graph::ReadFromStream(std::istream& in) {
         pbrt::Point3f point;
         in >> id >> point;
         auto vertex = new Vertex{id, point};
-        vertices.push_back(vertex);
+        vertices[id] = vertex;
 
         if (flags.useCoors) {
             pbrt::Point3i coors;
@@ -181,18 +168,13 @@ void Graph::ReadFromStream(std::istream& in) {
         in >> id >> pathLength;
 
         auto path = new Path{id};
-        paths.push_back(path);
+        paths[id] = path;
 
         for (int j = 0; j < pathLength; ++j) {
-            int pathId;
-            in >> pathId;
+            int pathEdgeId;
+            in >> pathEdgeId;
 
-            for (auto edge : edges) {
-                if (edge->id == pathId) {
-                    path->edges.push_back(edge);
-                    break;
-                }
-            }
+            path->edges.push_back(edges[pathEdgeId]);
         }
     }
 }
@@ -214,15 +196,26 @@ void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
 // UniformGraph implementations
 Vertex* UniformGraph::AddVertex(pbrt::Point3f p) {
     auto [coors, fittedPoint] = FitToGraph(p);
+    auto newVertex = new Vertex{curId + 1, fittedPoint, coors};
 
-    for (auto vertex : vertices) {
-        if (vertex->coors == coors)
-            return vertex;
+    auto result = coorsMap.insert({coors.ToString(), newVertex});
+    if (result.second) {
+        vertices[++curId] = newVertex;
+        return newVertex;
     }
+    return result.first->second;
+}
 
-    auto newVertex = new Vertex{curId++, fittedPoint, coors};
-    vertices.push_back(newVertex);
-    return newVertex;
+Vertex* UniformGraph::AddVertex(int id, pbrt::Point3f p) {
+    auto [coors, fittedPoint] = FitToGraph(p);
+    auto newVertex = new Vertex{id, fittedPoint, coors};
+
+    auto result = coorsMap.insert({coors.ToString(), newVertex});
+    if (result.second) {
+        vertices[id] = newVertex;
+        return newVertex;
+    }
+    return result.first->second;
 }
 
 inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(const pbrt::Point3f& p) const {
@@ -256,7 +249,8 @@ std::istream& operator>>(std::istream& in, UniformGraph& g) {
 UniformGraph* FreeGraph::ToUniform(float spacing) {
     auto uniform = new UniformGraph(spacing);
 
-    for (auto oldVertex : vertices) {
+    for (auto oldPair : vertices) {
+        Vertex* oldVertex = oldPair.second;
         Vertex* curVertex = uniform->AddVertex(oldVertex->point);
 
         for (Edge* inEdge : oldVertex->inEdges) {
@@ -269,6 +263,8 @@ UniformGraph* FreeGraph::ToUniform(float spacing) {
             uniform->AddEdge(curVertex, outVertex, outEdge->data, false);
         }
     }
+
+    // TODO: maintain paths
 
     return uniform;
 }

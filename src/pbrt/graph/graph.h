@@ -13,7 +13,10 @@ namespace graph {
 
 using namespace pbrt;
 
+struct Vertex;
 struct Edge;
+struct EdgeData;
+struct Path;
 
 struct Vertex {
     int id = -1;
@@ -71,14 +74,15 @@ public:
     Graph() = default;
     Graph(Graph& other) = default;
 
-    std::vector<Vertex*> GetVertices() { return vertices; }
-    std::vector<Edge*> GetEdges() { return edges; }
-    std::vector<Path*> GetPaths() { return paths; }
+    std::unordered_map<int, Vertex*> GetVertices() { return vertices; }
+    std::unordered_map<int, Edge*> GetEdges() { return edges; }
+    std::unordered_map<int, Path*> GetPaths() { return paths; }
 
     std::optional<Vertex*> GetVertex(int id);
     std::optional<Edge*> GetEdge(int id);
 
     virtual Vertex* AddVertex(Point3f p) = 0;
+    virtual Vertex* AddVertex(int id, Point3f p) = 0;
 
     std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
     std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
@@ -92,10 +96,10 @@ protected:
     void WriteToStream(std::ostream& out, StreamFlags flags);
     void ReadFromStream(std::istream& in);
 
-    std::vector<Vertex*> vertices;
-    std::vector<Edge*> edges;
-    std::vector<Path*> paths;
-    int curId = 0;
+    std::unordered_map<int, Vertex*> vertices;
+    std::unordered_map<int, Edge*> edges;
+    std::unordered_map<int, Path*> paths;
+    int curId = -1;
 };
 
 class UniformGraph : public Graph {
@@ -105,6 +109,7 @@ public:
     UniformGraph(UniformGraph& other) = default;
 
     Vertex* AddVertex(Point3f p) override;
+    Vertex* AddVertex(int id, Point3f p) override;
 
     friend std::ostream& operator<<(std::ostream& out, UniformGraph& v);
     friend std::istream& operator>>(std::istream& in, UniformGraph& v);
@@ -113,6 +118,7 @@ private:
     [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(const Point3f& p) const;
 
     float spacing;
+    std::unordered_map<std::string, Vertex*> coorsMap;
 };
 
 class FreeGraph : public Graph {
@@ -120,9 +126,14 @@ public:
     FreeGraph() = default;
     FreeGraph(FreeGraph &other) = default;
 
+
     Vertex* AddVertex(Point3f p) override {
-        auto newVertex = new Vertex{curId++, p};
-        vertices.push_back(newVertex);
+        return AddVertex(++curId, p);
+    }
+
+    Vertex* AddVertex(int id, pbrt::Point3f p) override {
+        auto newVertex = new Vertex{id, p};
+        vertices[id] = newVertex;
         return newVertex;
     }
 
