@@ -2,6 +2,7 @@
 #include "pbrt/util/progressreporter.h"
 #include <pbrt/media.h>
 #include <pbrt/cpu/aggregates.h>
+#include <queue>
 
 namespace graph {
 
@@ -9,24 +10,34 @@ VolBoundary::VolBoundary(pbrt::Primitive& accel, SampledWavelengths lambda) : la
     if (!accel.Is<BVHAggregate>())
         throw std::runtime_error("Accelerator primitive must be a 'BVHAggregate' type");
 
-    std::vector<Primitive> aggregate = accel.Cast<BVHAggregate>()->GetPrimitives();
-    if (aggregate.size() != 1)
-        throw std::runtime_error("Expected exactly one primitive");
+    aggregate = accel;
+    bounds = aggregate.Bounds();
+    boundsCenter = bounds.pMin + bounds.Diagonal() / 2;
+    maxDistToCenter = Length(bounds.Diagonal() / 2);
 
-    if (!aggregate[0].Is<GeometricPrimitive>())
-        throw std::runtime_error("The primitive must be a 'GeometricPrimitive' type");
+    std::vector<Primitive>& primitives = aggregate.Cast<BVHAggregate>()->GetPrimitives();
 
-    auto primitive = aggregate[0].Cast<GeometricPrimitive>();
-    medium = primitive->GetMediumInterface().inside;
-    if (!medium || !primitive->GetMediumInterface().IsMediumTransition())
-        throw std::runtime_error("Expected one medium in empty space");
+    medium = nullptr;
 
-    Bounds3f mediumBounds = primitive->Bounds();
-    boundsCenter = mediumBounds.pMin + mediumBounds.Diagonal() / 2;
-    maxDistToCenter = Length(mediumBounds.Diagonal() / 2);
+    for (Primitive& primitive : primitives) {
+        if (!primitive.Is<GeometricPrimitive>())
+            throw std::runtime_error("The primitive must be a 'GeometricPrimitive' type");
+
+        auto& interface = primitive.Cast<GeometricPrimitive>()->GetMediumInterface();
+        if (!interface.IsMediumTransition())
+            throw std::runtime_error("The medium must be in empty space");
+
+        if (!interface.inside)
+            throw std::runtime_error("There is no medium");
+
+        if (medium && medium != interface.inside)
+            throw std::runtime_error("There can be only one medium");
+
+        medium = interface.inside;
+    }
 }
 
-UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalStep, int verticalStep) {
+UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalStep, int verticalStep) const {
     ProgressReporter progress((360 / horizontalStep) * (360 / verticalStep), "Capturing volume boundary", false);
 
     auto graph = new UniformGraph(graphSpacing);
@@ -40,7 +51,7 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
 
         for (int phi = 0; phi < 360; phi += verticalStep) {
             Vector3f dir = SphericalDirection(sinTheta, cosTheta, (float)phi);
-            Point3f origin(boundsCenter - dir * maxDistToCenter);
+            Point3f origin(boundsCenter - dir * maxDistToCenter * 2);
             graph->AddVertex(origin);
 
             Vector3f xVector;
@@ -53,9 +64,15 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
             for (int i = -numSteps; i < numSteps; ++i) {
                 for (int j = -numSteps; j < numSteps; ++j) {
                     Point3f newOrigin = origin + xVector * i + yVector * j;
-                    Ray gridRay(newOrigin, dir);
+                    RayDifferential gridRay(newOrigin, dir);
 
-                    auto iter = medium.SampleRay(gridRay, Infinity, lambda, buffer);
+                    auto shapeInter = aggregate.Intersect(gridRay);
+                    if (!shapeInter)
+                        continue;
+
+                    shapeInter.value().intr.SkipIntersection(&gridRay, shapeInter->tHit);
+
+                    auto iter = medium.SampleRay((Ray&)gridRay, Infinity, lambda, buffer);
                     while (true) {
                         pstd::optional<RayMajorantSegment> segment = iter.Next();
                         if (!segment)
@@ -73,6 +90,84 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
     progress.Done();
 
     return graph;
+}
+
+inline std::vector<Point3i> GetNeighbours(Point3i p, Bounds3i bounds) {
+    std::vector<Point3i> neighbours;
+
+    for (int i = 0; i < 6; ++i) {
+        Point3i newP(p);
+        int index = i / 2;
+        int diff = i - index;
+        int toAdd = diff == 0 ? -1 : 1;
+        newP[index] += toAdd;
+
+        if (Inside(newP, bounds)) {
+            neighbours.push_back(newP);
+        }
+    }
+    return neighbours;
+}
+
+void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
+    using std::get;
+    Bounds3i coorBounds(get<0>(boundary->FitToGraph(bounds.pMin)),
+                        get<0>(boundary->FitToGraph(bounds.pMax)));
+
+    UniformGraph search(boundary->GetSpacing());
+    UniformGraph layer(boundary->GetSpacing());
+    layer.AddVertex(coorBounds.pMin);
+    layer.AddVertex(coorBounds.pMax);
+
+    std::unordered_set<int> singleLayerSet;
+    std::unordered_set<Point3i, util::PointHash> visited;
+    std::queue<Point3i> queue;
+    std::unordered_set<Point3i, util::PointHash> queueSet;
+    queue.push(coorBounds.pMin);
+    queueSet.insert(coorBounds.pMin);
+
+
+    while (!queue.empty()) {
+        // if (singleLayerSet.size() >= 1000) {
+        //     for (auto p : queueSet)
+        //         search.AddVertex(p);
+        //     search.WriteToDisk("surface_5_queue", GetDescriptionName(Description::queue));
+        //
+        //     for (auto id : singleLayerSet)
+        //         layer.AddVertex(boundary->GetVertex(id).value()->coors.value());
+        //     layer.WriteToDisk("surface_5_surface", GetDescriptionName(Description::surface));
+        //
+        //     return;
+        // }
+        // std::cout << queueSet.size() << std::endl;
+
+        Point3i curPoint = queue.front();
+        queue.pop();
+        queueSet.erase(curPoint);
+
+        for (Point3i neighbour : GetNeighbours(curPoint, coorBounds)) {
+            auto optVertex = boundary->GetVertex(neighbour);
+            if (optVertex) {
+                singleLayerSet.insert(optVertex.value()->id);
+            }
+            else if (visited.find(neighbour) == visited.end() && queueSet.find(neighbour) == queueSet.end()) {
+                queue.push(neighbour);
+                queueSet.insert(neighbour);
+                visited.insert(neighbour);
+            }
+        }
+    }
+
+    // for (auto id : singleLayerSet)
+    //     layer.AddVertex(boundary->GetVertex(id).value()->coors.value());
+    // layer.WriteToDisk("surface_1_surface", GetDescriptionName(Description::surface));
+
+    return;
+
+    for (auto pair : boundary->GetVertices()) {
+        if (singleLayerSet.find(pair.first) == singleLayerSet.end())
+            boundary->RemoveVertex(pair.first);
+    }
 }
 
 }

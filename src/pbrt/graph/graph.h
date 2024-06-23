@@ -9,6 +9,8 @@
 #include <pbrt/util/spectrum.h>
 #include <pbrt/lights.h>
 
+#include "util.h"
+
 namespace graph {
 
 using namespace pbrt;
@@ -69,6 +71,20 @@ struct StreamFlags {
     bool useCoors = false;
 };
 
+inline std::string FileNameToPath(const std::string& fileName) {
+    return "files/graphs/" + fileName + ".txt";
+}
+
+enum Description {
+    paths, queue, surface
+};
+
+const std::vector<std::string> descriptionNames{"full_paths", "grid_queue", "grid_surface"};
+
+inline std::string GetDescriptionName(Description desc) {
+    return descriptionNames[desc];
+}
+
 class Graph {
 public:
     Graph() = default;
@@ -78,11 +94,13 @@ public:
     std::unordered_map<int, Edge*> GetEdges() { return edges; }
     std::unordered_map<int, Path*> GetPaths() { return paths; }
 
-    std::optional<Vertex*> GetVertex(int id);
+    virtual std::optional<Vertex*> GetVertex(int id);
     std::optional<Edge*> GetEdge(int id);
 
     virtual Vertex* AddVertex(Point3f p) = 0;
     virtual Vertex* AddVertex(int id, Point3f p) = 0;
+
+    virtual bool RemoveVertex(int id);
 
     std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
     std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
@@ -108,17 +126,28 @@ public:
     explicit UniformGraph(float spacing) : spacing(spacing) {};
     UniformGraph(UniformGraph& other) = default;
 
+    float GetSpacing() { return spacing; } // NOLINT(*-make-member-function-const)
+    std::unordered_map<Point3i, Vertex*, util::PointHash> GetCoorsMap() { return coorsMap; }
+
+    std::optional<Vertex*> GetVertex(int id) override { return Graph::GetVertex(id); }
+    std::optional<Vertex*> GetVertex(Point3i coors);
+
     Vertex* AddVertex(Point3f p) override;
     Vertex* AddVertex(int id, Point3f p) override;
+    Vertex* AddVertex(Point3i coors);
+
+    bool RemoveVertex(int id) override;
 
     friend std::ostream& operator<<(std::ostream& out, UniformGraph& v);
     friend std::istream& operator>>(std::istream& in, UniformGraph& v);
 
-private:
+    static UniformGraph* ReadFromDisk(const std::string& fileName);
+
     [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(const Point3f& p) const;
 
+private:
     float spacing;
-    std::unordered_map<std::string, Vertex*> coorsMap;
+    std::unordered_map<Point3i, Vertex*, util::PointHash> coorsMap;
 };
 
 class FreeGraph : public Graph {
@@ -141,6 +170,8 @@ public:
 
     friend std::ostream& operator<<(std::ostream& out, FreeGraph& v);
     friend std::istream& operator>>(std::istream& in, FreeGraph& v);
+
+    static FreeGraph* ReadFromDisk(const std::string& fileName);
 };
 
 class ClusterableGraph : public FreeGraph {

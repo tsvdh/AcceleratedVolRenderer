@@ -58,12 +58,10 @@ int main(int argc, char* argv[]) {
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
 
     graph::VolBoundary boundary(accel, lambda);
-    // auto graph0 = boundary.CaptureBoundary(0.5, 40, 40);
-    // auto graph1 = boundary.CaptureBoundary(1, 40, 40);
-    // auto graph2 = boundary.CaptureBoundary(2, 40, 40);
-    auto graph5 = boundary.CaptureBoundary(5, 40, 40);
+    auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
 
-    graph5->WriteToDisk("surface_5", "surface");
+    cubeGraph->WriteToDisk("surface_cube", "surface");
+    // boundary.ToSingleLayer(graph1);
 
     // std::vector<Primitive> aggregate = accel.Cast<BVHAggregate>()->GetPrimitives();
     // if (aggregate.size() != 1)

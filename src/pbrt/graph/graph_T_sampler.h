@@ -50,6 +50,9 @@ PBRT_CPU_GPU SampledSpectrum SampleT_maj(Ray ray, Float tMax, Float u, RNG &rng,
             continue;
         }
 
+        // graph.AddVertex(ray(seg->tMin));
+        // return SampledSpectrum(0);
+
         // Generate samples along current majorant segment
         Float tMin = seg->tMin;
         while (true) {

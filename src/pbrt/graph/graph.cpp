@@ -37,6 +37,21 @@ std::optional<Edge*> Graph::GetEdge(int id) {
     return result->second;
 }
 
+bool Graph::RemoveVertex(int id) {
+    auto result = vertices.find(id);
+    if (result == vertices.end())
+        return false;
+
+    vertices.erase(id);
+    for (Edge* edge : result->second->inEdges)
+        edges.erase(edge->id);
+    for (Edge* edge : result->second->outEdges)
+        edges.erase(edge->id);
+
+    return true;
+    // TODO: remove edges from paths
+}
+
 std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, graph::EdgeData* data, bool checkValid) {
     if (checkValid) {
         if (vertices.find(from->id) == vertices.end())
@@ -146,8 +161,7 @@ void Graph::ReadFromStream(std::istream& in) {
         int id;
         pbrt::Point3f point;
         in >> id >> point;
-        auto vertex = new Vertex{id, point};
-        vertices[id] = vertex;
+        auto vertex = AddVertex(id, point);
 
         if (flags.useCoors) {
             pbrt::Point3i coors;
@@ -194,11 +208,19 @@ void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
 }
 
 // UniformGraph implementations
+std::optional<Vertex*> UniformGraph::GetVertex(pbrt::Point3i coors) {
+    auto result = coorsMap.find(coors);
+    if (result == coorsMap.end())
+        return {};
+
+    return result->second;
+}
+
 Vertex* UniformGraph::AddVertex(pbrt::Point3f p) {
     auto [coors, fittedPoint] = FitToGraph(p);
     auto newVertex = new Vertex{curId + 1, fittedPoint, coors};
 
-    auto result = coorsMap.insert({coors.ToString(), newVertex});
+    auto result = coorsMap.insert({coors, newVertex});
     if (result.second) {
         vertices[++curId] = newVertex;
         return newVertex;
@@ -210,12 +232,26 @@ Vertex* UniformGraph::AddVertex(int id, pbrt::Point3f p) {
     auto [coors, fittedPoint] = FitToGraph(p);
     auto newVertex = new Vertex{id, fittedPoint, coors};
 
-    auto result = coorsMap.insert({coors.ToString(), newVertex});
+    auto result = coorsMap.insert({coors, newVertex});
     if (result.second) {
         vertices[id] = newVertex;
         return newVertex;
     }
     return result.first->second;
+}
+
+Vertex* UniformGraph::AddVertex(pbrt::Point3i coors) {
+    return AddVertex(Point3f(coors * spacing));
+}
+
+bool UniformGraph::RemoveVertex(int id) {
+    auto result = vertices.find(id);
+    if (result == vertices.end())
+        return false;
+
+    coorsMap.erase(result->second->coors.value());
+
+    return Graph::RemoveVertex(id);
 }
 
 inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(const pbrt::Point3f& p) const {
@@ -238,11 +274,18 @@ std::ostream& operator<<(std::ostream& out, UniformGraph& g) {
 }
 
 std::istream& operator>>(std::istream& in, UniformGraph& g) {
-    std::string name;
-    in >> name >> g.spacing;
+    std::string description, name;
+    in >> description >> name >> g.spacing;
 
     g.ReadFromStream(in);
     return in;
+}
+
+UniformGraph* UniformGraph::ReadFromDisk(const std::string& fileName) {
+    auto graph = new UniformGraph;
+    std::ifstream file(graph::FileNameToPath(fileName));
+    file >> *graph;
+    return graph;
 }
 
 // FreeGraph implementations
@@ -277,11 +320,18 @@ std::ostream& operator<<(std::ostream& out, FreeGraph& g) {
 }
 
 std::istream& operator>>(std::istream& in, FreeGraph& g) {
-    std::string name;
-    in >> name;
+    std::string description, name;
+    in >> description >> name;
 
     g.ReadFromStream(in);
     return in;
+}
+
+FreeGraph* FreeGraph::ReadFromDisk(const std::string& fileName) {
+    auto graph = new FreeGraph;
+    std::ifstream file(graph::FileNameToPath(fileName));
+    file >> *graph;
+    return graph;
 }
 
 }

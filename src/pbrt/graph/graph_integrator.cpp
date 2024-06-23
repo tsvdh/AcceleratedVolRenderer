@@ -134,8 +134,8 @@ void GraphVolPathIntegrator::Render() {
                        });
     }
 
-    // FreeGraph surfaceGraph;
-    FreeGraph pathGraph;
+    FreeGraph surfaceGraph;
+    // FreeGraph pathGraph;
 
     // Render image in waves
     while (waveStart < spp) {
@@ -155,7 +155,7 @@ void GraphVolPathIntegrator::Render() {
                 for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
                     threadSampleIndex = sampleIndex;
                     sampler.StartPixelSample(pPixel, sampleIndex);
-                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer, pathGraph);
+                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer, surfaceGraph);
                     scratchBuffer.Reset();
                 }
 
@@ -228,15 +228,16 @@ void GraphVolPathIntegrator::Render() {
 
     // Set the first edge of each path to length 1-
     // First edge from camera is only for direction illustration
-    for (auto pair : pathGraph.GetPaths()) {
-        Path* path = pair.second;
-        Vertex* from = path->edges[0]->from;
-        Vertex* to = path->edges[1]->from;
-
-        Vector3f edge = from->point - to->point;
-        from->point = to->point + Normalize(edge) * 10;
-    }
-    pathGraph.WriteToDisk("one_pixel", "full_paths");
+    // for (auto pair : pathGraph.GetPaths()) {
+    //     Path* path = pair.second;
+    //     Vertex* from = path->edges[0]->from;
+    //     Vertex* to = path->edges[1]->from;
+    //
+    //     Vector3f edge = from->point - to->point;
+    //     from->point = to->point + Normalize(edge) * 10;
+    // }
+    // pathGraph.WriteToDisk("one_pixel", "full_paths");
+    // surfaceGraph.WriteToDisk("camera_surface", "surface");
 
     if (mseOutFile)
         fclose(mseOutFile);
@@ -321,19 +322,19 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
     LightSampleContext prevIntrContext;
 
     // Init graph path variables
-    Path* path = graph.AddPath();
-    Vertex* curVertex = nullptr;
-
-    auto AddNewVertex = [&](Point3f p) {
-        auto newVertex = graph.AddVertex(p);
-        if (curVertex) {
-            auto edge = graph.AddEdge(curVertex, newVertex, nullptr, false);
-            path->edges.push_back(edge.value());
-        }
-        curVertex = newVertex;
-    };
-
-    AddNewVertex(ray.o);
+    // Path* path = graph.AddPath();
+    // Vertex* curVertex = nullptr;
+    //
+    // auto AddNewVertex = [&](Point3f p) {
+    //     auto newVertex = graph.AddVertex(p);
+    //     if (curVertex) {
+    //         auto edge = graph.AddEdge(curVertex, newVertex, nullptr, false);
+    //         path->edges.push_back(edge.value());
+    //     }
+    //     curVertex = newVertex;
+    // };
+    //
+    // AddNewVertex(ray.o);
 
     while (true) {
         // Sample segment of volumetric scattering path
@@ -359,7 +360,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             RNG rng(hash0, hash1);
 
             SampledSpectrum T_maj = SampleT_maj(
-                    ray, tMax, sampler.Get1D(), rng, lambda, graph, // NOLINT(*-slicing)
+                    (Ray&)ray, tMax, sampler.Get1D(), rng, lambda, graph,
                     [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                         // Handle medium scattering event for ray
                         if (!beta) {
@@ -392,9 +393,9 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                         int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
 
                         // add edge to graph
-                        if (mode == 0 || mode == 1) {
-                            AddNewVertex(p);
-                        }
+                        // if (mode == 0 || mode == 1) {
+                        //     AddNewVertex(p);
+                        // }
 
                         if (mode == 0) {
                             // Handle absorption along ray path
@@ -598,7 +599,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                 pstd::optional<ShapeIntersection> ssi = Intersect(r, 1);
                 if (!ssi)
                     break;
-                base = ssi->intr; // NOLINT(*-slicing)
+                base = (Interaction&)ssi->intr;
                 if (ssi->intr.material == isect.material)
                     interactionSampler.Add(SubsurfaceInteraction(ssi->intr), 1.f);
             }
