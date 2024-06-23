@@ -52,7 +52,7 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
         for (int phi = 0; phi < 360; phi += verticalStep) {
             Vector3f dir = SphericalDirection(sinTheta, cosTheta, (float)phi);
             Point3f origin(boundsCenter - dir * maxDistToCenter * 2);
-            graph->AddVertex(origin);
+            // graph->AddVertex(origin);
 
             Vector3f xVector;
             Vector3f yVector;
@@ -98,8 +98,7 @@ inline std::vector<Point3i> GetNeighbours(Point3i p, Bounds3i bounds) {
     for (int i = 0; i < 6; ++i) {
         Point3i newP(p);
         int index = i / 2;
-        int diff = i - index;
-        int toAdd = diff == 0 ? -1 : 1;
+        int toAdd = i % 2 == 0 ? -1 : 1;
         newP[index] += toAdd;
 
         if (Inside(newP, bounds)) {
@@ -111,8 +110,8 @@ inline std::vector<Point3i> GetNeighbours(Point3i p, Bounds3i bounds) {
 
 void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
     using std::get;
-    Bounds3i coorBounds(get<0>(boundary->FitToGraph(bounds.pMin)),
-                        get<0>(boundary->FitToGraph(bounds.pMax)));
+    Bounds3i coorBounds(get<0>(boundary->FitToGraph(bounds.pMin)) - Vector3i(1, 1, 1),
+                        get<0>(boundary->FitToGraph(bounds.pMax)) + Vector3i(1, 1, 1));
 
     UniformGraph search(boundary->GetSpacing());
     UniformGraph layer(boundary->GetSpacing());
@@ -128,18 +127,6 @@ void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
 
 
     while (!queue.empty()) {
-        // if (singleLayerSet.size() >= 1000) {
-        //     for (auto p : queueSet)
-        //         search.AddVertex(p);
-        //     search.WriteToDisk("surface_5_queue", GetDescriptionName(Description::queue));
-        //
-        //     for (auto id : singleLayerSet)
-        //         layer.AddVertex(boundary->GetVertex(id).value()->coors.value());
-        //     layer.WriteToDisk("surface_5_surface", GetDescriptionName(Description::surface));
-        //
-        //     return;
-        // }
-        // std::cout << queueSet.size() << std::endl;
 
         Point3i curPoint = queue.front();
         queue.pop();
@@ -157,12 +144,6 @@ void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
             }
         }
     }
-
-    // for (auto id : singleLayerSet)
-    //     layer.AddVertex(boundary->GetVertex(id).value()->coors.value());
-    // layer.WriteToDisk("surface_1_surface", GetDescriptionName(Description::surface));
-
-    return;
 
     for (auto pair : boundary->GetVertices()) {
         if (singleLayerSet.find(pair.first) == singleLayerSet.end())

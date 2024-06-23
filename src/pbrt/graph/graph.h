@@ -109,6 +109,7 @@ public:
     Path* AddPath();
 
     void WriteToDisk(const std::string& fileName, const std::string& desc);
+    void WriteToDisk(const std::string& fileName, Description desc);
 
 protected:
     void WriteToStream(std::ostream& out, StreamFlags flags);

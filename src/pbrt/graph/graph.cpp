@@ -207,6 +207,10 @@ void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
     file.close();
 }
 
+void Graph::WriteToDisk(const std::string& fileName, graph::Description desc) {
+    WriteToDisk(fileName, GetDescriptionName(desc));
+}
+
 // UniformGraph implementations
 std::optional<Vertex*> UniformGraph::GetVertex(pbrt::Point3i coors) {
     auto result = coorsMap.find(coors);

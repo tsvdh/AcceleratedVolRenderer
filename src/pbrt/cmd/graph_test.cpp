@@ -58,67 +58,21 @@ int main(int argc, char* argv[]) {
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
 
     graph::VolBoundary boundary(accel, lambda);
-    auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
 
-    cubeGraph->WriteToDisk("surface_cube", "surface");
-    // boundary.ToSingleLayer(graph1);
+    // --- cube ---
+    // auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
+    // cubeGraph->WriteToDisk("surface_cube", "surface");
+    // auto cubeGraph = graph::UniformGraph::ReadFromDisk("surface_cube");
+    // boundary.ToSingleLayer(cubeGraph);
+    // ---
 
-    // std::vector<Primitive> aggregate = accel.Cast<BVHAggregate>()->GetPrimitives();
-    // if (aggregate.size() != 1)
-    //     throw std::runtime_error("Expected exactly one shape");
-    //
-    // auto primitive = aggregate[0].Cast<GeometricPrimitive>();
-    // Medium medium = primitive->GetMediumInterface().inside;
-    // if (!medium || !primitive->GetMediumInterface().IsMediumTransition())
-    //     throw std::runtime_error("Expected one medium in empty space");
-    //
-    // Bounds3f mediumBounds = primitive->Bounds();
-    // Point3f boundsMiddle = mediumBounds.pMin + mediumBounds.Diagonal() / 2;
-    // float maxDistToMiddle = Length(mediumBounds.Diagonal() / 2);
-    //
-    // Camera camera = scene.GetCamera();
-    // SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
-    //
-    // graph::FreeGraph graph;
-    //
-    // Point3f origin(boundsMiddle - lightDir * maxDistToMiddle);
-    // graph.AddVertex(origin);
-    // // graph.AddVertex(origin + lightDir * 10);
-    // // graph.AddVertex(origin + xVector);
-    // // graph.AddVertex(origin + yVector);
-    //
-    // int numSteps = 100;
-    // float stepSize = maxDistToMiddle / (float)numSteps;
-    // xVector *= stepSize;
-    // yVector *= stepSize;
-    //
-    // int numRays = (int)std::pow(2 * numSteps, 2);
-    // int numHit = 0;
-    //
-    // ScratchBuffer buffer;
-    // for (int i = -numSteps; i < numSteps; ++i) {
-    //     for (int j = -numSteps; j < numSteps; ++j) {
-    //         Point3f newOrigin = origin + xVector * i + yVector * j;
-    //         Ray gridRay(newOrigin, lightDir);
-    //
-    //         // auto iter = medium->SampleRay(gridRay, Infinity, lambda);
-    //         auto iter = medium.SampleRay(gridRay, Infinity, lambda, buffer);
-    //         while (true) {
-    //             pstd::optional<RayMajorantSegment> segment = iter.Next();
-    //             if (!segment)
-    //                 break;
-    //             if (segment->sigma_maj[0] != 0) {
-    //                 graph.AddVertex(gridRay(segment->tMin));
-    //                 numHit++;
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
-    //
-    // std::cout << numHit << " / " << numRays << " | " << ((float)numHit / (float)numRays) << std::endl;
-    //
-    // graph.WriteToDisk("light_surface", "surface");
+    // --- disney ---
+    // auto disneyGraph = boundary.CaptureBoundary(10, 40, 40);
+    // disneyGraph->WriteToDisk("surface_disney", "surface");
+    auto disneyGraph = graph::UniformGraph::ReadFromDisk("surface_disney");
+    boundary.ToSingleLayer(disneyGraph);
+    disneyGraph->WriteToDisk("surface_disney_clean", "surface");
+    // ---
 
     return 0;
 }
