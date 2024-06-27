@@ -12,19 +12,14 @@ using namespace pbrt;
 
 class VolBoundary {
 public:
-    VolBoundary(Primitive& accel, SampledWavelengths lambda);
+    explicit VolBoundary(util::MediumData* mediumData) : mediumData(mediumData) {}
 
     [[nodiscard]] UniformGraph* CaptureBoundary(float graphSpacing, int horizontalStep, int verticalStep) const;
 
     void ToSingleLayer(UniformGraph* boundary) const;
 
 private:
-    SampledWavelengths lambda;
-    Primitive aggregate;
-    Medium medium;
-    Bounds3f bounds;
-    Point3f boundsCenter;
-    float maxDistToCenter;
+    util::MediumData* mediumData;
 };
 
 }

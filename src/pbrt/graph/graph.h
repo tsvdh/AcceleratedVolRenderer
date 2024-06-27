@@ -26,22 +26,16 @@ struct Vertex {
     std::optional<Point3i> coors;
     std::vector<Edge*> inEdges, outEdges;
 
-    // explicit Vertex(Point3f point) : point(point) {}
-
     bool operator==(const Vertex& other) const {
         return id == other.id;
     }
 };
 
 struct EdgeData {
-    SampledSpectrum L{0.f}, beta{1.f}, r_u{1.f}, r_l{1.f};
-    bool specularBounce = false, anyNonSpecularBounces = false;
-    int depth = 0;
-    Float etaScale = 1;
-    LightSampleContext prevIntrContext;
+
     
-    EdgeData() = default;
-    EdgeData(EdgeData& edgeData) = default;
+    // EdgeData() = default;
+    // EdgeData(EdgeData& edgeData) = default;
 };
 
 struct Edge {
@@ -49,9 +43,7 @@ struct Edge {
     Vertex* from = nullptr;
     Vertex* to = nullptr;
     EdgeData* data = nullptr;
-
-    // explicit Edge(Vertex* from, Vertex* to, EdgeData* data)
-    //     : from(from), to(to), data(data) {}
+    std::vector<std::pair<Path*, int>> paths;
 
     bool operator==(const Edge& other) const {
         return id == other.id;
@@ -76,10 +68,10 @@ inline std::string FileNameToPath(const std::string& fileName) {
 }
 
 enum Description {
-    paths, queue, surface
+    basic, surface, paths, search_queue, search_surface
 };
 
-const std::vector<std::string> descriptionNames{"full_paths", "grid_queue", "grid_surface"};
+const std::vector<std::string> descriptionNames{"basic", "surface", "full_paths", "grid_queue", "grid_surface"};
 
 inline std::string GetDescriptionName(Description desc) {
     return descriptionNames[desc];
@@ -96,6 +88,7 @@ public:
 
     virtual std::optional<Vertex*> GetVertex(int id);
     std::optional<Edge*> GetEdge(int id);
+    std::optional<Path*> GetPath(int id);
 
     virtual Vertex* AddVertex(Point3f p) = 0;
     virtual Vertex* AddVertex(int id, Point3f p) = 0;
@@ -107,6 +100,8 @@ public:
 
     void AddPath(const Path& path);
     Path* AddPath();
+
+    static void AddEdgeToPath(Edge* edge, Path* path);
 
     void WriteToDisk(const std::string& fileName, const std::string& desc);
     void WriteToDisk(const std::string& fileName, Description desc);

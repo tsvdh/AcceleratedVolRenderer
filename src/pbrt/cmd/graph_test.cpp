@@ -10,6 +10,7 @@
 #include <pbrt/cpu/aggregates.h>
 
 #include <pbrt/graph/vol_boundary.h>
+#include <pbrt/graph/vol_transmittance.h>
 
 using namespace pbrt;
 
@@ -36,19 +37,6 @@ int main(int argc, char* argv[]) {
     std::map<int, pstd::vector<Light>*> shapeIndexToAreaLights;
     std::vector<Light> lights = scene.CreateLights(textures, &shapeIndexToAreaLights);
 
-    // if (lights.size() != 1)
-    //     throw std::runtime_error("Expected exactly one light source");
-    //
-    // Light light = lights[0];
-    // if (!light.Is<DistantLight>())
-    //     throw std::runtime_error("Expected a directional light");
-    //
-    // auto distantLight = light.Cast<DistantLight>();
-    // Vector3f lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
-    // Vector3f xVector;
-    // Vector3f yVector;
-    // CoordinateSystem(lightDir, &xVector, &yVector);
-
     std::map<std::string, pbrt::Material> namedMaterials;
     std::vector<pbrt::Material> materials;
     scene.CreateMaterials(textures, &namedMaterials, &materials);
@@ -57,22 +45,28 @@ int main(int argc, char* argv[]) {
     Camera camera = scene.GetCamera();
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
 
-    graph::VolBoundary boundary(accel, lambda);
+    auto mediumData = new util::MediumData(lambda, accel);
+
+    graph::VolBoundary boundary(mediumData);
 
     // --- cube ---
     // auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
-    // cubeGraph->WriteToDisk("surface_cube", "surface");
-    // auto cubeGraph = graph::UniformGraph::ReadFromDisk("surface_cube");
+    // cubeGraph->WriteToDisk("surface_cube", graph::Description::surface);
+    auto cubeGraph = graph::UniformGraph::ReadFromDisk("surface_cube");
     // boundary.ToSingleLayer(cubeGraph);
+    // cubeGraph->WriteToDisk("surface_cube", graph::Description::surface);
     // ---
 
     // --- disney ---
     // auto disneyGraph = boundary.CaptureBoundary(10, 40, 40);
     // disneyGraph->WriteToDisk("surface_disney", "surface");
-    auto disneyGraph = graph::UniformGraph::ReadFromDisk("surface_disney");
-    boundary.ToSingleLayer(disneyGraph);
-    disneyGraph->WriteToDisk("surface_disney_clean", "surface");
+    // auto disneyGraph = graph::UniformGraph::ReadFromDisk("surface_disney");
+    // boundary.ToSingleLayer(disneyGraph);
+    // disneyGraph->WriteToDisk("surface_disney", graph::Description::basic);
     // ---
+
+    graph::VolTransmittance transmittance(cubeGraph, mediumData);
+    transmittance.CaptureTransmittance(lights);
 
     return 0;
 }

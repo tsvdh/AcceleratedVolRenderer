@@ -829,6 +829,8 @@ set(GRAPH
         src/pbrt/graph/vol_boundary.cpp
         src/pbrt/graph/graph_T_sampler.h
         src/pbrt/graph/util.h
+        src/pbrt/graph/vol_transmittance.h
+        src/pbrt/graph/vol_transmittance.cpp
 )
 
 source_group ("Graph files" FILES ${GRAPH})

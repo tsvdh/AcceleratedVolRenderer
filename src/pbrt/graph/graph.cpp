@@ -21,35 +21,39 @@ std::istream& operator>>(std::istream& in, pbrt::Point3<T>& p) {
 }
 
 // Graph implementations
-std::optional<Vertex*> Graph::GetVertex(int id) {
-    auto result = vertices.find(id);
-    if (result == vertices.end())
+template<typename T>
+inline std::optional<T*> GetById(int id, std::unordered_map<int, T*> coll) {
+    auto result = coll.find(id);
+    if (result == coll.end())
         return {};
 
     return result->second;
 }
 
-std::optional<Edge*> Graph::GetEdge(int id) {
-    auto result = edges.find(id);
-    if (result == edges.end())
-        return {};
-
-    return result->second;
-}
+std::optional<Vertex*> Graph::GetVertex(int id) { return GetById(id, vertices); }
+std::optional<Edge*> Graph::GetEdge(int id) { return GetById(id, edges); }
+std::optional<Path*> Graph::GetPath(int id) { return GetById(id, paths); }
 
 bool Graph::RemoveVertex(int id) {
     auto result = vertices.find(id);
     if (result == vertices.end())
         return false;
 
-    vertices.erase(id);
+    auto removeEdge = [&](Edge* edge) {
+        edges.erase(edge->id);
+        for (std::pair<Path*, int> pair : edge->paths)
+            paths[pair.first->id]->edges[pair.second] = nullptr;
+    };
+
     for (Edge* edge : result->second->inEdges)
-        edges.erase(edge->id);
+        removeEdge(edge);
+
     for (Edge* edge : result->second->outEdges)
-        edges.erase(edge->id);
+        removeEdge(edge);
+
+    vertices.erase(id);
 
     return true;
-    // TODO: remove edges from paths
 }
 
 std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, graph::EdgeData* data, bool checkValid) {
@@ -110,6 +114,12 @@ Path* Graph::AddPath() {
     auto path = new Path{++curId};
     paths[curId] = path;
     return path;
+}
+
+void Graph::AddEdgeToPath(graph::Edge* edge, graph::Path* path) {
+    int index = (int)path->edges.size();
+    path->edges.push_back(edge);
+    edge->paths.emplace_back(path, index);
 }
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
