@@ -39,20 +39,14 @@ bool Graph::RemoveVertex(int id) {
     if (result == vertices.end())
         return false;
 
-    auto removeEdge = [&](Edge* edge) {
-        edges.erase(edge->id);
-        for (std::pair<Path*, int> pair : edge->paths)
-            paths[pair.first->id]->edges[pair.second] = nullptr;
-    };
+    for (auto pair : result->second->inEdges)
+        RemoveEdge(pair.second->id);
 
-    for (Edge* edge : result->second->inEdges)
-        removeEdge(edge);
+    for (auto pair : result->second->outEdges)
+        RemoveEdge(pair.second->id);
 
-    for (Edge* edge : result->second->outEdges)
-        removeEdge(edge);
-
+    delete result->second;
     vertices.erase(id);
-
     return true;
 }
 
@@ -64,11 +58,17 @@ std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, grap
             return {};
     }
 
-    auto newEdge = new Edge{++curId, from, to, data};
-    edges.insert({curId, newEdge});
+    for (auto pair: from->outEdges) {
+        if (*pair.second->to == *to)
+            // TODO: merge edge data
+            return pair.second;
+    }
 
-    from->outEdges.push_back(newEdge);
-    to->inEdges.push_back(newEdge);
+    auto newEdge = new Edge{++curId, from, to, data};
+    edges[curId] = newEdge;
+
+    from->outEdges[curId] = newEdge;
+    to->inEdges[curId] = newEdge;
 
     return newEdge;
 }
@@ -82,13 +82,35 @@ std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, graph::EdgeDat
     if (toResult == vertices.end())
         return {};
 
+    for (auto pair : fromResult->second->outEdges) {
+        if (*pair.second->to == *toResult->second)
+            // TODO: merge edge data
+            return pair.second;
+    }
+
     auto newEdge = new Edge{id, fromResult->second, toResult->second, data};
     edges[id] = newEdge;
 
-    fromResult->second->outEdges.push_back(newEdge);
-    toResult->second->inEdges.push_back(newEdge);
+    fromResult->second->outEdges[id] = newEdge;
+    toResult->second->inEdges[id] = newEdge;
 
     return newEdge;
+}
+
+bool Graph::RemoveEdge(int id) {
+    auto result = edges.find(id);
+    if (result == edges.end())
+        return false;
+
+    result->second->from->outEdges.erase(id);
+    result->second->to->inEdges.erase(id);
+
+    for (auto pair : result->second->paths)
+        paths[pair.first]->edges[pair.second] = nullptr;
+
+    delete result->second;
+    edges.erase(id);
+    return true;
 }
 
 void Graph::AddPath(const graph::Path& path) {
@@ -104,7 +126,7 @@ void Graph::AddPath(const graph::Path& path) {
     for (Edge* edge : path.edges) {
         curTo = AddVertex(edge->to->point);
         Edge* newEdge = AddEdge(curFrom, curTo, edge->data, true).value();
-        newPath->edges.push_back(newEdge);
+        AddEdgeToPath(newEdge, newPath);
 
         curFrom = curTo;
     }
@@ -116,10 +138,46 @@ Path* Graph::AddPath() {
     return path;
 }
 
-void Graph::AddEdgeToPath(graph::Edge* edge, graph::Path* path) {
-    int index = (int)path->edges.size();
+bool Graph::RemovePath(int id) {
+    auto result = paths.find(id);
+    if (result == paths.end())
+        return false;
+
+    Path* path = result->second;
+    if (!path->edges.empty()) {
+        for (Edge* edge : path->edges) {
+            edge->paths.erase(id);
+
+            if (edge->paths.empty()) {
+                RemoveEdge(edge->id);
+
+                Vertex* to = edge->to;
+                if (to->inEdges.empty() && to->outEdges.empty())
+                    RemoveVertex(to->id);
+            }
+        }
+
+        Vertex* firstVertex = path->edges[0]->from;
+        if (firstVertex->inEdges.empty() && firstVertex->outEdges.size() == 1)
+            RemoveVertex(firstVertex->id);
+    }
+
+    delete result->second;
+    paths.erase(id);
+    return true;
+}
+
+bool Graph::AddEdgeToPath(graph::Edge* edge, graph::Path* path) {
+    for (Edge* pathEdge : path->edges) {
+        if (*pathEdge == *edge)
+            return false;
+    }
+
     path->edges.push_back(edge);
-    edge->paths.emplace_back(path, index);
+    int index = (int)path->edges.size();
+    edge->paths[path->id] = index;
+
+    return true;
 }
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
@@ -198,7 +256,7 @@ void Graph::ReadFromStream(std::istream& in) {
             int pathEdgeId;
             in >> pathEdgeId;
 
-            path->edges.push_back(edges[pathEdgeId]);
+            AddEdgeToPath(edges[pathEdgeId], path);
         }
     }
 }
@@ -310,18 +368,25 @@ UniformGraph* FreeGraph::ToUniform(float spacing) {
         Vertex* oldVertex = oldPair.second;
         Vertex* curVertex = uniform->AddVertex(oldVertex->point);
 
-        for (Edge* inEdge : oldVertex->inEdges) {
+        for (auto pair : oldVertex->inEdges) {
+            Edge* inEdge = pair.second;
             Vertex* inVertex = uniform->AddVertex(inEdge->from->point);
             uniform->AddEdge(inVertex, curVertex, inEdge->data, false);
         }
 
-        for (Edge* outEdge : oldVertex->outEdges) {
+        for (auto pair : oldVertex->outEdges) {
+            Edge* outEdge = pair.second;
             Vertex* outVertex = uniform->AddVertex(outEdge->to->point);
             uniform->AddEdge(curVertex, outVertex, outEdge->data, false);
         }
     }
 
-    // TODO: maintain paths
+    for (auto oldPair : paths) {
+        Path* oldPath = oldPair.second;
+        auto newPath = AddPath();
+        for (Edge* edge : oldPath->edges)
+            AddEdgeToPath(edge, newPath);
+    }
 
     return uniform;
 }

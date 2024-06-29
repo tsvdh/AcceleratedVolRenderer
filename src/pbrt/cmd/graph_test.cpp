@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
 
     auto mediumData = new util::MediumData(lambda, accel);
 
-    graph::VolBoundary boundary(mediumData);
+    // graph::VolBoundary boundary(mediumData);
 
     // --- cube ---
     // auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
@@ -65,8 +65,11 @@ int main(int argc, char* argv[]) {
     // disneyGraph->WriteToDisk("surface_disney", graph::Description::basic);
     // ---
 
-    graph::VolTransmittance transmittance(cubeGraph, mediumData);
-    transmittance.CaptureTransmittance(lights);
+    Sampler sampler = scene.GetSampler();
 
+    graph::VolTransmittance transmittance(cubeGraph, mediumData, sampler);
+    graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
+
+    paths->WriteToDisk("cube_paths", graph::Description::paths);
     return 0;
 }

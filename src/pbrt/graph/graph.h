@@ -24,7 +24,7 @@ struct Vertex {
     int id = -1;
     Point3f point;
     std::optional<Point3i> coors;
-    std::vector<Edge*> inEdges, outEdges;
+    std::unordered_map<int, Edge*> inEdges, outEdges;
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
@@ -32,10 +32,6 @@ struct Vertex {
 };
 
 struct EdgeData {
-
-    
-    // EdgeData() = default;
-    // EdgeData(EdgeData& edgeData) = default;
 };
 
 struct Edge {
@@ -43,7 +39,7 @@ struct Edge {
     Vertex* from = nullptr;
     Vertex* to = nullptr;
     EdgeData* data = nullptr;
-    std::vector<std::pair<Path*, int>> paths;
+    std::unordered_map<int, int> paths; // pathID, index
 
     bool operator==(const Edge& other) const {
         return id == other.id;
@@ -92,16 +88,17 @@ public:
 
     virtual Vertex* AddVertex(Point3f p) = 0;
     virtual Vertex* AddVertex(int id, Point3f p) = 0;
-
     virtual bool RemoveVertex(int id);
 
     std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
     std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
+    bool RemoveEdge(int id);
 
     void AddPath(const Path& path);
     Path* AddPath();
+    bool RemovePath(int id);
 
-    static void AddEdgeToPath(Edge* edge, Path* path);
+    static bool AddEdgeToPath(Edge* edge, Path* path);
 
     void WriteToDisk(const std::string& fileName, const std::string& desc);
     void WriteToDisk(const std::string& fileName, Description desc);
