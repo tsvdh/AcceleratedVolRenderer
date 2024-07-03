@@ -24,14 +24,11 @@ struct Vertex {
     int id = -1;
     Point3f point;
     std::optional<Point3i> coors;
-    std::unordered_map<int, Edge*> inEdges, outEdges;
+    std::unordered_map<int, Edge*> inEdges, outEdges; // edgeID, edge
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
     }
-};
-
-struct EdgeData {
 };
 
 struct Edge {
@@ -39,11 +36,17 @@ struct Edge {
     Vertex* from = nullptr;
     Vertex* to = nullptr;
     EdgeData* data = nullptr;
-    std::unordered_map<int, int> paths; // pathID, index
+    std::unordered_map<int, int> paths; // pathID, index in path
 
     bool operator==(const Edge& other) const {
         return id == other.id;
     }
+};
+
+struct EdgeData {
+    SampledSpectrum T;
+    float G;
+    std::unordered_map<int, SampledSpectrum> f; // edgeId, collision scale value
 };
 
 struct Path {
@@ -107,9 +110,9 @@ protected:
     void WriteToStream(std::ostream& out, StreamFlags flags);
     void ReadFromStream(std::istream& in);
 
-    std::unordered_map<int, Vertex*> vertices;
-    std::unordered_map<int, Edge*> edges;
-    std::unordered_map<int, Path*> paths;
+    std::unordered_map<int, Vertex*> vertices; // ID, object
+    std::unordered_map<int, Edge*> edges;      // ID, object
+    std::unordered_map<int, Path*> paths;      // ID, object
     int curId = -1;
 };
 
@@ -140,7 +143,7 @@ public:
 
 private:
     float spacing;
-    std::unordered_map<Point3i, Vertex*, util::PointHash> coorsMap;
+    std::unordered_map<Point3i, Vertex*, util::PointHash> coorsMap; // coors, vertex
 };
 
 class FreeGraph : public Graph {

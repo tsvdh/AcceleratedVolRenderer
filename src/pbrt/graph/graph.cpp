@@ -61,7 +61,7 @@ std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, grap
     for (auto pair: from->outEdges) {
         if (*pair.second->to == *to)
             // TODO: merge edge data
-            return pair.second;
+            throw std::runtime_error("Can't merge edges yet");
     }
 
     auto newEdge = new Edge{++curId, from, to, data};

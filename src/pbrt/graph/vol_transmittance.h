@@ -16,10 +16,12 @@ public:
     VolTransmittance(UniformGraph* boundary, util::MediumData* mediumData, Sampler sampler)
         : boundary(boundary), mediumData(mediumData), sampler(std::move(sampler)) {}
 
-    void TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vector3f lightDir);
     [[nodiscard]] FreeGraph* CaptureTransmittance(std::vector<Light> lights);
 
 private:
+    void GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoints, Vector3f lightDir);
+    void TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vector3f lightDir);
+
     UniformGraph* boundary;
     util::MediumData* mediumData;
     Sampler sampler;

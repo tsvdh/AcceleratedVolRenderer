@@ -17,6 +17,8 @@ STAT_COUNTER("Integrator/Surface interactions", surfaceInteractions)
 STAT_PERCENT("Integrator/Regularized BSDFs", regularizedBSDFs, totalBSDFs)
 STAT_COUNTER("Integrator/Camera rays traced", nCameraRays)
 
+int counter = 0;
+
 // FreeGraph pathGraph;
 // FreeGraph surfaceGraph;
 //
@@ -140,8 +142,8 @@ void GraphVolPathIntegrator::Render() {
     // Render image in waves
     while (waveStart < spp) {
         // Render current wave's image in series
-        for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x += 4) {
-            for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y += 4) {
+        for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
+            for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
                 Point2i pPixel(x, y);
                 ScratchBuffer& scratchBuffer = scratchBuffers.Get();
                 Sampler& sampler = samplers.Get();
@@ -223,6 +225,8 @@ void GraphVolPathIntegrator::Render() {
             }
         }
     }
+
+    std::cout << counter << std::endl;
 
     // surfaceGraph.WriteToDisk("camera_surface", "surface");
 
@@ -360,7 +364,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             RNG rng(hash0, hash1);
 
             SampledSpectrum T_maj = SampleT_maj(
-                    (Ray&)ray, tMax, sampler.Get1D(), rng, lambda, graph,
+                    (Ray&)ray, tMax, sampler.Get1D(), rng, lambda,
                     [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                         // Handle medium scattering event for ray
                         if (!beta) {
@@ -452,6 +456,8 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                                 beta = SampledSpectrum(0.f);
                             r_u *= T_maj * sigma_n / pdf;
                             r_l *= T_maj * sigma_maj / pdf;
+                            if (!(beta && r_u))
+                                counter++;
                             return beta && r_u;
                         }
                     });
