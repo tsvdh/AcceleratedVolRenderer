@@ -24,7 +24,7 @@ struct Vertex {
     int id = -1;
     Point3f point;
     std::optional<Point3i> coors;
-    std::unordered_map<int, Edge*> inEdges, outEdges; // edgeID, edge
+    std::unordered_set<Edge*> inEdges, outEdges;
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
@@ -36,7 +36,7 @@ struct Edge {
     Vertex* from = nullptr;
     Vertex* to = nullptr;
     EdgeData* data = nullptr;
-    std::unordered_map<int, int> paths; // pathID, index in path
+    std::unordered_map<Path*, int> paths; // path, index in path
 
     bool operator==(const Edge& other) const {
         return id == other.id;
@@ -44,14 +44,14 @@ struct Edge {
 };
 
 struct EdgeData {
-    SampledSpectrum T;
-    float G;
-    std::unordered_map<int, SampledSpectrum> f; // edgeId, collision scale value
+    SampledSpectrum throughput;
+    float weightedThroughput = -1;
 };
 
 struct Path {
     int id = -1;
     std::vector<Edge*> edges;
+    std::vector<EdgeData*> edgeData;
 
     bool operator==(const Path& other) const {
         return id == other.id;
@@ -101,7 +101,7 @@ public:
     Path* AddPath();
     bool RemovePath(int id);
 
-    static bool AddEdgeToPath(Edge* edge, Path* path);
+    static bool AddEdgeToPath(Edge* edge, EdgeData* data, Path* path);
 
     void WriteToDisk(const std::string& fileName, const std::string& desc);
     void WriteToDisk(const std::string& fileName, Description desc);

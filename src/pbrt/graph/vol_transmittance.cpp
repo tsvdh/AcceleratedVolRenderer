@@ -49,14 +49,15 @@ void VolTransmittance::TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vec
     float depth = 0;
     Path* path = pathGraph->AddPath();
     Vertex* curVertex = nullptr;
-    SampledSpectrum curCollScale(-1);
+    SampledSpectrum curPhase(1);
+    float curPhaseRatio = 1;
 
     auto AddNewPathSegment = [&](Point3f p, EdgeData* data) {
         Vertex* newVertex = pathGraph->AddVertex(p);
 
         if (curVertex) {
             Edge* edge = pathGraph->AddEdge(curVertex, newVertex, data, false).value();
-            Graph::AddEdgeToPath(edge, path);
+            Graph::AddEdgeToPath(edge, nullptr, path);
         }
         curVertex = newVertex;
     };
@@ -97,17 +98,10 @@ void VolTransmittance::TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vec
                         if (mode == 0 || mode == 1) {
                             int visibility = 1; // TODO: check visibility
                             float G = (float)visibility / Sqr(Length(curVertex->point - p));
+                            SampledSpectrum throughput = curPhase * segT_Maj * G;
 
-                            auto data = new EdgeData{segT_Maj, G};
+                            auto data = new EdgeData{throughput, curPhaseRatio};
                             AddNewPathSegment(p, data);
-
-                            if (curCollScale[0] != -1) {
-                                // TODO: handle anisotropic media
-                                Edge* prevEdge = path->edges[path->edges.size() - 2];
-                                Edge* curEdge = path->edges[path->edges.size() - 1];
-                                prevEdge->data->f[curEdge->id] = curCollScale;
-                                curEdge->data->f[prevEdge->id] = curCollScale;
-                            }
                         }
 
                         if (mode == 0) {
@@ -135,7 +129,12 @@ void VolTransmittance::TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vec
                                 scattered = true;
                                 ray.o = p;
                                 ray.d = ps->wi;
-                                curCollScale = mp.sigma_s * ps->pdf;
+
+                                if (curVertex->id == 66)
+                                    auto bla = 1;
+
+                                curPhase = mp.sigma_s * ps->p;
+                                curPhaseRatio = ps->p / ps->pdf;
                             }
 
                             return false;
@@ -187,7 +186,16 @@ FreeGraph* VolTransmittance::CaptureTransmittance(std::vector<Light> lights) {
 
     for (auto pair : pathGraph->GetPaths()) {
         Path* path = pair.second;
+        std::vector<Edge*> edges = pair.second->edges;
 
+        for (int i = 0; i < edges.size(); ++i) {
+            EdgeData* data = edges[i]->data;
+
+            SampledSpectrum prevThroughput = i == 0 ? SampledSpectrum(1) : path->edgeData[i - 1]->throughput;
+            float prevWeightedThroughput = i == 0 ? 1 : path->edgeData[i - 1]->weightedThroughput;
+            path->edgeData[i] = new EdgeData{prevThroughput * data->throughput,
+                                             prevWeightedThroughput * data->weightedThroughput};
+        }
     }
 
     return pathGraph;
