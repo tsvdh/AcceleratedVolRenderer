@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="graph_test" type="CMakeRunConfiguration" factoryName="Application" folderName="quick_access" PROGRAM_PARAMS="C:\Users\tsvdh\CLionProjects\pbrt-v4-scenes\cube\cube.pbrt" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="PBRT-V4" TARGET_NAME="graph_test" CONFIG_NAME="Release" RUN_TARGET_PROJECT_NAME="PBRT-V4" RUN_TARGET_NAME="graph_test">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>
