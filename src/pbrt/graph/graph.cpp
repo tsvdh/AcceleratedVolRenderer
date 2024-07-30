@@ -1,6 +1,6 @@
 #include "graph.h"
+#include <fstream>
 #include <stdexcept>
-#include <iostream>
 
 namespace graph {
 
@@ -9,20 +9,20 @@ char NEW('\n');
 
 // Helper methods
 template<class T>
-std::ostream& operator<<(std::ostream& out, pbrt::Point3<T>& p) {
+std::ostream& operator<<(std::ostream& out, Point3<T>& p) {
     out << p.x << SEP << p.y << SEP << p.z << SEP;
     return out;
 }
 
 template<class T>
-std::istream& operator>>(std::istream& in, pbrt::Point3<T>& p) {
+std::istream& operator>>(std::istream& in, Point3<T>& p) {
     in >> p.x >> p.y >> p.z;
     return in;
 }
 
 // Graph implementations
 template<typename T>
-inline std::optional<T*> GetById(int id, std::unordered_map<int, T*> coll) {
+std::optional<T*> GetById(int id, std::unordered_map<int, T*> coll) {
     auto result = coll.find(id);
     if (result == coll.end())
         return {};
@@ -50,7 +50,7 @@ bool Graph::RemoveVertex(int id) {
     return true;
 }
 
-std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, graph::EdgeData* data, bool checkValid) {
+std::optional<Edge*> Graph::AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid) {
     if (checkValid) {
         if (vertices.find(from->id) == vertices.end())
             return {};
@@ -73,7 +73,7 @@ std::optional<Edge*> Graph::AddEdge(graph::Vertex* from, graph::Vertex* to, grap
     return newEdge;
 }
 
-std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, graph::EdgeData* data) {
+std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, EdgeData* data) {
     auto fromResult = vertices.find(fromId);
     if (fromResult == vertices.end())
         return {};
@@ -110,15 +110,15 @@ bool Graph::RemoveEdge(int id) {
     edge->from->outEdges.erase(edge);
     edge->to->inEdges.erase(edge);
 
-    for (auto pair : edge->paths)
-        paths[pair.first->id]->edges[pair.second] = nullptr;
+    for (auto [path, index] : edge->paths)
+        paths[path->id]->edges[index] = nullptr;
 
     delete edge;
     edges.erase(id);
     return true;
 }
 
-void Graph::AddPath(const graph::Path& path) {
+void Graph::AddPath(const Path& path) {
     auto newPath = new Path{++curId};
     paths[curId] = newPath;
 
@@ -126,11 +126,10 @@ void Graph::AddPath(const graph::Path& path) {
         return;
 
     Vertex* curFrom = AddVertex(path.edges[0]->from->point);
-    Vertex* curTo;
 
     for (int i = 0; i < path.edges.size(); ++i) {
         Edge* edge = path.edges[i];
-        curTo = AddVertex(edge->to->point);
+        Vertex* curTo = AddVertex(edge->to->point);
         Edge* newEdge = AddEdge(curFrom, curTo, edge->data, true).value();
         AddEdgeToPath(newEdge, path.edgeData[i], newPath);
 
@@ -157,8 +156,7 @@ bool Graph::RemovePath(int id) {
             if (edge->paths.empty()) {
                 RemoveEdge(edge->id);
 
-                Vertex* to = edge->to;
-                if (to->inEdges.empty() && to->outEdges.empty())
+                if (Vertex* to = edge->to; to->inEdges.empty() && to->outEdges.empty())
                     RemoveVertex(to->id);
             }
         }
@@ -173,7 +171,7 @@ bool Graph::RemovePath(int id) {
     return true;
 }
 
-bool Graph::AddEdgeToPath(graph::Edge* edge, EdgeData* data, graph::Path* path) {
+bool Graph::AddEdgeToPath(Edge* edge, EdgeData* data, Path* path) {
     for (Edge* pathEdge : path->edges) {
         if (*pathEdge == *edge)
             return false;
@@ -181,7 +179,7 @@ bool Graph::AddEdgeToPath(graph::Edge* edge, EdgeData* data, graph::Path* path) 
 
     path->edges.push_back(edge);
     path->edgeData.push_back(data);
-    int index = (int)path->edges.size();
+    int index = static_cast<int>(path->edges.size());
     edge->paths[path] = index;
 
     return true;
@@ -213,23 +211,20 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
            edges.size() << SEP <<
            paths.size() << NEW;
 
-    for (auto pair : vertices) {
-        Vertex* vertex = pair.second;
+    for (auto [_, vertex] : vertices) {
         out << vertex->id << SEP << vertex->point ;
         if (flags.useCoors)
             out << vertex->coors.value();
         out << NEW;
     }
 
-    for (auto pair : edges) {
-        Edge* edge = pair.second;
+    for (auto [_, edge] : edges) {
         out << edge->id << SEP << edge->from->id << SEP << edge->to->id << SEP;
         WriteEdgeData(out, edge->data);
         out << NEW;
     }
 
-    for (auto pair : paths) {
-        Path* path = pair.second;
+    for (auto [_, path] : paths) {
         out << path->id << SEP << path->edges.size() << SEP;
         for (int i = 0; i < path->edges.size(); ++i) {
             out << path->edges[i]->id << SEP;
@@ -255,12 +250,12 @@ void Graph::ReadFromStream(std::istream& in) {
 
     for (int i = 0; i < verticesCap; ++i) {
         int id;
-        pbrt::Point3f point;
+        Point3f point;
         in >> id >> point;
         auto vertex = AddVertex(id, point);
 
         if (flags.useCoors) {
-            pbrt::Point3i coors;
+            Point3i coors;
             in >> coors;
             vertex->coors = coors;
         }
@@ -305,12 +300,12 @@ void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
     file.close();
 }
 
-void Graph::WriteToDisk(const std::string& fileName, graph::Description desc) {
+void Graph::WriteToDisk(const std::string& fileName, Description desc) {
     WriteToDisk(fileName, GetDescriptionName(desc));
 }
 
 // UniformGraph implementations
-std::optional<Vertex*> UniformGraph::GetVertex(pbrt::Point3i coors) {
+std::optional<Vertex*> UniformGraph::GetVertex(Point3i coors) {
     auto result = coorsMap.find(coors);
     if (result == coorsMap.end())
         return {};
@@ -318,31 +313,31 @@ std::optional<Vertex*> UniformGraph::GetVertex(pbrt::Point3i coors) {
     return result->second;
 }
 
-Vertex* UniformGraph::AddVertex(pbrt::Point3f p) {
+Vertex* UniformGraph::AddVertex(Point3f p) {
     auto [coors, fittedPoint] = FitToGraph(p);
     auto newVertex = new Vertex{curId + 1, fittedPoint, coors};
 
-    auto result = coorsMap.insert({coors, newVertex});
-    if (result.second) {
+    auto [iter, success] = coorsMap.insert({coors, newVertex});
+    if (success) {
         vertices[++curId] = newVertex;
         return newVertex;
     }
-    return result.first->second;
+    return iter->second;
 }
 
-Vertex* UniformGraph::AddVertex(int id, pbrt::Point3f p) {
+Vertex* UniformGraph::AddVertex(int id, Point3f p) {
     auto [coors, fittedPoint] = FitToGraph(p);
     auto newVertex = new Vertex{id, fittedPoint, coors};
 
-    auto result = coorsMap.insert({coors, newVertex});
-    if (result.second) {
+    auto [iter, success] = coorsMap.insert({coors, newVertex});
+    if (success) {
         vertices[id] = newVertex;
         return newVertex;
     }
-    return result.first->second;
+    return iter->second;
 }
 
-Vertex* UniformGraph::AddVertex(pbrt::Point3i coors) {
+Vertex* UniformGraph::AddVertex(Point3i coors) {
     return AddVertex(Point3f(coors * spacing));
 }
 
@@ -356,14 +351,13 @@ bool UniformGraph::RemoveVertex(int id) {
     return Graph::RemoveVertex(id);
 }
 
-inline std::tuple<pbrt::Point3i, pbrt::Point3f> UniformGraph::FitToGraph(const pbrt::Point3f& p) const {
-    pbrt::Point3i coors;
-    pbrt::Point3f fittedPoint;
-
+inline std::tuple<Point3i, Point3f> UniformGraph::FitToGraph(const Point3f& p) const {
+    Point3i coors;
     for (int i = 0; i < 3; ++i) {
-        coors[i] = (int) std::round(p[i] / spacing);
+        coors[i] = static_cast<int>(std::round(p[i] / spacing));
     }
-    fittedPoint = coors * spacing;
+
+    Point3f fittedPoint = coors * spacing;
 
     return {coors, fittedPoint};
 }
@@ -385,7 +379,7 @@ std::istream& operator>>(std::istream& in, UniformGraph& g) {
 
 UniformGraph* UniformGraph::ReadFromDisk(const std::string& fileName) {
     auto graph = new UniformGraph;
-    std::ifstream file(graph::FileNameToPath(fileName));
+    std::ifstream file(FileNameToPath(fileName));
     file >> *graph;
     return graph;
 }
@@ -394,8 +388,7 @@ UniformGraph* UniformGraph::ReadFromDisk(const std::string& fileName) {
 UniformGraph* FreeGraph::ToUniform(float spacing) {
     auto uniform = new UniformGraph(spacing);
 
-    for (auto oldPair : vertices) {
-        Vertex* oldVertex = oldPair.second;
+    for (auto [oldId, oldVertex] : vertices) {
         Vertex* curVertex = uniform->AddVertex(oldVertex->point);
 
         for (Edge* inEdge : oldVertex->inEdges) {
@@ -409,8 +402,7 @@ UniformGraph* FreeGraph::ToUniform(float spacing) {
         }
     }
 
-    for (auto oldPair : paths) {
-        Path* oldPath = oldPair.second;
+    for (auto [oldId, oldPath] : paths) {
         auto newPath = AddPath();
         for (int i = 0; i < oldPath->edges.size(); ++i) {
             AddEdgeToPath(oldPath->edges[i], oldPath->edgeData[i], newPath);
@@ -437,7 +429,7 @@ std::istream& operator>>(std::istream& in, FreeGraph& g) {
 
 FreeGraph* FreeGraph::ReadFromDisk(const std::string& fileName) {
     auto graph = new FreeGraph;
-    std::ifstream file(graph::FileNameToPath(fileName));
+    std::ifstream file(FileNameToPath(fileName));
     file >> *graph;
     return graph;
 }

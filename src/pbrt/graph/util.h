@@ -1,9 +1,9 @@
 #pragma once
 
 #include <pbrt/pbrt.h>
-#include <pbrt/util/vecmath.h>
-#include <pbrt/cpu/primitive.h>
 #include <pbrt/cpu/aggregates.h>
+#include <pbrt/cpu/primitive.h>
+#include <pbrt/util/vecmath.h>
 
 namespace util {
 
@@ -27,7 +27,7 @@ struct MediumData {
     Point3f boundsCenter;
     float maxDistToCenter;
 
-    MediumData(SampledWavelengths lambda, Primitive accel) : lambda(lambda) {
+    MediumData(const SampledWavelengths& lambda, Primitive accel) : lambda(lambda) {
         if (!accel.Is<BVHAggregate>())
             throw std::runtime_error("Accelerator primitive must be a 'BVHAggregate' type");
 

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <pbrt/media.h>
 #include <pbrt/pbrt.h>
 #include <pbrt/ray.h>
-#include <pbrt/media.h>
-#include <pbrt/util/spectrum.h>
 #include <pbrt/graph/graph.h>
+#include <pbrt/util/spectrum.h>
 
 namespace graph {
 
@@ -14,7 +14,7 @@ template <typename F>
 PBRT_CPU_GPU SampledSpectrum SampleT_maj(Ray ray, Float tMax, Float u, RNG &rng,
                                          const SampledWavelengths &lambda, Graph& graph, F callback) {
     auto sample = [&](auto medium) {
-        using M = typename std::remove_reference_t<decltype(*medium)>;
+        using M = std::remove_reference_t<decltype(*medium)>;
         return SampleT_maj<M>(ray, tMax, u, rng, lambda, graph, callback);
     };
     return ray.medium.Dispatch(sample);

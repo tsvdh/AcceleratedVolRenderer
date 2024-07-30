@@ -1,12 +1,13 @@
 #include "graph_integrator.h"
 
-#include <pbrt/materials.h>
-#include <pbrt/util/string.h>
-#include <pbrt/util/progressreporter.h>
-#include <pbrt/util/file.h>
-#include <pbrt/util/display.h>
 #include <iostream>
+
+#include <pbrt/materials.h>
 #include <pbrt/graph/graph_T_sampler.h>
+#include <pbrt/util/display.h>
+#include <pbrt/util/file.h>
+#include <pbrt/util/progressreporter.h>
+#include <pbrt/util/string.h>
 
 namespace graph {
 
@@ -80,7 +81,7 @@ void GraphVolPathIntegrator::Render() {
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
     int spp = samplerPrototype.SamplesPerPixel();
-    ProgressReporter progress(int64_t(spp) * pixelBounds.Area(), "Rendering",
+    ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering",
                               Options->quiet);
 
     int waveStart = 0, waveEnd = 1, nextWaveSize = 1;
@@ -92,12 +93,12 @@ void GraphVolPathIntegrator::Render() {
     pstd::optional<Image> referenceImage;
     FILE *mseOutFile = nullptr;
     if (!Options->mseReferenceImage.empty()) {
-        auto mse = Image::Read(Options->mseReferenceImage);
-        referenceImage = mse.image;
+        auto [image, metadata] = Image::Read(Options->mseReferenceImage);
+        referenceImage = image;
 
         Bounds2i msePixelBounds =
-                mse.metadata.pixelBounds
-                ? *mse.metadata.pixelBounds
+                metadata.pixelBounds
+                ? *metadata.pixelBounds
                 : Bounds2i(Point2i(0, 0), referenceImage->Resolution());
         if (!Inside(pixelBounds, msePixelBounds))
             ErrorExit("Output image pixel bounds %s aren't inside the MSE "
@@ -128,7 +129,7 @@ void GraphVolPathIntegrator::Render() {
                            int index = 0;
                            for (Point2i p : b) {
                                RGB rgb = film.GetPixelRGB(pixelBounds.pMin + p,
-                                                          2.f / (float)(waveStart + waveEnd));
+                                                          2.f / static_cast<float>(waveStart + waveEnd));
                                for (int c = 0; c < 3; ++c)
                                    displayValue[c][index] = rgb[c];
                                ++index;
@@ -207,12 +208,12 @@ void GraphVolPathIntegrator::Render() {
         if (waveStart == spp || Options->writePartialImages || referenceImage) {
             LOG_VERBOSE("Writing image with spp = %d", waveStart);
             ImageMetadata metadata;
-            metadata.renderTimeSeconds = (float)progress.ElapsedSeconds();
+            metadata.renderTimeSeconds = static_cast<float>(progress.ElapsedSeconds());
             metadata.samplesPerPixel = waveStart;
             if (referenceImage) {
                 ImageMetadata filmMetadata;
                 Image filmImage =
-                        camera.GetFilm().GetImage(&filmMetadata, 1.f / (float)waveStart);
+                        camera.GetFilm().GetImage(&filmMetadata, 1.f / static_cast<float>(waveStart));
                 ImageChannelValues mse =
                         filmImage.MSE(filmImage.AllChannelsDesc(), *referenceImage);
                 fprintf(mseOutFile, "%d, %.9g\n", waveStart, mse.Average());
@@ -221,7 +222,7 @@ void GraphVolPathIntegrator::Render() {
             }
             if (waveStart == spp || Options->writePartialImages) {
                 camera.InitMetadata(&metadata);
-                camera.GetFilm().WriteImage(metadata, 1.f / (float)waveStart);
+                camera.GetFilm().WriteImage(metadata, 1.f / static_cast<float>(waveStart));
             }
         }
     }
@@ -274,7 +275,7 @@ void GraphVolPathIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex
         DCHECK_LT(Length(cameraRay->ray.d), 1.001f);
         // Scale camera ray differentials based on image sampling rate
         Float rayDiffScale =
-                std::max<Float>(.125f, 1 / std::sqrt((Float)sampler.SamplesPerPixel()));
+                std::max<Float>(.125f, 1 / std::sqrt(static_cast<Float>(sampler.SamplesPerPixel())));
         if (!Options->disablePixelJitter)
             cameraRay->ray.ScaleDifferentials(rayDiffScale);
 
@@ -317,7 +318,7 @@ void GraphVolPathIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex
 
 SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
                                            Sampler sampler, ScratchBuffer& scratchBuffer,
-                                           VisibleSurface* visibleSurf, Graph& graph) const {
+                                           VisibleSurface* visibleSurface, Graph& graph) const {
     // Declare state variables for volumetric path sampling
     SampledSpectrum L(0.f), beta(1.f), r_u(1.f), r_l(1.f);
     bool specularBounce = false, anyNonSpecularBounces = false;
@@ -363,7 +364,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             uint64_t hash1 = Hash(sampler.Get1D());
             RNG rng(hash0, hash1);
 
-            SampledSpectrum T_maj = SampleT_maj(
+            SampledSpectrum T_majFinal = SampleT_maj(
                     (Ray&)ray, tMax, sampler.Get1D(), rng, lambda,
                     [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                         // Handle medium scattering event for ray
@@ -394,6 +395,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                         CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
                         // Sample medium scattering event type and update path
                         Float um = rng.Uniform<Float>();
+                        // ReSharper disable once CppTooWideScopeInitStatement
                         int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
 
                         // add edge to graph
@@ -405,8 +407,8 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                             // Handle absorption along ray path
                             terminated = true;
                             return false;
-
-                        } else if (mode == 1) {
+                        }
+                        if (mode == 1) {
                             // Handle scattering along ray path
                             // Stop path sampling if maximum depth has been reached
                             if (depth++ >= maxDepth) {
@@ -428,8 +430,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
 
                                 // Sample new direction at real-scattering event
                                 Point2f u = sampler.Get2D();
-                                pstd::optional<PhaseFunctionSample> ps =
-                                        intr.phase.Sample_p(-ray.d, u);
+                                pstd::optional<PhaseFunctionSample> ps = intr.phase.Sample_p(-ray.d, u);
                                 if (!ps || ps->pdf == 0)
                                     terminated = true;
                                 else {
@@ -445,8 +446,8 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
                                 }
                             }
                             return false;
-
-                        } else {
+                        }
+                        else {
                             // Handle null scattering along ray path
                             SampledSpectrum sigma_n =
                                     ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
@@ -468,9 +469,9 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             if (scattered)
                 continue;
 
-            beta *= T_maj / T_maj[0];
-            r_u *= T_maj / T_maj[0];
-            r_l *= T_maj / T_maj[0];
+            beta *= T_majFinal / T_majFinal[0];
+            r_u *= T_majFinal / T_majFinal[0];
+            r_l *= T_majFinal / T_majFinal[0];
         }
 
         // Handle surviving unscattered rays
@@ -518,11 +519,11 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
         }
 
         // Initialize _visibleSurf_ at first intersection
-        if (depth == 0 && visibleSurf) {
+        if (depth == 0 && visibleSurface) {
             // Estimate BSDF's albedo
             // Define sample arrays _ucRho_ and _uRho_ for reflectance estimate
             constexpr int nRhoSamples = 16;
-            const Float ucRho[nRhoSamples] = {
+            constexpr Float ucRho[nRhoSamples] = {
                     0.75741637, 0.37870818, 0.7083487, 0.18935409, 0.9149363, 0.35417435,
                     0.5990858, 0.09467703, 0.8578725, 0.45746812, 0.686759, 0.17708716,
                     0.9674518, 0.2995429, 0.5083201, 0.047338516};
@@ -538,7 +539,7 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
 
             SampledSpectrum albedo = bsdf.rho(isect.wo, ucRho, uRho);
 
-            *visibleSurf = VisibleSurface(isect, albedo, lambda);
+            *visibleSurface = VisibleSurface(isect, albedo, lambda);
         }
 
         // Terminate path if maximum depth reached
@@ -615,8 +616,8 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
 
             // Convert probe intersection to _BSSRDFSample_
             SubsurfaceInteraction sssi = interactionSampler.GetSample();
-            BSSRDFSample bssrdfSample =
-                    bssrdf.ProbeIntersectionToSample(sssi, scratchBuffer);
+            // ReSharper disable once CppUseStructuredBinding
+            BSSRDFSample bssrdfSample = bssrdf.ProbeIntersectionToSample(sssi, scratchBuffer);
             if (!bssrdfSample.Sp || !bssrdfSample.pdf)
                 break;
 
@@ -738,9 +739,9 @@ SampledSpectrum GraphVolPathIntegrator::SampleLd(const Interaction& intr, const 
         if (lightRay.medium) {
             Float tMax = si ? si->tHit : (1 - ShadowEpsilon);
             Float mediumU = rng.Uniform<Float>();
-            SampledSpectrum T_maj =
+            SampledSpectrum T_majFinal =
                     SampleT_maj(lightRay, tMax, mediumU, rng, lambda,
-                                [&](Point3f p, MediumProperties& mp, SampledSpectrum sigma_maj,
+                                [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj,
                                     SampledSpectrum T_maj) {
                                     // Update ray transmittance estimate at sampled point
                                     // Update _T_ray_ and PDFs using ratio-tracking estimator
@@ -767,9 +768,9 @@ SampledSpectrum GraphVolPathIntegrator::SampleLd(const Interaction& intr, const 
                                     return true;
                                 });
             // Update transmittance estimate for final segment
-            T_ray *= T_maj / T_maj[0];
-            r_l *= T_maj / T_maj[0];
-            r_u *= T_maj / T_maj[0];
+            T_ray *= T_majFinal / T_majFinal[0];
+            r_l *= T_majFinal / T_majFinal[0];
+            r_u *= T_majFinal / T_majFinal[0];
         }
 
         // Generate next ray segment or return final transmittance

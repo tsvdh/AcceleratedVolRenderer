@@ -1,25 +1,21 @@
 #pragma once
 
-#include <pbrt/graph/graph.h>
-#include <iostream>
-#include <fstream>
 #include <iomanip>
+#include <iostream>
 
-#include <pbrt/util/args.h>
+#include <pbrt/graph/graph.h>
 #include <pbrt/scene.h>
-#include <pbrt/cpu/aggregates.h>
-
-#include <pbrt/graph/vol_boundary.h>
 #include <pbrt/graph/vol_transmittance.h>
+#include <pbrt/util/args.h>
 
 using namespace pbrt;
 
-int main(int argc, char* argv[]) {
+void main(int argc, char* argv[]) {
     std::vector<std::string> args = GetCommandLineArguments(argv);
 
     if (args.size() != 1) {
         std::cout << "Error: expected exactly one argument" << std::endl;
-        return 0;
+        return;
     }
 
     PBRTOptions options;
@@ -71,5 +67,4 @@ int main(int argc, char* argv[]) {
     graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
 
     paths->WriteToDisk("cube_paths", graph::Description::paths);
-    return 0;
 }

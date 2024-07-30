@@ -1,10 +1,8 @@
 #pragma once
 
 #include <pbrt/pbrt.h>
-#include <pbrt/util/vecmath.h>
-#include <pbrt/cpu/primitive.h>
+
 #include "graph.h"
-#include "pbrt/cpu/aggregates.h"
 
 namespace graph {
 

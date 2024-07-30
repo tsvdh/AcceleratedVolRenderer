@@ -1,8 +1,11 @@
 #include "vol_boundary.h"
-#include "pbrt/util/progressreporter.h"
+
+#include <queue>
+
 #include <pbrt/media.h>
 #include <pbrt/cpu/aggregates.h>
-#include <queue>
+
+#include "pbrt/util/progressreporter.h"
 
 namespace graph {
 
@@ -12,14 +15,14 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
     auto graph = new UniformGraph(graphSpacing);
 
     int numSteps = 100;
-    float stepSize = mediumData->maxDistToCenter / (float)numSteps;
+    float stepSize = mediumData->maxDistToCenter / static_cast<float>(numSteps);
 
     for (int theta = 0; theta < 360; theta += horizontalStep) {
-        float sinTheta = std::sin((float)theta * Pi / 180);
-        float cosTheta = std::cos((float)theta * Pi / 180);
+        float sinTheta = std::sin(static_cast<float>(theta) * Pi / 180);
+        float cosTheta = std::cos(static_cast<float>(theta) * Pi / 180);
 
         for (int phi = 0; phi < 360; phi += verticalStep) {
-            Vector3f dir = SphericalDirection(sinTheta, cosTheta, (float)phi);
+            Vector3f dir = SphericalDirection(sinTheta, cosTheta, static_cast<float>(phi));
             Point3f origin(mediumData->boundsCenter - dir * mediumData->maxDistToCenter * 2);
             // graph->AddVertex(origin);
 
@@ -61,7 +64,7 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
     return graph;
 }
 
-inline std::vector<Point3i> GetNeighbours(Point3i p, Bounds3i bounds) {
+inline std::vector<Point3i> GetNeighbours(Point3i p, const Bounds3i& bounds) {
     std::vector<Point3i> neighbours;
 
     for (int i = 0; i < 6; ++i) {
@@ -77,7 +80,7 @@ inline std::vector<Point3i> GetNeighbours(Point3i p, Bounds3i bounds) {
     return neighbours;
 }
 
-void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
+void VolBoundary::ToSingleLayer(UniformGraph* boundary) const {
     using std::get;
     Bounds3i coorBounds(get<0>(boundary->FitToGraph(mediumData->bounds.pMin)) - Vector3i(1, 1, 1),
                         get<0>(boundary->FitToGraph(mediumData->bounds.pMax)) + Vector3i(1, 1, 1));
@@ -102,8 +105,7 @@ void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
         queueSet.erase(curPoint);
 
         for (Point3i neighbour : GetNeighbours(curPoint, coorBounds)) {
-            auto optVertex = boundary->GetVertex(neighbour);
-            if (optVertex) {
+            if (auto optVertex = boundary->GetVertex(neighbour); optVertex) {
                 singleLayerSet.insert(optVertex.value()->id);
             }
             else if (visited.find(neighbour) == visited.end() && queueSet.find(neighbour) == queueSet.end()) {
@@ -114,9 +116,9 @@ void VolBoundary::ToSingleLayer(graph::UniformGraph* boundary) const {
         }
     }
 
-    for (auto pair : boundary->GetVertices()) {
-        if (singleLayerSet.find(pair.first) == singleLayerSet.end())
-            boundary->RemoveVertex(pair.first);
+    for (auto [id, vertex] : boundary->GetVertices()) {
+        if (singleLayerSet.find(id) == singleLayerSet.end())
+            boundary->RemoveVertex(id);
     }
 }
 

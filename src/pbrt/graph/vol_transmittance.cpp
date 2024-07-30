@@ -11,8 +11,7 @@ void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoint
     float maxRayLength = mediumData->maxDistToCenter * 2;
 
     ScratchBuffer buffer;
-    for (auto pair : boundary->GetVertices()) {
-        Vertex* vertex = pair.second;
+    for (auto [id, vertex] : boundary->GetVertices()) {
         RayDifferential ray(vertex->point - lightDir * maxRayLength, lightDir);
 
         auto shapeInter = mediumData->aggregate->Intersect(ray, Infinity);
@@ -40,11 +39,11 @@ void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoint
         }
 
         if (directlyLit)
-            litSurfacePoints->push_back(pair.second);
+            litSurfacePoints->push_back(vertex);
     }
 }
 
-void VolTransmittance::TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vector3f lightDir) {
+void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGraph, Vector3f lightDir) {
     RayDifferential ray(surfacePoint->point - lightDir * mediumData->maxDistToCenter, lightDir);
     float depth = 0;
     Path* path = pathGraph->AddPath();
@@ -97,7 +96,7 @@ void VolTransmittance::TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vec
                         segT_Maj *= T_maj;
                         if (mode == 0 || mode == 1) {
                             int visibility = 1; // TODO: check visibility
-                            float G = (float)visibility / Sqr(Length(curVertex->point - p));
+                            float G = static_cast<float>(visibility) / Sqr(Length(curVertex->point - p));
                             SampledSpectrum throughput = curPhase * segT_Maj * G;
 
                             auto data = new EdgeData{throughput, curPhaseRatio};
@@ -165,7 +164,7 @@ void VolTransmittance::TracePath(Vertex* surfacePoint, FreeGraph* pathGraph, Vec
     }
 }
 
-FreeGraph* VolTransmittance::CaptureTransmittance(std::vector<Light> lights) {
+FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& lights) {
     if (lights.size() != 1)
         throw std::runtime_error("Expected exactly one light source");
 
@@ -184,9 +183,8 @@ FreeGraph* VolTransmittance::CaptureTransmittance(std::vector<Light> lights) {
         TracePath(surfacePoint, pathGraph, lightDir);
     }
 
-    for (auto pair : pathGraph->GetPaths()) {
-        Path* path = pair.second;
-        std::vector<Edge*> edges = pair.second->edges;
+    for (auto [id, path] : pathGraph->GetPaths()) {
+        std::vector<Edge*> edges = path->edges;
 
         for (int i = 0; i < edges.size(); ++i) {
             EdgeData* data = edges[i]->data;

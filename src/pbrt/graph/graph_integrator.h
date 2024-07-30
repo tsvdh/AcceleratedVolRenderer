@@ -11,7 +11,7 @@ namespace graph {
 
 using namespace pbrt;
 
-class GraphVolPathIntegrator : public RayIntegrator {
+class GraphVolPathIntegrator final : public RayIntegrator {
 public:
     // GraphVolPathIntegrator Public Methods
     GraphVolPathIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate,
@@ -51,7 +51,7 @@ private:
     // GraphVolPathIntegrator Private Methods
     SampledSpectrum SampleLd(const Interaction &intr, const BSDF *bsdf,
                              SampledWavelengths &lambda, Sampler sampler,
-                             SampledSpectrum beta, SampledSpectrum inv_w_u) const;
+                             SampledSpectrum beta, SampledSpectrum r_p) const;
 
     // GraphVolPathIntegrator Private Members
     int maxDepth;

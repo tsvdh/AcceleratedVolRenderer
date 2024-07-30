@@ -1,13 +1,11 @@
 #pragma once
 
-#include <vector>
 #include <optional>
-#include <iostream>
-#include <fstream>
+#include <vector>
 
-#include <pbrt/util/vecmath.h>
-#include <pbrt/util/spectrum.h>
 #include <pbrt/lights.h>
+#include <pbrt/util/spectrum.h>
+#include <pbrt/util/vecmath.h>
 
 #include "util.h"
 
@@ -80,6 +78,7 @@ class Graph {
 public:
     Graph() = default;
     Graph(Graph& other) = default;
+    virtual ~Graph() = default;
 
     std::unordered_map<int, Vertex*> GetVertices() { return vertices; }
     std::unordered_map<int, Edge*> GetEdges() { return edges; }
@@ -116,11 +115,10 @@ protected:
     int curId = -1;
 };
 
-class UniformGraph : public Graph {
+class UniformGraph final : public Graph {
 public:
     UniformGraph() : spacing(1.f) {};
     explicit UniformGraph(float spacing) : spacing(spacing) {};
-    UniformGraph(UniformGraph& other) = default;
 
     float GetSpacing() { return spacing; } // NOLINT(*-make-member-function-const)
     std::unordered_map<Point3i, Vertex*, util::PointHash> GetCoorsMap() { return coorsMap; }
@@ -134,8 +132,8 @@ public:
 
     bool RemoveVertex(int id) override;
 
-    friend std::ostream& operator<<(std::ostream& out, UniformGraph& v);
-    friend std::istream& operator>>(std::istream& in, UniformGraph& v);
+    friend std::ostream& operator<<(std::ostream& out, UniformGraph& g);
+    friend std::istream& operator>>(std::istream& in, UniformGraph& g);
 
     static UniformGraph* ReadFromDisk(const std::string& fileName);
 
@@ -149,14 +147,12 @@ private:
 class FreeGraph : public Graph {
 public:
     FreeGraph() = default;
-    FreeGraph(FreeGraph &other) = default;
-
 
     Vertex* AddVertex(Point3f p) override {
         return AddVertex(++curId, p);
     }
 
-    Vertex* AddVertex(int id, pbrt::Point3f p) override {
+    Vertex* AddVertex(int id, Point3f p) override {
         auto newVertex = new Vertex{id, p};
         vertices[id] = newVertex;
         return newVertex;
@@ -164,8 +160,8 @@ public:
 
     [[nodiscard]] UniformGraph* ToUniform(float spacing);
 
-    friend std::ostream& operator<<(std::ostream& out, FreeGraph& v);
-    friend std::istream& operator>>(std::istream& in, FreeGraph& v);
+    friend std::ostream& operator<<(std::ostream& out, FreeGraph& g);
+    friend std::istream& operator>>(std::istream& in, FreeGraph& g);
 
     static FreeGraph* ReadFromDisk(const std::string& fileName);
 };
