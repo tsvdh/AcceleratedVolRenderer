@@ -102,13 +102,12 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
                             auto data = new EdgeData{throughput, curPhaseRatio};
                             AddNewPathSegment(p, data);
                         }
-
                         if (mode == 0) {
                             // Handle absorption along ray path
                             terminated = true;
                             return false;
-
-                        } else if (mode == 1) {
+                        }
+                        else if (mode == 1) {
                             // Handle scattering along ray path
                             // Stop path sampling if maximum depth has been reached
                             if (depth++ >= maxDepth) {
@@ -137,9 +136,10 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
                             }
 
                             return false;
-
-                        } else {
+                        }
+                        else {
                             // Handle null scattering along ray path
+                            curPhase *= 1 - mp.sigma_a - mp.sigma_s;
                             return true;
                         }
                     });

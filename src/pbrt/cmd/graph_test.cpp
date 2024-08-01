@@ -33,8 +33,8 @@ void main(int argc, char* argv[]) {
     std::map<int, pstd::vector<Light>*> shapeIndexToAreaLights;
     std::vector<Light> lights = scene.CreateLights(textures, &shapeIndexToAreaLights);
 
-    std::map<std::string, pbrt::Material> namedMaterials;
-    std::vector<pbrt::Material> materials;
+    std::map<std::string, Material> namedMaterials;
+    std::vector<Material> materials;
     scene.CreateMaterials(textures, &namedMaterials, &materials);
     Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
 
