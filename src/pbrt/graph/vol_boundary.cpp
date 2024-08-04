@@ -5,6 +5,7 @@
 #include <pbrt/media.h>
 #include <pbrt/cpu/aggregates.h>
 
+#include "pbrt/shapes.h"
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {

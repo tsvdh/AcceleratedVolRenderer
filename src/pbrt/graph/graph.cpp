@@ -204,7 +204,8 @@ inline EdgeData* ReadEdgeData(std::istream& in) {
 }
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
-    out << (flags.useCoors ? "True" : "False") << NEW;
+    out << (flags.useCoors ? "True" : "False") << SEP
+        << (flags.useThroughput ? "True" : "False") << NEW;
 
     out << curId << SEP <<
            vertices.size() << SEP <<
@@ -220,7 +221,8 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
 
     for (auto [_, edge] : edges) {
         out << edge->id << SEP << edge->from->id << SEP << edge->to->id << SEP;
-        WriteEdgeData(out, edge->data);
+        if (flags.useThroughput)
+            WriteEdgeData(out, edge->data);
         out << NEW;
     }
 
@@ -228,7 +230,8 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
         out << path->id << SEP << path->edges.size() << SEP;
         for (int i = 0; i < path->edges.size(); ++i) {
             out << path->edges[i]->id << SEP;
-            WriteEdgeData(out, path->edgeData[i]);
+            if (flags.useThroughput)
+                WriteEdgeData(out, path->edgeData[i]);
         }
         out << NEW;
     }
@@ -237,10 +240,12 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
 void Graph::ReadFromStream(std::istream& in) {
     StreamFlags flags{};
 
-    std::string useCoors;
-    in >> useCoors;
+    std::string useCoors, useThroughput;
+    in >> useCoors >> useThroughput;
     if (useCoors == "True")
         flags.useCoors = true;
+    if (useThroughput == "True")
+        flags.useThroughput = true;
 
     int verticesCap, edgesCap, pathsCap;
     in >> curId >> verticesCap >> edgesCap >> pathsCap;
@@ -264,7 +269,7 @@ void Graph::ReadFromStream(std::istream& in) {
     for (int i = 0; i < edgesCap; ++i) {
         int id, fromId, toId;
         in >> id >> fromId >> toId;
-        EdgeData* data = ReadEdgeData(in);
+        EdgeData* data = flags.useThroughput ? ReadEdgeData(in) : nullptr;
 
         AddEdge(id, fromId, toId, data);
     }
@@ -279,29 +284,29 @@ void Graph::ReadFromStream(std::istream& in) {
         for (int j = 0; j < pathLength; ++j) {
             int pathEdgeId;
             in >> pathEdgeId;
-            EdgeData* data = ReadEdgeData(in);
+            EdgeData* data = flags.useThroughput ? ReadEdgeData(in) : nullptr;
 
             AddEdgeToPath(edges[pathEdgeId], data, path);
         }
     }
 }
 
-void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
+void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags) {
     std::ofstream file("files/graphs/" + fileName + ".txt");
     file << desc << NEW;
 
     auto asUniform = dynamic_cast<UniformGraph*>(this);
     auto asFree = dynamic_cast<FreeGraph*>(this);
     if (asUniform)
-        file << *asUniform;
+        asUniform->WriteToStream(file, flags);
     if (asFree)
-        file << *asFree;
+        asFree->WriteToStream(file, flags);
 
     file.close();
 }
 
-void Graph::WriteToDisk(const std::string& fileName, Description desc) {
-    WriteToDisk(fileName, GetDescriptionName(desc));
+void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags) {
+    WriteToDisk(fileName, GetDescriptionName(desc), flags);
 }
 
 // UniformGraph implementations
@@ -362,25 +367,23 @@ inline std::tuple<Point3i, Point3f> UniformGraph::FitToGraph(const Point3f& p) c
     return {coors, fittedPoint};
 }
 
-std::ostream& operator<<(std::ostream& out, UniformGraph& g) {
-    out << "uniform" << SEP << g.spacing << NEW;
+void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags) {
+    out << "uniform" << SEP << spacing << NEW;
 
-    g.WriteToStream(out, StreamFlags{false});
-    return out;
+    Graph::WriteToStream(out, flags);
 }
 
-std::istream& operator>>(std::istream& in, UniformGraph& g) {
+void UniformGraph::ReadFromStream(std::istream& in) {
     std::string description, name;
-    in >> description >> name >> g.spacing;
+    in >> description >> name >> spacing;
 
-    g.ReadFromStream(in);
-    return in;
+    Graph::ReadFromStream(in);
 }
 
 UniformGraph* UniformGraph::ReadFromDisk(const std::string& fileName) {
     auto graph = new UniformGraph;
     std::ifstream file(FileNameToPath(fileName));
-    file >> *graph;
+    graph->ReadFromStream(file);
     return graph;
 }
 
@@ -412,25 +415,23 @@ UniformGraph* FreeGraph::ToUniform(float spacing) {
     return uniform;
 }
 
-std::ostream& operator<<(std::ostream& out, FreeGraph& g) {
+void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags) {
     out << "free" << NEW;
 
-    g.WriteToStream(out, StreamFlags{false});
-    return out;
+    Graph::WriteToStream(out, flags);
 }
 
-std::istream& operator>>(std::istream& in, FreeGraph& g) {
+void FreeGraph::ReadFromStream(std::istream& in) {
     std::string description, name;
     in >> description >> name;
 
-    g.ReadFromStream(in);
-    return in;
+    Graph::ReadFromStream(in);
 }
 
 FreeGraph* FreeGraph::ReadFromDisk(const std::string& fileName) {
     auto graph = new FreeGraph;
     std::ifstream file(FileNameToPath(fileName));
-    file >> *graph;
+    graph->ReadFromStream(file);
     return graph;
 }
 

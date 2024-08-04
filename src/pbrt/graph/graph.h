@@ -1,11 +1,11 @@
 #pragma once
 
-#include <optional>
-#include <vector>
-
-#include <pbrt/lights.h>
 #include <pbrt/util/spectrum.h>
 #include <pbrt/util/vecmath.h>
+
+#include <optional>
+#include <unordered_set>
+#include <vector>
 
 #include "util.h"
 
@@ -58,6 +58,7 @@ struct Path {
 
 struct StreamFlags {
     bool useCoors = false;
+    bool useThroughput = false;
 };
 
 inline std::string FileNameToPath(const std::string& fileName) {
@@ -102,12 +103,12 @@ public:
 
     static bool AddEdgeToPath(Edge* edge, EdgeData* data, Path* path);
 
-    void WriteToDisk(const std::string& fileName, const std::string& desc);
-    void WriteToDisk(const std::string& fileName, Description desc);
+    void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags);
+    void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
 
 protected:
-    void WriteToStream(std::ostream& out, StreamFlags flags);
-    void ReadFromStream(std::istream& in);
+    virtual void WriteToStream(std::ostream& out, StreamFlags flags);
+    virtual void ReadFromStream(std::istream& in);
 
     std::unordered_map<int, Vertex*> vertices; // ID, object
     std::unordered_map<int, Edge*> edges;      // ID, object
@@ -132,12 +133,12 @@ public:
 
     bool RemoveVertex(int id) override;
 
-    friend std::ostream& operator<<(std::ostream& out, UniformGraph& g);
-    friend std::istream& operator>>(std::istream& in, UniformGraph& g);
+    [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(const Point3f& p) const;
 
     static UniformGraph* ReadFromDisk(const std::string& fileName);
 
-    [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(const Point3f& p) const;
+    void WriteToStream(std::ostream& out, StreamFlags flags) override;
+    void ReadFromStream(std::istream& in) override;
 
 private:
     float spacing;
@@ -160,10 +161,10 @@ public:
 
     [[nodiscard]] UniformGraph* ToUniform(float spacing);
 
-    friend std::ostream& operator<<(std::ostream& out, FreeGraph& g);
-    friend std::istream& operator>>(std::istream& in, FreeGraph& g);
-
     static FreeGraph* ReadFromDisk(const std::string& fileName);
+
+    void WriteToStream(std::ostream& out, StreamFlags flags) override;
+    void ReadFromStream(std::istream& in) override;
 };
 
 class ClusterableGraph : public FreeGraph {

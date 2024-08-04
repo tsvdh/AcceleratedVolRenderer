@@ -8,6 +8,8 @@
 #include <pbrt/graph/vol_transmittance.h>
 #include <pbrt/util/args.h>
 
+#include "pbrt/graph/vol_boundary.h"
+
 using namespace pbrt;
 
 void main(int argc, char* argv[]) {
@@ -43,14 +45,15 @@ void main(int argc, char* argv[]) {
 
     auto mediumData = new util::MediumData(lambda, accel);
 
-    // graph::VolBoundary boundary(mediumData);
+    graph::VolBoundary boundary(mediumData);
 
     // --- cube ---
     // auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
-    // cubeGraph->WriteToDisk("surface_cube", graph::Description::surface);
-    auto cubeGraph = graph::UniformGraph::ReadFromDisk("surface_cube");
     // boundary.ToSingleLayer(cubeGraph);
-    // cubeGraph->WriteToDisk("surface_cube", graph::Description::surface);
+    // cubeGraph->WriteToDisk("surface_cube", graph::Description::surface,
+    //     graph::StreamFlags{false, false});
+
+    auto cubeGraph = graph::UniformGraph::ReadFromDisk("surface_cube");
     // ---
 
     // --- disney ---
@@ -66,5 +69,6 @@ void main(int argc, char* argv[]) {
     graph::VolTransmittance transmittance(cubeGraph, mediumData, sampler);
     graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
 
-    paths->WriteToDisk("cube_paths", graph::Description::paths);
+    paths->WriteToDisk("cube_paths", graph::Description::paths,
+        graph::StreamFlags{false, true});
 }

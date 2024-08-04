@@ -1,11 +1,11 @@
-graph desc  string-description
-extra meta	string-name (float-spacing)                     super class
+graph desc  string-description                                  super class
+extra meta	string-name (float-spacing)
 
-flags 		bool(int)-useCoors			                    base class
+flags 		string-useCoors string-useThroughput                base class
 base meta	int-curId,vertices,edges,paths
 vertices	int-id float-x,y,z (int-x,y,z)
 ...
-edges		int-id,from,to float-throughput(x5)
+edges		int-id,from,to (float-throughput(x5))
 ...
-paths		int-id,size, ...int-id, float-throughput(x5)...
+paths		int-id,size, ...int-id, (float-throughput(x5))...
 ...
