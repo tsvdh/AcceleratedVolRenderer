@@ -1,5 +1,7 @@
 #include "vol_transmittance.h"
+
 #include "pbrt/media.h"
+#include "pbrt/util/progressreporter.h"
 
 namespace graph {
 
@@ -96,7 +98,8 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
                         segT_Maj *= T_maj;
                         if (mode == 0 || mode == 1) {
                             int visibility = 1; // TODO: check visibility
-                            float G = static_cast<float>(visibility) / Sqr(Length(curVertex->point - p));
+                            float dist = std::max(1.f, Length(curVertex->point - p));
+                            float G = static_cast<float>(visibility) / Sqr(dist);
                             SampledSpectrum throughput = curPhase * segT_Maj * G;
 
                             auto data = new EdgeData{throughput, curPhaseRatio};
@@ -178,10 +181,15 @@ FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& ligh
     std::vector<Vertex*> litSurfacePoints;
     GetLitSurfacePoints(&litSurfacePoints, lightDir);
 
+    auto progress = ProgressReporter(static_cast<int>(litSurfacePoints.size()), "Tracing lit surface", false);
+
     auto pathGraph = new FreeGraph();
-    for (Vertex* surfacePoint : litSurfacePoints) {
-        TracePath(surfacePoint, pathGraph, lightDir);
+    for (int i = 0; i < litSurfacePoints.size(); ++i) {
+        sampler.StartPixelSample(Point2i(i, 0), 0);
+        TracePath(litSurfacePoints[i], pathGraph, lightDir);
+        progress.Update();
     }
+    progress.Done();
 
     for (auto [id, path] : pathGraph->GetPaths()) {
         std::vector<Edge*> edges = path->edges;
