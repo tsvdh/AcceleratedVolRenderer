@@ -52,6 +52,7 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
     Vertex* curVertex = nullptr;
     SampledSpectrum curPhase(1);
     float curPhaseRatio = 1;
+    bool outsideMedium = true;
 
     auto AddNewPathSegment = [&](Point3f p, EdgeData* data) {
         Vertex* newVertex = pathGraph->AddVertex(p);
@@ -159,6 +160,10 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
             break;
 
         si->intr.SkipIntersection(&ray, si->tHit);
+        if (outsideMedium) {
+            AddNewPathSegment(ray.o, new EdgeData{SampledSpectrum(1), 1});
+            outsideMedium = false;
+        }
     }
 
     if (path->edges.empty()) {
