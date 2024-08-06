@@ -14,6 +14,7 @@ namespace graph {
 using namespace pbrt;
 
 struct Vertex;
+struct VertexData;
 struct Edge;
 struct EdgeData;
 struct Path;
@@ -21,12 +22,25 @@ struct Path;
 struct Vertex {
     int id = -1;
     Point3f point;
+    VertexData* data;
     std::optional<Point3i> coors;
     std::unordered_set<Edge*> inEdges, outEdges;
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
     }
+};
+
+enum RayVertexType {
+    absorp,
+    scatter,
+    null,
+    entry,
+    scatter_final
+};
+
+struct VertexData {
+    std::optional<RayVertexType> type;
 };
 
 struct Edge {
@@ -59,6 +73,7 @@ struct Path {
 struct StreamFlags {
     bool useCoors = false;
     bool useThroughput = false;
+    bool useRayVertexTypes = false;
 };
 
 inline std::string FileNameToPath(const std::string& fileName) {
@@ -66,10 +81,19 @@ inline std::string FileNameToPath(const std::string& fileName) {
 }
 
 enum Description {
-    basic, surface, paths, search_queue, search_surface
+    basic,
+    surface,
+    paths,
+    search_queue,
+    search_surface
 };
-
-const std::vector<std::string> descriptionNames{"basic", "surface", "full_paths", "grid_queue", "grid_surface"};
+const std::vector<std::string> descriptionNames{
+    "basic",
+    "surface",
+    "paths",
+    "search_queue",
+    "search_surface"
+};
 
 inline std::string GetDescriptionName(Description desc) {
     return descriptionNames[desc];
@@ -89,8 +113,8 @@ public:
     std::optional<Edge*> GetEdge(int id);
     std::optional<Path*> GetPath(int id);
 
-    virtual Vertex* AddVertex(Point3f p) = 0;
-    virtual Vertex* AddVertex(int id, Point3f p) = 0;
+    virtual Vertex* AddVertex(Point3f p, VertexData* data) = 0;
+    virtual Vertex* AddVertex(int id, Point3f p, VertexData* data) = 0;
     virtual bool RemoveVertex(int id);
 
     std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
@@ -127,9 +151,9 @@ public:
     std::optional<Vertex*> GetVertex(int id) override { return Graph::GetVertex(id); }
     std::optional<Vertex*> GetVertex(Point3i coors);
 
-    Vertex* AddVertex(Point3f p) override;
-    Vertex* AddVertex(int id, Point3f p) override;
-    Vertex* AddVertex(Point3i coors);
+    Vertex* AddVertex(Point3f p, VertexData*) override;
+    Vertex* AddVertex(int id, Point3f p, VertexData* data) override;
+    Vertex* AddVertex(Point3i coors, VertexData* data);
 
     bool RemoveVertex(int id) override;
 
@@ -149,12 +173,12 @@ class FreeGraph : public Graph {
 public:
     FreeGraph() = default;
 
-    Vertex* AddVertex(Point3f p) override {
-        return AddVertex(++curId, p);
+    Vertex* AddVertex(Point3f p, VertexData* data) override {
+        return AddVertex(++curId, p, data);
     }
 
-    Vertex* AddVertex(int id, Point3f p) override {
-        auto newVertex = new Vertex{id, p};
+    Vertex* AddVertex(int id, Point3f p, VertexData* data) override {
+        auto newVertex = new Vertex{id, p, data};
         vertices[id] = newVertex;
         return newVertex;
     }

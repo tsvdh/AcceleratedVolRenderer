@@ -125,11 +125,12 @@ void Graph::AddPath(const Path& path) {
     if (path.edges.empty())
         return;
 
-    Vertex* curFrom = AddVertex(path.edges[0]->from->point);
+    Vertex* firstVertex = path.edges[0]->from;
+    Vertex* curFrom = AddVertex(firstVertex->point, firstVertex->data);
 
     for (int i = 0; i < path.edges.size(); ++i) {
         Edge* edge = path.edges[i];
-        Vertex* curTo = AddVertex(edge->to->point);
+        Vertex* curTo = AddVertex(edge->to->point, edge->to->data);
         Edge* newEdge = AddEdge(curFrom, curTo, edge->data, true).value();
         AddEdgeToPath(newEdge, path.edgeData[i], newPath);
 
@@ -205,7 +206,8 @@ inline EdgeData* ReadEdgeData(std::istream& in) {
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
     out << (flags.useCoors ? "True" : "False") << SEP
-        << (flags.useThroughput ? "True" : "False") << NEW;
+        << (flags.useThroughput ? "True" : "False") << SEP
+        << (flags.useRayVertexTypes ? "True" : "False") << NEW;
 
     out << curId << SEP <<
            vertices.size() << SEP <<
@@ -213,7 +215,13 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
            paths.size() << NEW;
 
     for (auto [_, vertex] : vertices) {
-        out << vertex->id << SEP << vertex->point ;
+        out << vertex->id << SEP << vertex->point;
+
+        if (flags.useRayVertexTypes) {
+            std::optional<RayVertexType> vertexType = vertex->data->type;
+            out << (vertexType.has_value() ? vertexType.value() : -1) << SEP;
+        }
+
         if (flags.useCoors)
             out << vertex->coors.value();
         out << NEW;
@@ -238,14 +246,16 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
 }
 
 void Graph::ReadFromStream(std::istream& in) {
-    StreamFlags flags{};
+    StreamFlags flags;
 
-    std::string useCoors, useThroughput;
-    in >> useCoors >> useThroughput;
+    std::string useCoors, useThroughput, useRayVertexType;
+    in >> useCoors >> useThroughput >> useRayVertexType;
     if (useCoors == "True")
         flags.useCoors = true;
     if (useThroughput == "True")
         flags.useThroughput = true;
+    if (useRayVertexType == "True")
+        flags.useRayVertexTypes = true;
 
     int verticesCap, edgesCap, pathsCap;
     in >> curId >> verticesCap >> edgesCap >> pathsCap;
@@ -257,7 +267,18 @@ void Graph::ReadFromStream(std::istream& in) {
         int id;
         Point3f point;
         in >> id >> point;
-        auto vertex = AddVertex(id, point);
+
+        std::optional<RayVertexType> rayType;
+
+        if (flags.useRayVertexTypes) {
+            int type;
+            in >> type;
+
+            if (type != -1)
+                rayType = static_cast<RayVertexType>(type);
+        }
+
+        auto vertex = AddVertex(id, point, new VertexData{rayType});
 
         if (flags.useCoors) {
             Point3i coors;
@@ -318,21 +339,25 @@ std::optional<Vertex*> UniformGraph::GetVertex(Point3i coors) {
     return result->second;
 }
 
-Vertex* UniformGraph::AddVertex(Point3f p) {
+Vertex* UniformGraph::AddVertex(Point3f p, VertexData* data) {
     auto [coors, fittedPoint] = FitToGraph(p);
-    auto newVertex = new Vertex{curId + 1, fittedPoint, coors};
+    auto newVertex = new Vertex{curId + 1, fittedPoint, data, coors};
 
     auto [iter, success] = coorsMap.insert({coors, newVertex});
     if (success) {
         vertices[++curId] = newVertex;
         return newVertex;
     }
-    return iter->second;
+    else {
+        // TODO: merge vertex data
+        delete newVertex;
+        return iter->second;
+    }
 }
 
-Vertex* UniformGraph::AddVertex(int id, Point3f p) {
+Vertex* UniformGraph::AddVertex(int id, Point3f p, VertexData* data) {
     auto [coors, fittedPoint] = FitToGraph(p);
-    auto newVertex = new Vertex{id, fittedPoint, coors};
+    auto newVertex = new Vertex{id, fittedPoint, data, coors};
 
     auto [iter, success] = coorsMap.insert({coors, newVertex});
     if (success) {
@@ -342,8 +367,8 @@ Vertex* UniformGraph::AddVertex(int id, Point3f p) {
     return iter->second;
 }
 
-Vertex* UniformGraph::AddVertex(Point3i coors) {
-    return AddVertex(Point3f(coors * spacing));
+Vertex* UniformGraph::AddVertex(Point3i coors, VertexData* data) {
+    return AddVertex(Point3f(coors * spacing), data);
 }
 
 bool UniformGraph::RemoveVertex(int id) {
@@ -392,15 +417,15 @@ UniformGraph* FreeGraph::ToUniform(float spacing) {
     auto uniform = new UniformGraph(spacing);
 
     for (auto [oldId, oldVertex] : vertices) {
-        Vertex* curVertex = uniform->AddVertex(oldVertex->point);
+        Vertex* curVertex = uniform->AddVertex(oldVertex->point, oldVertex->data);
 
         for (Edge* inEdge : oldVertex->inEdges) {
-            Vertex* inVertex = uniform->AddVertex(inEdge->from->point);
+            Vertex* inVertex = uniform->AddVertex(inEdge->from->point, inEdge->from->data);
             uniform->AddEdge(inVertex, curVertex, inEdge->data, false);
         }
 
         for (Edge* outEdge : oldVertex->outEdges) {
-            Vertex* outVertex = uniform->AddVertex(outEdge->to->point);
+            Vertex* outVertex = uniform->AddVertex(outEdge->to->point, outEdge->to->data);
             uniform->AddEdge(curVertex, outVertex, outEdge->data, false);
         }
     }

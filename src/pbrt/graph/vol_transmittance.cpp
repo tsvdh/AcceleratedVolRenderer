@@ -52,19 +52,19 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
     Vertex* curVertex = nullptr;
     SampledSpectrum curPhase(1);
     float curPhaseRatio = 1;
-    bool outsideMedium = true;
+    bool insideMedium = false;
 
-    auto AddNewPathSegment = [&](Point3f p, EdgeData* data) {
-        Vertex* newVertex = pathGraph->AddVertex(p);
+    auto AddNewPathSegment = [&](Point3f p, VertexData* vertexData, EdgeData* edgeData) {
+        Vertex* newVertex = pathGraph->AddVertex(p, vertexData);
 
         if (curVertex) {
-            Edge* edge = pathGraph->AddEdge(curVertex, newVertex, data, false).value();
+            Edge* edge = pathGraph->AddEdge(curVertex, newVertex, edgeData, false).value();
             Graph::AddEdgeToPath(edge, nullptr, path);
         }
         curVertex = newVertex;
     };
 
-    AddNewPathSegment(ray.o, nullptr);
+    AddNewPathSegment(ray.o, new VertexData, nullptr);
 
     while (true) {
         pstd::optional<ShapeIntersection> si = mediumData->aggregate->Intersect(ray, Infinity);
@@ -82,71 +82,72 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
             SampledSpectrum segT_Maj(1);
 
             SampleT_maj(
-                    (Ray&) ray, tMax, sampler.Get1D(), rng, mediumData->lambda,
-                    [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-                        // Handle medium scattering event for ray
+                (Ray&) ray, tMax, sampler.Get1D(), rng, mediumData->lambda,
+                [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                    // Handle medium scattering event for ray
 
-                        // Compute medium event probabilities for interaction
-                        Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
-                        Float pScatter = mp.sigma_s[0] / sigma_maj[0];
-                        Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+                    // Compute medium event probabilities for interaction
+                    Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+                    Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+                    Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
 
-                        CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
-                        // Sample medium scattering event type and update path
-                        Float um = rng.Uniform<Float>();
-                        int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+                    CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+                    // Sample medium scattering event type and update path
+                    Float um = rng.Uniform<Float>();
+                    int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
 
-                        segT_Maj *= T_maj;
-                        if (mode == 0 || mode == 1) {
-                            int visibility = 1; // TODO: check visibility
-                            float dist = std::max(1.f, Length(curVertex->point - p));
-                            float G = static_cast<float>(visibility) / Sqr(dist);
-                            SampledSpectrum throughput = curPhase * segT_Maj * G;
+                    segT_Maj *= T_maj;
+                    if (mode == 0 || mode == 1) {
+                        int visibility = 1; // TODO: check visibility
+                        float dist = std::max(1.f, Length(curVertex->point - p));
+                        float G = static_cast<float>(visibility) / Sqr(dist);
+                        SampledSpectrum throughput = curPhase * segT_Maj * G;
 
-                            auto data = new EdgeData{throughput, curPhaseRatio};
-                            AddNewPathSegment(p, data);
-                        }
-                        if (mode == 0) {
-                            // Handle absorption along ray path
+                        auto vertexData = new VertexData{mode == 0 ? absorp : scatter};
+                        auto edgeData = new EdgeData{throughput, curPhaseRatio};
+                        AddNewPathSegment(p, vertexData, edgeData);
+                    }
+                    if (mode == 0) {
+                        // Handle absorption along ray path
+                        terminated = true;
+                        return false;
+                    }
+                    else if (mode == 1) {
+                        // Handle scattering along ray path
+                        // Stop path sampling if maximum depth has been reached
+                        if (depth++ >= maxDepth) {
                             terminated = true;
                             return false;
                         }
-                        else if (mode == 1) {
-                            // Handle scattering along ray path
-                            // Stop path sampling if maximum depth has been reached
-                            if (depth++ >= maxDepth) {
-                                terminated = true;
-                                return false;
-                            }
 
-                            MediumInteraction intr(p, -ray.d, ray.time, ray.medium, mp.phase);
+                        MediumInteraction intr(p, -ray.d, ray.time, ray.medium, mp.phase);
 
-                            // Sample new direction at real-scattering event
-                            Point2f u = sampler.Get2D();
-                            pstd::optional<PhaseFunctionSample> ps = intr.phase.Sample_p(-ray.d, u);
-                            if (!ps || ps->pdf == 0)
-                                terminated = true;
-                            else {
-                                // Update ray path state for indirect volume scattering
-                                scattered = true;
-                                ray.o = p;
-                                ray.d = ps->wi;
-
-                                if (curVertex->id == 66)
-                                    auto bla = 1;
-
-                                curPhase = mp.sigma_s * ps->p;
-                                curPhaseRatio = ps->p / ps->pdf;
-                            }
-
-                            return false;
-                        }
+                        // Sample new direction at real-scattering event
+                        Point2f u = sampler.Get2D();
+                        pstd::optional<PhaseFunctionSample> ps = intr.phase.Sample_p(-ray.d, u);
+                        if (!ps || ps->pdf == 0)
+                            terminated = true;
                         else {
-                            // Handle null scattering along ray path
-                            curPhase *= 1 - mp.sigma_a - mp.sigma_s;
-                            return true;
+                            // Update ray path state for indirect volume scattering
+                            scattered = true;
+                            ray.o = p;
+                            ray.d = ps->wi;
+
+                            if (curVertex->id == 66)
+                                auto bla = 1;
+
+                            curPhase = mp.sigma_s * ps->p;
+                            curPhaseRatio = ps->p / ps->pdf;
                         }
-                    });
+
+                        return false;
+                    }
+                    else {
+                        // Handle null scattering along ray path
+                        curPhase *= 1 - mp.sigma_a - mp.sigma_s;
+                        return true;
+                    }
+                });
 
             // Handle terminated, scattered, and unscattered medium rays
             if (terminated)
@@ -160,9 +161,10 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
             break;
 
         si->intr.SkipIntersection(&ray, si->tHit);
-        if (outsideMedium) {
-            AddNewPathSegment(ray.o, new EdgeData{SampledSpectrum(1), 1});
-            outsideMedium = false;
+        if (!insideMedium) {
+            AddNewPathSegment(ray.o, new VertexData{entry},
+                new EdgeData{SampledSpectrum(1), 1});
+            insideMedium = true;
         }
     }
 
@@ -207,6 +209,10 @@ FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& ligh
             path->edgeData[i] = new EdgeData{prevThroughput * data->throughput,
                                              prevWeightedThroughput * data->weightedThroughput};
         }
+
+        VertexData* finalData = edges.back()->to->data;
+        if (finalData->type == scatter)
+            finalData->type = scatter_final;
     }
 
     return pathGraph;

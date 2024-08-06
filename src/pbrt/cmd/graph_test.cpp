@@ -55,7 +55,7 @@ void main(int argc, char* argv[]) {
     // cubeGraph->WriteToDisk("surfaces/cube", graph::Description::surface,
     //     graph::StreamFlags{false, false});
 
-    auto cubeGraph = graph::UniformGraph::ReadFromDisk("surface_cube");
+    auto cubeGraph = graph::UniformGraph::ReadFromDisk("surfaces/cube");
     // ---
 
     // --- disney ---
@@ -71,5 +71,5 @@ void main(int argc, char* argv[]) {
     graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
 
     paths->WriteToDisk("paths/cube", graph::Description::paths,
-        graph::StreamFlags{false, true});
+        graph::StreamFlags{false, true, true});
 }

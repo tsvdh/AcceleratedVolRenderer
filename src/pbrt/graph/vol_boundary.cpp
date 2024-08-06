@@ -51,7 +51,7 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
                         if (!segment)
                             break;
                         if (segment->sigma_maj[0] != 0) {
-                            graph->AddVertex(gridRay(segment->tMin));
+                            graph->AddVertex(gridRay(segment->tMin), new VertexData);
                             break;
                         }
                     }
@@ -88,8 +88,8 @@ void VolBoundary::ToSingleLayer(UniformGraph* boundary) const {
 
     UniformGraph search(boundary->GetSpacing());
     UniformGraph layer(boundary->GetSpacing());
-    layer.AddVertex(coorBounds.pMin);
-    layer.AddVertex(coorBounds.pMax);
+    layer.AddVertex(coorBounds.pMin, new VertexData);
+    layer.AddVertex(coorBounds.pMax, new VertexData);
 
     std::unordered_set<int> singleLayerSet;
     std::unordered_set<Point3i, util::PointHash> visited;

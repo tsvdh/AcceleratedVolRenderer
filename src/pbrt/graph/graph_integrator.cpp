@@ -364,104 +364,104 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             uint64_t hash1 = Hash(sampler.Get1D());
             RNG rng(hash0, hash1);
 
-            SampledSpectrum T_majFinal = SampleT_maj(
-                    (Ray&)ray, tMax, sampler.Get1D(), rng, lambda,
-                    [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-                        // Handle medium scattering event for ray
-                        if (!beta) {
+            SampledSpectrum T_majRemain = SampleT_maj(
+                (Ray&)ray, tMax, sampler.Get1D(), rng, lambda,
+                [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                    // Handle medium scattering event for ray
+                    if (!beta) {
+                        terminated = true;
+                        return false;
+                    }
+                    ++volumeInteractions;
+                    // Add emission from medium scattering event
+                    if (depth < maxDepth && mp.Le) {
+                        // Compute $\beta'$ at new path vertex
+                        Float pdf = sigma_maj[0] * T_maj[0];
+                        SampledSpectrum betap = beta * T_maj / pdf;
+
+                        // Compute rescaled path probability for absorption at path vertex
+                        SampledSpectrum r_e = r_u * sigma_maj * T_maj / pdf;
+
+                        // Update _L_ for medium emission
+                        if (r_e)
+                            L += betap * mp.sigma_a * mp.Le / r_e.Average();
+                    }
+
+                    // Compute medium event probabilities for interaction
+                    Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+                    Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+                    Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+
+                    CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+                    // Sample medium scattering event type and update path
+                    Float um = rng.Uniform<Float>();
+                    // ReSharper disable once CppTooWideScopeInitStatement
+                    int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+
+                    // add edge to graph
+                    // if (mode == 0 || mode == 1) {
+                    //     AddNewVertex(p);
+                    // }
+
+                    if (mode == 0) {
+                        // Handle absorption along ray path
+                        terminated = true;
+                        return false;
+                    }
+                    if (mode == 1) {
+                        // Handle scattering along ray path
+                        // Stop path sampling if maximum depth has been reached
+                        if (depth++ >= maxDepth) {
                             terminated = true;
                             return false;
                         }
-                        ++volumeInteractions;
-                        // Add emission from medium scattering event
-                        if (depth < maxDepth && mp.Le) {
-                            // Compute $\beta'$ at new path vertex
-                            Float pdf = sigma_maj[0] * T_maj[0];
-                            SampledSpectrum betap = beta * T_maj / pdf;
 
-                            // Compute rescaled path probability for absorption at path vertex
-                            SampledSpectrum r_e = r_u * sigma_maj * T_maj / pdf;
+                        // Update _beta_ and _r_u_ for real-scattering event
+                        Float pdf = T_maj[0] * mp.sigma_s[0];
+                        beta *= T_maj * mp.sigma_s / pdf;
+                        r_u *= T_maj * mp.sigma_s / pdf;
 
-                            // Update _L_ for medium emission
-                            if (r_e)
-                                L += betap * mp.sigma_a * mp.Le / r_e.Average();
-                        }
+                        if (beta && r_u) {
+                            // Sample direct lighting at volume-scattering event
+                            MediumInteraction intr(p, -ray.d, ray.time, ray.medium,
+                                                   mp.phase);
 
-                        // Compute medium event probabilities for interaction
-                        Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
-                        Float pScatter = mp.sigma_s[0] / sigma_maj[0];
-                        Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+                            L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
 
-                        CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
-                        // Sample medium scattering event type and update path
-                        Float um = rng.Uniform<Float>();
-                        // ReSharper disable once CppTooWideScopeInitStatement
-                        int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
-
-                        // add edge to graph
-                        // if (mode == 0 || mode == 1) {
-                        //     AddNewVertex(p);
-                        // }
-
-                        if (mode == 0) {
-                            // Handle absorption along ray path
-                            terminated = true;
-                            return false;
-                        }
-                        if (mode == 1) {
-                            // Handle scattering along ray path
-                            // Stop path sampling if maximum depth has been reached
-                            if (depth++ >= maxDepth) {
+                            // Sample new direction at real-scattering event
+                            Point2f u = sampler.Get2D();
+                            pstd::optional<PhaseFunctionSample> ps = intr.phase.Sample_p(-ray.d, u);
+                            if (!ps || ps->pdf == 0)
                                 terminated = true;
-                                return false;
+                            else {
+                                // Update ray path state for indirect volume scattering
+                                beta *= ps->p / ps->pdf;
+                                r_l = r_u / ps->pdf;
+                                prevIntrContext = LightSampleContext(intr);
+                                scattered = true;
+                                ray.o = p;
+                                ray.d = ps->wi;
+                                specularBounce = false;
+                                anyNonSpecularBounces = true;
                             }
-
-                            // Update _beta_ and _r_u_ for real-scattering event
-                            Float pdf = T_maj[0] * mp.sigma_s[0];
-                            beta *= T_maj * mp.sigma_s / pdf;
-                            r_u *= T_maj * mp.sigma_s / pdf;
-
-                            if (beta && r_u) {
-                                // Sample direct lighting at volume-scattering event
-                                MediumInteraction intr(p, -ray.d, ray.time, ray.medium,
-                                                       mp.phase);
-
-                                L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
-
-                                // Sample new direction at real-scattering event
-                                Point2f u = sampler.Get2D();
-                                pstd::optional<PhaseFunctionSample> ps = intr.phase.Sample_p(-ray.d, u);
-                                if (!ps || ps->pdf == 0)
-                                    terminated = true;
-                                else {
-                                    // Update ray path state for indirect volume scattering
-                                    beta *= ps->p / ps->pdf;
-                                    r_l = r_u / ps->pdf;
-                                    prevIntrContext = LightSampleContext(intr);
-                                    scattered = true;
-                                    ray.o = p;
-                                    ray.d = ps->wi;
-                                    specularBounce = false;
-                                    anyNonSpecularBounces = true;
-                                }
-                            }
-                            return false;
                         }
-                        else {
-                            // Handle null scattering along ray path
-                            SampledSpectrum sigma_n =
-                                    ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
-                            Float pdf = T_maj[0] * sigma_n[0];
-                            beta *= T_maj * sigma_n / pdf;
-                            if (pdf == 0)
-                                beta = SampledSpectrum(0.f);
-                            r_u *= T_maj * sigma_n / pdf;
-                            r_l *= T_maj * sigma_maj / pdf;
-                            if (!(beta && r_u))
-                                counter++;
-                            return beta && r_u;
-                        }
-                    });
+                        return false;
+                    }
+                    else {
+                        // Handle null scattering along ray path
+                        SampledSpectrum sigma_n =
+                                ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
+                        Float pdf = T_maj[0] * sigma_n[0];
+                        beta *= T_maj * sigma_n / pdf;
+                        if (pdf == 0)
+                            beta = SampledSpectrum(0.f);
+                        r_u *= T_maj * sigma_n / pdf;
+                        r_l *= T_maj * sigma_maj / pdf;
+                        if (!(beta && r_u))
+                            counter++;
+                        return beta && r_u;
+                    }
+                });
 
             // Handle terminated, scattered, and unscattered medium rays
             if (terminated || !beta || !r_u)
@@ -469,9 +469,9 @@ SampledSpectrum GraphVolPathIntegrator::Li(RayDifferential ray, SampledWavelengt
             if (scattered)
                 continue;
 
-            beta *= T_majFinal / T_majFinal[0];
-            r_u *= T_majFinal / T_majFinal[0];
-            r_l *= T_majFinal / T_majFinal[0];
+            beta *= T_majRemain / T_majRemain[0];
+            r_u *= T_majRemain / T_majRemain[0];
+            r_l *= T_majRemain / T_majRemain[0];
         }
 
         // Handle surviving unscattered rays
