@@ -144,7 +144,7 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
                     }
                     else {
                         // Handle null scattering along ray path
-                        curPhase *= 1 - mp.sigma_a - mp.sigma_s;
+                        curPhase *= sigma_maj - mp.sigma_a - mp.sigma_s;
                         return true;
                     }
                 });
@@ -174,7 +174,10 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
     }
 }
 
-FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& lights) {
+FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& lights, float amount) {
+    if (amount < 0 || amount > 1)
+        throw std::runtime_error("Amount should be a ratio");
+
     if (lights.size() != 1)
         throw std::runtime_error("Expected exactly one light source");
 
@@ -188,12 +191,18 @@ FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& ligh
     std::vector<Vertex*> litSurfacePoints;
     GetLitSurfacePoints(&litSurfacePoints, lightDir);
 
-    auto progress = ProgressReporter(static_cast<int>(litSurfacePoints.size()), "Tracing lit surface", false);
+    std::vector<Vertex*> selectedSurfacePoints;
+    int increment = static_cast<int>(std::round(1 / amount));
+    for (int i = 0; i < litSurfacePoints.size(); i += increment) {
+        selectedSurfacePoints.push_back(litSurfacePoints[i]);
+    }
+
+    auto progress = ProgressReporter(static_cast<int>(selectedSurfacePoints.size()), "Tracing lit surface", false);
 
     auto pathGraph = new FreeGraph();
-    for (int i = 0; i < litSurfacePoints.size(); ++i) {
+    for (int i = 0; i < selectedSurfacePoints.size(); ++i) {
         sampler.StartPixelSample(Point2i(i, 0), 0);
-        TracePath(litSurfacePoints[i], pathGraph, lightDir);
+        TracePath(selectedSurfacePoints[i], pathGraph, lightDir);
         progress.Update();
     }
     progress.Done();

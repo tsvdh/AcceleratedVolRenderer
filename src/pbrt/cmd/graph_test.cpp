@@ -55,21 +55,29 @@ void main(int argc, char* argv[]) {
     // cubeGraph->WriteToDisk("surfaces/cube", graph::Description::surface,
     //     graph::StreamFlags{false, false});
 
-    auto cubeGraph = graph::UniformGraph::ReadFromDisk("surfaces/cube");
+    // auto cubeGraph = graph::UniformGraph::ReadFromDisk("surfaces/cube");
+
+    // graph::VolTransmittance transmittance(cubeGraph, mediumData, sampler);
+    // graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
+    //
+    // paths->WriteToDisk("paths/cube", graph::Description::paths,
+    //     graph::StreamFlags{false, true, true});
     // ---
 
     // --- disney ---
     // auto disneyGraph = boundary.CaptureBoundary(10, 40, 40);
     // boundary.ToSingleLayer(disneyGraph);
-    // disneyGraph->WriteToDisk("surface_disney", graph::Description::basic,
-    //     graph::StreamFlags{false, false});
+    // disneyGraph->WriteToDisk("surfaces/disney", graph::Description::surface,
+    //     graph::StreamFlags{false, false, false});
 
-    // auto disneyGraph = graph::UniformGraph::ReadFromDisk("surface_disney");
+    auto disneyGraph = graph::UniformGraph::ReadFromDisk("surfaces/disney");
+
+    graph::VolTransmittance transmittance(disneyGraph, mediumData, sampler);
+    graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights, 0.1);
+
+    paths->WriteToDisk("paths/disney", graph::Description::paths,
+        graph::StreamFlags{false, true, true});
     // ---
 
-    graph::VolTransmittance transmittance(cubeGraph, mediumData, sampler);
-    graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
 
-    paths->WriteToDisk("paths/cube", graph::Description::paths,
-        graph::StreamFlags{false, true, true});
 }

@@ -16,7 +16,7 @@ public:
     VolTransmittance(UniformGraph* boundary, util::MediumData* mediumData, Sampler sampler)
         : boundary(boundary), mediumData(mediumData), sampler(std::move(sampler)) {}
 
-    [[nodiscard]] FreeGraph* CaptureTransmittance(const std::vector<Light>& lights);
+    [[nodiscard]] FreeGraph* CaptureTransmittance(const std::vector<Light>& lights, float amount);
 
 private:
     void GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoints, Vector3f lightDir);
