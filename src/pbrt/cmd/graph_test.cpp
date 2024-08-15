@@ -10,6 +10,8 @@
 
 #include "pbrt/graph/vol_boundary.h"
 
+#include <pbrt/graph/deps/nanoflann.hpp>
+
 using namespace pbrt;
 
 void main(int argc, char* argv[]) {
@@ -72,12 +74,25 @@ void main(int argc, char* argv[]) {
 
     auto disneyGraph = graph::UniformGraph::ReadFromDisk("surfaces/disney");
 
-    graph::VolTransmittance transmittance(disneyGraph, mediumData, sampler);
-    graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights, 0.1);
-
-    paths->WriteToDisk("paths/disney", graph::Description::paths,
-        graph::StreamFlags{false, true, true});
+    // graph::VolTransmittance transmittance(disneyGraph, mediumData, sampler);
+    // graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights, 0.1);
+    //
+    // paths->WriteToDisk("paths/disney", graph::Description::paths,
+    //     graph::StreamFlags{false, true, true});
     // ---
 
+    using namespace nanoflann;
+    using namespace graph;
+    using TreeType = KDTreeSingleIndexAdaptor<L2_Simple_Adaptor<Float, Graph>, Graph, 3, int>;
+    TreeType tree(3, *disneyGraph);
 
+    Float searchPoint[3] = {-860, 40, 0};
+    std::vector<ResultItem<int, Float>> result;
+    tree.radiusSearch(searchPoint, 50, result);
+
+    std::cout << result.size() << std::endl;
+    for (auto item : result) {
+        Point3f p = disneyGraph->GetVertex(item.first).value()->point;
+        std::cout << p.x << " " << " " << p.y << " " << p.z << " " << item.second << std::endl;
+    }
 }

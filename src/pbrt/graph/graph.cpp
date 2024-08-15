@@ -330,6 +330,20 @@ void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFla
     WriteToDisk(fileName, GetDescriptionName(desc), flags);
 }
 
+Float Graph::kdtree_get_pt(size_t index, size_t dim) const {
+    int _index = static_cast<int>(index);
+    switch (dim) {
+    case 0:
+        return vertices.at(_index)->point.x;
+    case 1:
+        return vertices.at(_index)->point.y;
+    case 2:
+        return vertices.at(_index)->point.z;
+    default:
+        throw std::runtime_error("Impossible dimension");
+    }
+}
+
 // UniformGraph implementations
 std::optional<Vertex*> UniformGraph::GetVertex(Point3i coors) {
     auto result = coorsMap.find(coors);
