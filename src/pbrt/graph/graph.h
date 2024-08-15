@@ -106,6 +106,7 @@ public:
     virtual ~Graph() = default;
 
     std::unordered_map<int, Vertex*> GetVertices() { return vertices; }
+    std::vector<Vertex*> GetVerticesList() { return verticesList; }
     std::unordered_map<int, Edge*> GetEdges() { return edges; }
     std::unordered_map<int, Path*> GetPaths() { return paths; }
 
@@ -130,6 +131,8 @@ public:
     void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags);
     void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
 
+    void UpdateVerticesList();
+
     [[nodiscard]] size_t kdtree_get_point_count() const { return vertices.size(); }
     [[nodiscard]] Float kdtree_get_pt(size_t index, size_t dim) const;
     // ReSharper disable once CppMemberFunctionMayBeStatic
@@ -143,6 +146,7 @@ protected:
     std::unordered_map<int, Edge*> edges;      // ID, object
     std::unordered_map<int, Path*> paths;      // ID, object
     int curId = -1;
+    std::vector<Vertex*> verticesList = {};
 };
 
 class UniformGraph final : public Graph {

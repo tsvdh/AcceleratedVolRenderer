@@ -84,15 +84,16 @@ void main(int argc, char* argv[]) {
     using namespace nanoflann;
     using namespace graph;
     using TreeType = KDTreeSingleIndexAdaptor<L2_Simple_Adaptor<Float, Graph>, Graph, 3, int>;
+    disneyGraph->UpdateVerticesList();
     TreeType tree(3, *disneyGraph);
 
-    Float searchPoint[3] = {-860, 40, 0};
+    Float searchPoint[3] = {-850, 50, 0};
     std::vector<ResultItem<int, Float>> result;
-    tree.radiusSearch(searchPoint, 50, result);
+    tree.radiusSearch(searchPoint, 300, result);
 
     std::cout << result.size() << std::endl;
     for (auto item : result) {
-        Point3f p = disneyGraph->GetVertex(item.first).value()->point;
+        Point3f p = disneyGraph->GetVerticesList()[item.first]->point;
         std::cout << p.x << " " << " " << p.y << " " << p.z << " " << item.second << std::endl;
     }
 }
