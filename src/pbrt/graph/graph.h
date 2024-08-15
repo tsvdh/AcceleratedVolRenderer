@@ -130,6 +130,11 @@ public:
     void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags);
     void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
 
+    [[nodiscard]] size_t kdtree_get_point_count() const { return vertices.size(); }
+    [[nodiscard]] Float kdtree_get_pt(size_t index, size_t dim) const;
+    // ReSharper disable once CppMemberFunctionMayBeStatic
+    template <class BBOX> bool kdtree_get_bbox(BBOX& bb) const { return false; }
+
 protected:
     virtual void WriteToStream(std::ostream& out, StreamFlags flags);
     virtual void ReadFromStream(std::istream& in);

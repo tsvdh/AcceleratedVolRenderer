@@ -831,6 +831,8 @@ set(GRAPH
         src/pbrt/graph/util.h
         src/pbrt/graph/vol_transmittance.h
         src/pbrt/graph/vol_transmittance.cpp
+
+        src/pbrt/graph/deps/nanoflann.hpp
 )
 
 source_group ("Graph files" FILES ${GRAPH})
@@ -1177,6 +1179,7 @@ install (TARGETS
 
 install (TARGETS
   pbrt_lib
+  graph_lib
   DESTINATION
   lib
   )
