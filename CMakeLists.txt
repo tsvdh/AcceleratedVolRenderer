@@ -71,7 +71,6 @@ check_ext ("filesystem" "filesystem/filesystem" c5f9de30142453eb3c6fe991e82dfc25
 check_ext ("glfw" "glfw/docs" 4cb36872a5fe448c205d0b46f0e8c8b57530cfe0)
 check_ext ("libdeflate" "libdeflate/common" 1fd0bea6ca2073c68493632dafc4b1ddda1bcbc3)
 check_ext ("lodepng" "lodepng/examples" 8c6a9e30576f07bf470ad6f09458a2dcd7a6a84a)
-check_ext ("nanoflann" "nanoflann/include" e68fd0f36e00af65fcb13c0fdbd275725f50527e)
 check_ext ("qoi" "qoi" 028c75fd26e5e0758c7c711216c00404994c1ad3)
 check_ext ("stb" "stb/tools" af1a5bc352164740c1cc1354942b1c6b72eacb8a)
 check_ext ("utf8proc" "utf8proc/bench" 2484e2ed5e1d9c19edcccf392a7d9920ad90dfaf)
@@ -893,7 +892,6 @@ add_library (pbrt_lib STATIC
   src/ext/gtest/gtest-all.cc
   src/ext/lodepng/lodepng.cpp
   src/ext/rply/rply.cpp
-  src/ext/nanoflann/include/nanoflann.hpp
   )
 add_library (pbrt::pbrt_lib ALIAS pbrt_lib)
 

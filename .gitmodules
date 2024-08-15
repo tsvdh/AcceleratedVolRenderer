@@ -36,6 +36,3 @@
 [submodule "src/ext/glfw"]
 	path = src/ext/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "src/ext/nanoflann"]
-	path = src/ext/nanoflann
-	url = https://github.com/jlblancoc/nanoflann.git
