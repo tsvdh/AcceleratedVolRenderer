@@ -83,9 +83,12 @@ void main(int argc, char* argv[]) {
 
     using namespace nanoflann;
     using namespace graph;
-    using TreeType = KDTreeSingleIndexAdaptor<L2_Simple_Adaptor<Float, Graph>, Graph, 3, int>;
-    disneyGraph->UpdateVerticesList();
-    TreeType tree(3, *disneyGraph);
+    using TreeType = KDTreeSingleIndexAdaptor<
+        L2_Simple_Adaptor<Float, util::VerticesHolder>,
+        util::VerticesHolder, 3, int
+    >;
+    util::VerticesHolder holder = disneyGraph->GetVerticesList();
+    TreeType tree(3, holder);
 
     Float searchPoint[3] = {-850, 50, 0};
     std::vector<ResultItem<int, Float>> result;
@@ -93,7 +96,7 @@ void main(int argc, char* argv[]) {
 
     std::cout << result.size() << std::endl;
     for (auto item : result) {
-        Point3f p = disneyGraph->GetVerticesList()[item.first]->point;
+        Point3f p = holder.GetList()[item.first].second;
         std::cout << p.x << " " << " " << p.y << " " << p.z << " " << item.second << std::endl;
     }
 }

@@ -1,9 +1,10 @@
 #pragma once
 
-#include <pbrt/pbrt.h>
 #include <pbrt/cpu/aggregates.h>
 #include <pbrt/cpu/primitive.h>
 #include <pbrt/util/vecmath.h>
+
+#include <utility>
 
 namespace util {
 
@@ -57,6 +58,35 @@ struct MediumData {
             medium = interface.inside;
         }
     }
+};
+
+class VerticesHolder {
+public:
+    explicit VerticesHolder(std::vector<std::pair<int, Point3f>> list) : verticesList(std::move(list)) {}
+
+    std::vector<std::pair<int, Point3f>> GetList() { return verticesList; }
+
+    [[nodiscard]] size_t kdtree_get_point_count() const { return verticesList.size(); }
+
+    [[nodiscard]] Float kdtree_get_pt(size_t index, size_t dim) const {
+        int _index = static_cast<int>(index);
+        switch (dim) {
+        case 0:
+            return verticesList[_index].second.x;
+        case 1:
+            return verticesList[_index].second.y;
+        case 2:
+            return verticesList[_index].second.z;
+        default:
+            throw std::runtime_error("Impossible dimension");
+        }
+    }
+
+    // ReSharper disable once CppMemberFunctionMayBeStatic
+    template <class BBOX> bool kdtree_get_bbox(BBOX& bb) const { return false; }
+
+private:
+    std::vector<std::pair<int, Point3f>> verticesList;
 };
 
 }

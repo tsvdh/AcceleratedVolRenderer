@@ -186,16 +186,6 @@ bool Graph::AddEdgeToPath(Edge* edge, EdgeData* data, Path* path) {
     return true;
 }
 
-void Graph::UpdateVerticesList() {
-    verticesList.clear();
-    verticesList.reserve(vertices.size());
-
-    for (auto [id, vertex] : vertices) {
-        verticesList.push_back(vertex);
-    }
-}
-
-
 inline void WriteEdgeData(std::ostream& out, EdgeData* data) {
     for (int i = 0; i < NSpectrumSamples; ++i) {
         out << data->throughput[i] << SEP;
@@ -340,18 +330,13 @@ void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFla
     WriteToDisk(fileName, GetDescriptionName(desc), flags);
 }
 
-Float Graph::kdtree_get_pt(size_t index, size_t dim) const {
-    int _index = static_cast<int>(index);
-    switch (dim) {
-    case 0:
-        return verticesList[_index]->point.x;
-    case 1:
-        return verticesList[_index]->point.y;
-    case 2:
-        return verticesList[_index]->point.z;
-    default:
-        throw std::runtime_error("Impossible dimension");
-    }
+util::VerticesHolder Graph::GetVerticesList() {
+    std::vector<std::pair<int, Point3f>> vList;
+    vList.reserve(vertices.size());
+
+    std::transform(vertices.begin(), vertices.end(), std::back_inserter(vList),
+        [](auto pair) { return std::pair{pair.second->id, pair.second->point }; });
+    return util::VerticesHolder(vList);
 }
 
 // UniformGraph implementations
