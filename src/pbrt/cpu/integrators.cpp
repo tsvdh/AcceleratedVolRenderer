@@ -40,7 +40,7 @@
 #include <pbrt/util/stats.h>
 #include <pbrt/util/string.h>
 
-#include <pbrt/graph/graph_integrator.h>
+#include <pbrt/graph/volpath_custom.h>
 
 #include <algorithm>
 
@@ -3683,8 +3683,10 @@ std::unique_ptr<Integrator> Integrator::Create(
     else if (name == "sppm")
         integrator = SPPMIntegrator::Create(parameters, colorSpace, camera, sampler,
                                             aggregate, lights, loc);
-    else if (name == "graphvolpath")
-        integrator = graph::GraphVolPathIntegrator::Create(parameters, camera, sampler, aggregate, lights);
+    else if (name == "volpathcustom")
+        integrator = graph::VolPathCustomIntegrator::Create(parameters, camera, sampler, aggregate, lights);
+    else if (name == "graph");
+        // integrator = doodoo;
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
 

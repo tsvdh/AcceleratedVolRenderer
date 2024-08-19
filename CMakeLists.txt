@@ -823,14 +823,16 @@ set_property (TARGET soac PROPERTY FOLDER "cmd")
 set(GRAPH
         src/pbrt/graph/graph.h
         src/pbrt/graph/graph.cpp
-        src/pbrt/graph/graph_integrator.h
-        src/pbrt/graph/graph_integrator.cpp
+        src/pbrt/graph/volpath_custom.h
+        src/pbrt/graph/volpath_custom.cpp
         src/pbrt/graph/vol_boundary.h
         src/pbrt/graph/vol_boundary.cpp
-        src/pbrt/graph/graph_T_sampler.h
+        src/pbrt/graph/T_sampler_custom.h
         src/pbrt/graph/util.h
         src/pbrt/graph/vol_transmittance.h
         src/pbrt/graph/vol_transmittance.cpp
+        src/pbrt/graph/graph_integrator.h
+        src/pbrt/graph/graph_integrator.cpp
 
         src/pbrt/graph/deps/nanoflann.hpp
 )

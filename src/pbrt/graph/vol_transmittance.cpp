@@ -176,14 +176,14 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
 
 FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& lights, float amount) {
     if (amount < 0 || amount > 1)
-        throw std::runtime_error("Amount should be a ratio");
+        ErrorExit("Amount should be a ratio");
 
     if (lights.size() != 1)
-        throw std::runtime_error("Expected exactly one light source");
+        ErrorExit("Expected exactly one light source");
 
     Light light = lights[0];
     if (!light.Is<DistantLight>())
-        throw std::runtime_error("Expected a directional light");
+        ErrorExit("Expected a directional light");
 
     auto distantLight = light.Cast<DistantLight>();
     Vector3f lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));

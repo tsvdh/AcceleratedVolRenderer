@@ -55,6 +55,8 @@ struct PBRTOptions : BasicPBRTOptions {
     pstd::optional<Point2i> pixelMaterial;
     Float displacementEdgeScale = 1;
 
+    std::string sceneFileName;
+
     std::string ToString() const;
 };
 

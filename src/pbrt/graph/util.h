@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "pbrt/util/error.h"
+
 namespace util {
 
 using namespace pbrt;
@@ -30,7 +32,7 @@ struct MediumData {
 
     MediumData(const SampledWavelengths& lambda, Primitive accel) : lambda(lambda) {
         if (!accel.Is<BVHAggregate>())
-            throw std::runtime_error("Accelerator primitive must be a 'BVHAggregate' type");
+            ErrorExit("Accelerator primitive must be a 'BVHAggregate' type");
 
         aggregate = accel.Cast<BVHAggregate>();
         bounds = aggregate->Bounds();
@@ -43,17 +45,17 @@ struct MediumData {
 
         for (Primitive& primitive : primitives) {
             if (!primitive.Is<GeometricPrimitive>())
-                throw std::runtime_error("The primitive must be a 'GeometricPrimitive' type");
+                ErrorExit("The primitive must be a 'GeometricPrimitive' type");
 
             auto& interface = primitive.Cast<GeometricPrimitive>()->GetMediumInterface();
             if (!interface.IsMediumTransition())
-                throw std::runtime_error("The medium must be in empty space");
+                ErrorExit("The medium must be in empty space");
 
             if (!interface.inside)
-                throw std::runtime_error("There is no medium");
+                ErrorExit("There is no medium");
 
             if (medium && medium != interface.inside)
-                throw std::runtime_error("There can be only one medium");
+                ErrorExit("There can be only one medium");
 
             medium = interface.inside;
         }
@@ -78,7 +80,7 @@ public:
         case 2:
             return verticesList[_index].second.z;
         default:
-            throw std::runtime_error("Impossible dimension");
+            ErrorExit("Impossible dimension");
         }
     }
 

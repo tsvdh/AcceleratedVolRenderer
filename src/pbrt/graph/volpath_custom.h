@@ -1,17 +1,18 @@
 #pragma once
 
-#include <pbrt/pbrt.h>
+#include "graph.h"
 
-#include "pbrt/cpu/integrators.h"
+#include <pbrt/pbrt.h>
+#include <pbrt/cpu/integrators.h>
 
 namespace graph {
 
 using namespace pbrt;
 
-class GraphIntegrator final : public RayIntegrator {
+class VolPathCustomIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
-    GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate,
+    VolPathCustomIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate,
                            std::vector<Light> lights,
                            const std::string &lightSampleStrategy = "bvh",
                            bool regularize = false)
@@ -23,13 +24,20 @@ public:
     void Render() override;
 
     void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
-                             ScratchBuffer &scratchBuffer);
+                             ScratchBuffer &scratchBuffer, Graph& graph);
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
-                       VisibleSurface *visibleSurface) const;
+                       VisibleSurface *visibleSurface, Graph& graph) const;
 
-    static std::unique_ptr<GraphIntegrator> Create(
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const override {
+        FreeGraph graph;
+        return Li(ray, lambda, sampler, scratchBuffer, visibleSurface, graph);
+    }
+
+    static std::unique_ptr<VolPathCustomIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
             Primitive aggregate, std::vector<Light> lights);
 

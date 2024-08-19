@@ -269,6 +269,11 @@ int main(int argc, char *argv[]) {
 
     options.logLevel = LogLevelFromString(logLevel);
 
+    if (filenames.size() != 1)
+        ErrorExit("Only one filename supported");
+
+    options.sceneFileName = filenames[0];
+
     // Initialize pbrt
     InitPBRT(options);
 
