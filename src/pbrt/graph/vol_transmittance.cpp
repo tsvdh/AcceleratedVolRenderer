@@ -7,8 +7,8 @@ namespace graph {
 
 void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoints, Vector3f lightDir) {
     float maxDistToVertex = mediumData->medium.Is<HomogeneousMedium>()
-                            ? boundary->GetSpacing() / 10
-                            : boundary->GetSpacing() * 2;
+                            ? boundary->GetSpacing()
+                            : boundary->GetSpacing() * 4;
 
     float maxRayLength = mediumData->maxDistToCenter * 2;
 

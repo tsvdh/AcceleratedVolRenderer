@@ -1,0 +1,75 @@
+#include <iostream>
+
+#include <pbrt/graph/graph.h>
+#include <pbrt/scene.h>
+#include <pbrt/graph/vol_transmittance.h>
+#include <pbrt/util/args.h>
+
+#include <regex>
+
+#include "pbrt/graph/vol_boundary.h"
+
+using namespace pbrt;
+
+void main(int argc, char* argv[]) {
+    std::vector<std::string> args = GetCommandLineArguments(argv);
+
+    if (args.size() != 3) {
+        ErrorExit("Expected exactly three arguments");
+    }
+
+    std::string mode = args[1];
+    int wantedVertices = -1;
+    float spacing = -1;
+
+    if (mode == "wantedVertices")
+        wantedVertices = std::stoi(args[2]);
+    else if (mode == "spacing")
+        spacing = std::stof(args[2]);
+    else
+        ErrorExit("Illegal mode argument");
+
+    args.pop_back();
+    args.pop_back();
+
+    PBRTOptions options;
+    options.disablePixelJitter = true;
+    options.disableWavelengthJitter = true;
+    InitPBRT(options);
+
+    BasicScene scene;
+    BasicSceneBuilder builder(&scene);
+    ParseFiles(&builder, args);
+
+    std::map<std::string, Medium> media = scene.CreateMedia();
+
+    NamedTextures textures = scene.CreateTextures();
+    std::map<int, pstd::vector<Light>*> shapeIndexToAreaLights;
+    std::vector<Light> lights = scene.CreateLights(textures, &shapeIndexToAreaLights);
+
+    std::map<std::string, Material> namedMaterials;
+    std::vector<Material> materials;
+    scene.CreateMaterials(textures, &namedMaterials, &materials);
+    Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
+
+    Camera camera = scene.GetCamera();
+    SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
+
+    auto mediumData = new util::MediumData(lambda, accel);
+
+    Sampler sampler = scene.GetSampler();
+
+    graph::VolBoundary boundary(mediumData);
+
+    graph::UniformGraph* boundaryGraph;
+    if (wantedVertices != -1)
+        boundaryGraph = boundary.CaptureBoundary(wantedVertices, 40, 40);
+    else if (spacing != -1)
+        boundaryGraph = boundary.CaptureBoundary(spacing, 40, 40);
+
+    graph::VolTransmittance transmittance(boundaryGraph, mediumData, sampler);
+    graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights, 1);
+
+    std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
+    paths->WriteToDisk(fileName, graph::paths, {false, true, true});
+}

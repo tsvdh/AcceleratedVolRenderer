@@ -22,6 +22,17 @@ struct PointHash {
     }
 };
 
+inline std::string FileNameToPath(const std::string& fileName) {
+    // convert absolute path backslash to forwardslash
+    if (fileName[1] == ':') {
+        std::string newPath = fileName;
+        std::replace(newPath.begin(), newPath.end(), '\\', '/');
+        return newPath;
+    }
+    // add path pre- and postfix
+    return "files/graphs/" + fileName + ".txt";
+}
+
 struct MediumData {
     SampledWavelengths lambda;
     Medium medium;

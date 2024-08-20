@@ -1,19 +1,20 @@
 #include "vol_boundary.h"
 
-#include <queue>
-
 #include <pbrt/media.h>
 #include <pbrt/cpu/aggregates.h>
+
+#include <iostream>
+#include <queue>
 
 #include "pbrt/shapes.h"
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
 
-UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalStep, int verticalStep) const {
-    ProgressReporter progress((360 / horizontalStep) * (360 / verticalStep), "Capturing volume boundary", false);
+FreeGraph VolBoundary::CaptureBoundary(int horizontalStep, int verticalStep) const {
+    ProgressReporter captureProgress((360 / horizontalStep) * (360 / verticalStep), "Capturing volume boundary", false);
 
-    auto graph = new UniformGraph(graphSpacing);
+    FreeGraph graph;
 
     int numSteps = 100;
     float stepSize = mediumData->maxDistToCenter / static_cast<float>(numSteps);
@@ -51,19 +52,63 @@ UniformGraph* VolBoundary::CaptureBoundary(float graphSpacing, int horizontalSte
                         if (!segment)
                             break;
                         if (segment->sigma_maj[0] != 0) {
-                            graph->AddVertex(gridRay(segment->tMin), new VertexData);
+                            graph.AddVertex(gridRay(segment->tMin), new VertexData);
                             break;
                         }
                     }
                 }
             }
-            progress.Update();
+            captureProgress.Update();
         }
     }
-    progress.Done();
+    captureProgress.Done();
 
     return graph;
 }
+
+UniformGraph* VolBoundary::CaptureBoundary(int wantedVertices, int horizontalStep, int verticalStep) const {
+    FreeGraph graph = CaptureBoundary(horizontalStep, verticalStep);
+
+    float multRange = 1000;
+    int stepsNeeded = static_cast<int>(std::ceil(std::log2(multRange))) + 1;
+
+    ProgressReporter shrinkingProgress(stepsNeeded, "Shrinking boundary graph", false);
+
+    bool spacingGTE1 = graph.ToUniform(1)->GetVertices().size() >= wantedVertices;
+    shrinkingProgress.Update();
+
+    float min = 1;
+    float max = multRange;
+    UniformGraph* curGraph = nullptr;
+
+    for (int i = 0; i < stepsNeeded - 1; ++i) {
+        float middle = min + (max - min) / 2;
+
+        curGraph = graph.ToUniform(middle / (spacingGTE1 ? 1 : multRange));
+        // std::cout << curGraph->GetSpacing() << std::endl;
+
+        if (curGraph->GetVertices().size() > wantedVertices)
+            min = middle;
+        else
+            max = middle;
+
+        shrinkingProgress.Update();
+    }
+    shrinkingProgress.Done();
+
+    ToSingleLayer(curGraph);
+    return curGraph;
+}
+
+UniformGraph* VolBoundary::CaptureBoundary(float spacing, int horizontalStep, int verticalStep) const {
+    FreeGraph graph = CaptureBoundary(horizontalStep, verticalStep);
+
+    UniformGraph* spacedGraph = graph.ToUniform(spacing);
+    ToSingleLayer(spacedGraph);
+
+    return spacedGraph;
+}
+
 
 inline std::vector<Point3i> GetNeighbours(Point3i p, const Bounds3i& bounds) {
     std::vector<Point3i> neighbours;

@@ -1037,6 +1037,20 @@ add_sanitizers(graph_test)
 set_property(TARGET graph_test PROPERTY FOLDER "cmd")
 
 ######################
+# Graph maker
+add_executable(graph_maker src/pbrt/cmd/graph_maker.cpp)
+add_executable(pbrt::graph_maker ALIAS graph_maker)
+
+target_compile_definitions(graph_maker PRIVATE ${PBRT_DEFINITIONS})
+target_compile_options(graph_maker PRIVATE ${PBRT_CXX_FLAGS})
+target_include_directories(graph_maker PRIVATE src src/ext)
+target_link_libraries(graph_maker PRIVATE ${ALL_PBRT_LIBS} pbrt_opt pbrt_warnings)
+
+add_sanitizers(graph_maker)
+
+set_property(TARGET graph_maker PROPERTY FOLDER "cmd")
+
+######################
 # imgtool
 
 add_executable (imgtool src/pbrt/cmd/imgtool.cpp)

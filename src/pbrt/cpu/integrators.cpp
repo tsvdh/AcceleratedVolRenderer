@@ -44,6 +44,8 @@
 
 #include <algorithm>
 
+#include "pbrt/graph/graph_integrator.h"
+
 namespace pbrt {
 
 STAT_COUNTER("Integrator/Camera rays traced", nCameraRays);
@@ -3685,8 +3687,8 @@ std::unique_ptr<Integrator> Integrator::Create(
                                             aggregate, lights, loc);
     else if (name == "volpathcustom")
         integrator = graph::VolPathCustomIntegrator::Create(parameters, camera, sampler, aggregate, lights);
-    else if (name == "graph");
-        // integrator = doodoo;
+    else if (name == "graph")
+        integrator = graph::GraphIntegrator::Create(parameters, camera, sampler, aggregate, lights);
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
 

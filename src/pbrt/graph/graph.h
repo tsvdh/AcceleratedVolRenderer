@@ -76,10 +76,6 @@ struct StreamFlags {
     bool useRayVertexTypes = false;
 };
 
-inline std::string FileNameToPath(const std::string& fileName) {
-    return "files/graphs/" + fileName + ".txt";
-}
-
 enum Description {
     basic,
     surface,
@@ -101,8 +97,8 @@ inline std::string GetDescriptionName(Description desc) {
 
 class Graph {
 public:
-    Graph() = default;
-    Graph(Graph& other) = default;
+    // Graph() = default;
+    // Graph(const Graph& other) = default;
     virtual ~Graph() = default;
 
     std::unordered_map<int, Vertex*> GetVertices() { return vertices; }
@@ -144,8 +140,9 @@ protected:
 
 class UniformGraph final : public Graph {
 public:
-    UniformGraph() : spacing(1.f) {};
+    UniformGraph() = default;
     explicit UniformGraph(float spacing) : spacing(spacing) {};
+    // UniformGraph(const UniformGraph& other) = default;
 
     float GetSpacing() { return spacing; } // NOLINT(*-make-member-function-const)
     std::unordered_map<Point3i, Vertex*, util::PointHash> GetCoorsMap() { return coorsMap; }
@@ -167,13 +164,14 @@ public:
     void ReadFromStream(std::istream& in) override;
 
 private:
-    float spacing;
+    float spacing = 1;
     std::unordered_map<Point3i, Vertex*, util::PointHash> coorsMap; // coors, vertex
 };
 
 class FreeGraph : public Graph {
 public:
-    FreeGraph() = default;
+    // FreeGraph() = default;
+    // FreeGraph(const FreeGraph& other) = default;
 
     Vertex* AddVertex(Point3f p, VertexData* data) override {
         return AddVertex(++curId, p, data);

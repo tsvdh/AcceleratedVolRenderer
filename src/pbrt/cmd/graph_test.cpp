@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iomanip>
 #include <iostream>
 
 #include <pbrt/graph/graph.h>

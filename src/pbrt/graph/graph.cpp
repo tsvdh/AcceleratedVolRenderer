@@ -1,6 +1,5 @@
 #include "graph.h"
 #include <fstream>
-#include <stdexcept>
 
 namespace graph {
 
@@ -313,7 +312,7 @@ void Graph::ReadFromStream(std::istream& in) {
 }
 
 void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags) {
-    std::ofstream file("files/graphs/" + fileName + ".txt");
+    std::ofstream file(util::FileNameToPath(fileName));
     file << desc << NEW;
 
     auto asUniform = dynamic_cast<UniformGraph*>(this);
@@ -416,7 +415,7 @@ void UniformGraph::ReadFromStream(std::istream& in) {
 
 UniformGraph* UniformGraph::ReadFromDisk(const std::string& fileName) {
     auto graph = new UniformGraph;
-    std::ifstream file(FileNameToPath(fileName));
+    std::ifstream file(util::FileNameToPath(fileName));
     graph->ReadFromStream(file);
     return graph;
 }
@@ -464,7 +463,7 @@ void FreeGraph::ReadFromStream(std::istream& in) {
 
 FreeGraph* FreeGraph::ReadFromDisk(const std::string& fileName) {
     auto graph = new FreeGraph;
-    std::ifstream file(FileNameToPath(fileName));
+    std::ifstream file(util::FileNameToPath(fileName));
     graph->ReadFromStream(file);
     return graph;
 }

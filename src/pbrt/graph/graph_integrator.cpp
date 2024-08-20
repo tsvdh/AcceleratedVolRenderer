@@ -9,6 +9,8 @@
 #include <pbrt/util/progressreporter.h>
 #include <pbrt/util/string.h>
 
+#include <regex>
+
 namespace graph {
 
 using namespace pbrt;
@@ -114,6 +116,10 @@ void GraphIntegrator::Render() {
                            }
                        });
     }
+
+    std::string sceneGraph = Options->sceneFileName;
+    sceneGraph = std::regex_replace(sceneGraph, std::regex("\\.pbrt"), ".txt");
+    pathGraph = FreeGraph::ReadFromDisk(sceneGraph);
 
     // Render image in waves
     while (waveStart < spp) {
@@ -276,6 +282,33 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
 SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
                                            Sampler sampler, ScratchBuffer& scratchBuffer,
                                            VisibleSurface* visibleSurface) const {
-
+    return SampledSpectrum(1);
 }
+
+SampledSpectrum GraphIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,
+                                            SampledWavelengths& lambda, Sampler sampler,
+                                            SampledSpectrum beta,
+                                            SampledSpectrum r_p) const {
+    return SampledSpectrum(0);
+}
+
+std::string GraphIntegrator::ToString() const {
+    return StringPrintf(
+            "[ GraphIntegrator maxDepth: %d lightSampler: %s regularize: %s ]", maxDepth,
+            lightSampler, regularize);
+}
+
+std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
+        const ParameterDictionary& parameters, Camera camera, Sampler sampler,
+        Primitive aggregate, std::vector<Light> lights)
+{
+    int maxDepth = parameters.GetOneInt("maxdepth", 5);
+    std::string lightStrategy = parameters.GetOneString("lightsampler", "bvh");
+    bool regularize = parameters.GetOneBool("regularize", false);
+
+    return std::make_unique<GraphIntegrator>(
+            maxDepth, std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights),
+            lightStrategy, regularize);
+}
+
 }

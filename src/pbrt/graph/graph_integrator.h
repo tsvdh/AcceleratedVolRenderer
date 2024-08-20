@@ -2,6 +2,7 @@
 
 #include <pbrt/pbrt.h>
 
+#include "graph.h"
 #include "pbrt/cpu/integrators.h"
 
 namespace graph {
@@ -23,7 +24,7 @@ public:
     void Render() override;
 
     void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
-                             ScratchBuffer &scratchBuffer);
+                             ScratchBuffer &scratchBuffer) override;
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
@@ -45,6 +46,7 @@ private:
     int maxDepth;
     LightSampler lightSampler;
     bool regularize;
+    FreeGraph* pathGraph;
 };
 
 }
