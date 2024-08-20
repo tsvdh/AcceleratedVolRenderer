@@ -127,6 +127,7 @@ public:
     void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
 
     util::VerticesHolder GetVerticesList();
+    util::VerticesHolder GetPathEndsList();
 
 protected:
     virtual void WriteToStream(std::ostream& out, StreamFlags flags);

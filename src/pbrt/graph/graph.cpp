@@ -334,7 +334,21 @@ util::VerticesHolder Graph::GetVerticesList() {
     vList.reserve(vertices.size());
 
     std::transform(vertices.begin(), vertices.end(), std::back_inserter(vList),
-        [](auto pair) { return std::pair{pair.second->id, pair.second->point }; });
+        [](std::pair<int, Vertex*> pair) {
+            return std::pair{ pair.second->id, pair.second->point };
+        });
+    return util::VerticesHolder(vList);
+}
+
+util::VerticesHolder Graph::GetPathEndsList() {
+    std::vector<std::pair<int, Point3f>> vList;
+    vList.reserve(paths.size());
+
+    std::transform(paths.begin(), paths.end(), std::back_inserter(vList),
+        [](std::pair<int, Path*> pair) {
+            Vertex* pathEnd = pair.second->edges.back()->to;
+            return std::pair{ pathEnd->id, pathEnd->point };
+        });
     return util::VerticesHolder(vList);
 }
 

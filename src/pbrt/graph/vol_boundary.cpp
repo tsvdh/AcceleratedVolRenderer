@@ -40,11 +40,11 @@ FreeGraph VolBoundary::CaptureBoundary(int horizontalStep, int verticalStep) con
                     Point3f newOrigin = origin + xVector * i + yVector * j;
                     RayDifferential gridRay(newOrigin, dir);
 
-                    auto shapeInter = mediumData->aggregate->Intersect(gridRay, Infinity);
-                    if (!shapeInter)
+                    auto shapeIsect = mediumData->aggregate->Intersect(gridRay, Infinity);
+                    if (!shapeIsect)
                         continue;
 
-                    shapeInter->intr.SkipIntersection(&gridRay, shapeInter->tHit);
+                    shapeIsect->intr.SkipIntersection(&gridRay, shapeIsect->tHit);
 
                     auto iter = mediumData->medium.SampleRay((Ray&)gridRay, Infinity, mediumData->lambda, buffer);
                     while (true) {

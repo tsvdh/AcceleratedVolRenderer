@@ -11,6 +11,8 @@
 
 #include <regex>
 
+#include "deps/nanoflann.hpp"
+
 namespace graph {
 
 using namespace pbrt;
@@ -282,7 +284,36 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
 SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
                                            Sampler sampler, ScratchBuffer& scratchBuffer,
                                            VisibleSurface* visibleSurface) const {
-    return SampledSpectrum(1);
+    using namespace nanoflann;
+    using TreeType = KDTreeSingleIndexAdaptor<
+        L2_Simple_Adaptor<Float, util::VerticesHolder>,
+        util::VerticesHolder, 3, int>;
+
+    util::VerticesHolder vHolder = pathGraph->GetPathEndsList();
+    TreeType searchTree(3, vHolder);
+
+    pstd::optional<ShapeIntersection> shapeIsect = Intersect(ray);
+    if (!shapeIsect)
+        return SampledSpectrum(0);
+
+    if (!ray.medium)
+        shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
+
+    auto iter = ray.medium.SampleRay((Ray&)ray, Infinity, lambda, scratchBuffer);
+    while (true) {
+        pstd::optional<RayMajorantSegment> segment = iter.Next();
+        if (!segment)
+            return SampledSpectrum(0);
+        if (segment->sigma_maj[0] != 0) {
+            Point3f p = ray(segment->tMin);
+            Float searchPoint[3] = {p.x, p.y, p.z};
+
+            std::vector<ResultItem<int, Float>> searchRes;
+            searchTree.radiusSearch(searchPoint, 0.25, searchRes);
+
+            return SampledSpectrum(searchRes.empty() ? 0 : 1);
+        }
+    }
 }
 
 SampledSpectrum GraphIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,
