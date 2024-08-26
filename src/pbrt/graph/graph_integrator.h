@@ -46,7 +46,7 @@ private:
     int maxDepth;
     LightSampler lightSampler;
     bool regularize;
-    FreeGraph* pathGraph;
+    FreeGraph pathGraph;
 };
 
 }

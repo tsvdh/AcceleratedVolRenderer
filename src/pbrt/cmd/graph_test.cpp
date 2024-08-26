@@ -79,23 +79,4 @@ void main(int argc, char* argv[]) {
     // paths->WriteToDisk("paths/disney", graph::Description::paths,
     //     graph::StreamFlags{false, true, true});
     // ---
-
-    using namespace nanoflann;
-    using namespace graph;
-    using TreeType = KDTreeSingleIndexAdaptor<
-        L2_Simple_Adaptor<Float, util::VerticesHolder>,
-        util::VerticesHolder, 3, int
-    >;
-    util::VerticesHolder holder = disneyGraph->GetVerticesList();
-    TreeType tree(3, holder);
-
-    Float searchPoint[3] = {-850, 50, 0};
-    std::vector<ResultItem<int, Float>> result;
-    tree.radiusSearch(searchPoint, 300, result);
-
-    std::cout << result.size() << std::endl;
-    for (auto item : result) {
-        Point3f p = holder.GetList()[item.first].second;
-        std::cout << p.x << " " << " " << p.y << " " << p.z << " " << item.second << std::endl;
-    }
 }

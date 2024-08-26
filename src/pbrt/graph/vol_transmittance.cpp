@@ -5,18 +5,22 @@
 
 namespace graph {
 
-void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoints, Vector3f lightDir) {
-    float maxDistToVertex = mediumData->medium.Is<HomogeneousMedium>()
-                            ? boundary->GetSpacing()
-                            : boundary->GetSpacing() * 4;
+std::vector<Ref<const Vertex>> VolTransmittance::GetLitSurfacePoints(Vector3f lightDir) {
+    float maxDistToVertex = mediumData.medium.Is<HomogeneousMedium>()
+                            ? boundary.GetSpacing()
+                            : boundary.GetSpacing() * 4;
 
-    float maxRayLength = mediumData->maxDistToCenter * 2;
+    float maxRayLength = mediumData.maxDistToCenter * 2;
+
+    std::vector<Ref<const Vertex>> litSurfacePoints;
 
     ScratchBuffer buffer;
-    for (auto [id, vertex] : boundary->GetVertices()) {
-        RayDifferential ray(vertex->point - lightDir * maxRayLength, lightDir);
+    for (auto& pair : boundary.GetVertices()) {
+        const Vertex& vertex = pair.second;
 
-        auto shapeInter = mediumData->aggregate->Intersect(ray, Infinity);
+        RayDifferential ray(vertex.point - lightDir * maxRayLength, lightDir);
+
+        auto shapeInter = mediumData.aggregate->Intersect(ray, Infinity);
         if (!shapeInter)
             continue;
 
@@ -24,7 +28,7 @@ void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoint
 
         bool directlyLit = false;
 
-        auto iter = mediumData->medium.SampleRay((Ray&)ray, Infinity, mediumData->lambda, buffer);
+        auto iter = mediumData.medium.SampleRay((Ray&)ray, Infinity, mediumData.lambda, buffer);
         while (true) {
             auto segment = iter.Next();
             if (!segment)
@@ -33,7 +37,7 @@ void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoint
             if (segment->sigma_maj[0] == 0)
                 continue;
 
-            float distToVertex = Length(vertex->point - ray(segment->tMin));
+            float distToVertex = Length(vertex.point - ray(segment->tMin));
             if (distToVertex <= maxDistToVertex)
                 directlyLit = true;
 
@@ -41,33 +45,35 @@ void VolTransmittance::GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoint
         }
 
         if (directlyLit)
-            litSurfacePoints->push_back(vertex);
+            litSurfacePoints.push_back(std::ref(vertex));
     }
+
+    return litSurfacePoints;
 }
 
-void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGraph, Vector3f lightDir) {
-    RayDifferential ray(surfacePoint->point - lightDir * mediumData->maxDistToCenter, lightDir);
+void VolTransmittance::TracePath(const Vertex& surfacePoint, FreeGraph& pathGraph, Vector3f lightDir) {
+    RayDifferential ray(surfacePoint.point - lightDir * mediumData.maxDistToCenter, lightDir);
     float depth = 0;
-    Path* path = pathGraph->AddPath();
-    Vertex* curVertex = nullptr;
+    Path& path = pathGraph.AddPath();
+    Vertex curVertex;
     SampledSpectrum curPhase(1);
     float curPhaseRatio = 1;
     bool insideMedium = false;
 
-    auto AddNewPathSegment = [&](Point3f p, VertexData* vertexData, EdgeData* edgeData) {
-        Vertex* newVertex = pathGraph->AddVertex(p, vertexData);
+    auto AddNewPathSegment = [&](Point3f p, VertexData vertexData, EdgeData edgeData) {
+        Vertex& newVertex = pathGraph.AddVertex(p, vertexData);
 
-        if (curVertex) {
-            Edge* edge = pathGraph->AddEdge(curVertex, newVertex, edgeData, false).value();
-            Graph::AddEdgeToPath(edge, nullptr, path);
+        if (curVertex.id != -1) {
+            Edge& edge = pathGraph.AddEdge(curVertex.id, newVertex.id, edgeData).value();
+            pathGraph.AddEdgeToPath(edge.id, path.id);
         }
         curVertex = newVertex;
     };
 
-    AddNewPathSegment(ray.o, new VertexData, nullptr);
+    AddNewPathSegment(ray.o, VertexData{}, EdgeData{});
 
     while (true) {
-        pstd::optional<ShapeIntersection> si = mediumData->aggregate->Intersect(ray, Infinity);
+        pstd::optional<ShapeIntersection> si = mediumData.aggregate->Intersect(ray, Infinity);
 
         if (ray.medium) {
 
@@ -82,7 +88,7 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
             SampledSpectrum segT_Maj(1);
 
             SampleT_maj(
-                (Ray&) ray, tMax, sampler.Get1D(), rng, mediumData->lambda,
+                (Ray&) ray, tMax, sampler.Get1D(), rng, mediumData.lambda,
                 [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                     // Handle medium scattering event for ray
 
@@ -99,12 +105,12 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
                     segT_Maj *= T_maj;
                     if (mode == 0 || mode == 1) {
                         int visibility = 1; // TODO: check visibility
-                        float dist = std::max(1.f, Length(curVertex->point - p));
+                        float dist = std::max(1.f, Length(curVertex.point - p));
                         float G = static_cast<float>(visibility) / Sqr(dist);
                         SampledSpectrum throughput = curPhase * segT_Maj * G;
 
-                        auto vertexData = new VertexData{mode == 0 ? absorp : scatter};
-                        auto edgeData = new EdgeData{throughput, curPhaseRatio};
+                        VertexData vertexData{mode == 0 ? absorp : scatter};
+                        EdgeData edgeData{throughput, curPhaseRatio};
                         AddNewPathSegment(p, vertexData, edgeData);
                     }
                     if (mode == 0) {
@@ -133,9 +139,6 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
                             ray.o = p;
                             ray.d = ps->wi;
 
-                            if (curVertex->id == 66)
-                                auto bla = 1;
-
                             curPhase = mp.sigma_s * ps->p;
                             curPhaseRatio = ps->p / ps->pdf;
                         }
@@ -162,19 +165,20 @@ void VolTransmittance::TracePath(const Vertex* surfacePoint, FreeGraph* pathGrap
 
         si->intr.SkipIntersection(&ray, si->tHit);
         if (!insideMedium) {
-            AddNewPathSegment(ray.o, new VertexData{entry},
-                new EdgeData{SampledSpectrum(1), 1});
+            AddNewPathSegment(ray.o,
+                VertexData{entry},
+                EdgeData{SampledSpectrum(1), 1});
             insideMedium = true;
         }
     }
 
-    if (path->edges.empty()) {
-        pathGraph->RemoveVertex(curVertex->id);
-        pathGraph->RemovePath(path->id);
+    if (path.edges.empty()) {
+        pathGraph.RemoveVertex(curVertex.id);
+        pathGraph.RemovePath(path.id);
     }
 }
 
-FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& lights, float amount) {
+FreeGraph VolTransmittance::CaptureTransmittance(const std::vector<Light>& lights, float amount) {
     if (amount < 0 || amount > 1)
         ErrorExit("Amount should be a ratio");
 
@@ -188,10 +192,9 @@ FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& ligh
     auto distantLight = light.Cast<DistantLight>();
     Vector3f lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
-    std::vector<Vertex*> litSurfacePoints;
-    GetLitSurfacePoints(&litSurfacePoints, lightDir);
+    std::vector<Ref<const Vertex>> litSurfacePoints = GetLitSurfacePoints(lightDir);
 
-    std::vector<Vertex*> selectedSurfacePoints;
+    std::vector<Ref<const Vertex>> selectedSurfacePoints;
     int increment = static_cast<int>(std::round(1 / amount));
     for (int i = 0; i < litSurfacePoints.size(); i += increment) {
         selectedSurfacePoints.push_back(litSurfacePoints[i]);
@@ -199,7 +202,7 @@ FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& ligh
 
     auto progress = ProgressReporter(static_cast<int>(selectedSurfacePoints.size()), "Tracing lit surface", false);
 
-    auto pathGraph = new FreeGraph();
+    FreeGraph pathGraph;
     for (int i = 0; i < selectedSurfacePoints.size(); ++i) {
         sampler.StartPixelSample(Point2i(i, 0), 0);
         TracePath(selectedSurfacePoints[i], pathGraph, lightDir);
@@ -207,22 +210,24 @@ FreeGraph* VolTransmittance::CaptureTransmittance(const std::vector<Light>& ligh
     }
     progress.Done();
 
-    for (auto [id, path] : pathGraph->GetPaths()) {
-        std::vector<Edge*> edges = path->edges;
-
-        for (int i = 0; i < edges.size(); ++i) {
-            EdgeData* data = edges[i]->data;
-
-            SampledSpectrum prevThroughput = i == 0 ? SampledSpectrum(1) : path->edgeData[i - 1]->throughput;
-            float prevWeightedThroughput = i == 0 ? 1 : path->edgeData[i - 1]->weightedThroughput;
-            path->edgeData[i] = new EdgeData{prevThroughput * data->throughput,
-                                             prevWeightedThroughput * data->weightedThroughput};
-        }
-
-        VertexData* finalData = edges.back()->to->data;
-        if (finalData->type == scatter)
-            finalData->type = scatter_final;
-    }
+    // for (auto& pair : pathGraph.GetPaths()) {
+    //     const Path& path = pair.second;
+    //
+    //     std::vector<Ref<Edge>> edges = path.edges;
+    //
+    //     for (int i = 0; i < edges.size(); ++i) {
+    //         EdgeData* data = edges[i].data;
+    //
+    //         SampledSpectrum prevThroughput = i == 0 ? SampledSpectrum(1) : path->edgeData[i - 1]->throughput;
+    //         float prevWeightedThroughput = i == 0 ? 1 : path->edgeData[i - 1]->weightedThroughput;
+    //         path->edgeData[i] = new EdgeData{prevThroughput * data->throughput,
+    //                                          prevWeightedThroughput * data->weightedThroughput};
+    //     }
+    //
+    //     VertexData* finalData = edges.back()->to->data;
+    //     if (finalData->type == scatter)
+    //         finalData->type = scatter_final;
+    // }
 
     return pathGraph;
 }

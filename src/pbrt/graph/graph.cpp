@@ -19,60 +19,56 @@ std::istream& operator>>(std::istream& in, Point3<T>& p) {
     return in;
 }
 
+void EdgeData::AddSample(const EdgeData& sample) {
+    throughput *= numSamples;
+    weightedThroughput *= numSamples;
+
+    throughput += sample.throughput * sample.numSamples;
+    weightedThroughput += sample.weightedThroughput * sample.numSamples;
+
+    numSamples += sample.numSamples;
+
+    throughput /= numSamples;
+    weightedThroughput /= numSamples;
+}
+
 // Graph implementations
 template<typename T>
-std::optional<T*> GetById(int id, std::unordered_map<int, T*> coll) {
-    auto result = coll.find(id);
-    if (result == coll.end())
+OptRef<T> GetById(int id, std::unordered_map<int, T> collection) {
+    auto result = collection.find(id);
+    if (result == collection.end())
         return {};
 
     return result->second;
 }
 
-std::optional<Vertex*> Graph::GetVertex(int id) { return GetById(id, vertices); }
-std::optional<Edge*> Graph::GetEdge(int id) { return GetById(id, edges); }
-std::optional<Path*> Graph::GetPath(int id) { return GetById(id, paths); }
+OptRef<Vertex> Graph::GetVertex(int id) const { return GetById(id, vertices); }
+OptRef<Edge> Graph::GetEdge(int id) const { return GetById(id, edges); }
+OptRef<Path> Graph::GetPath(int id) const { return GetById(id, paths); }
 
 bool Graph::RemoveVertex(int id) {
     auto result = vertices.find(id);
     if (result == vertices.end())
         return false;
 
-    for (Edge* edge : result->second->inEdges)
-        RemoveEdge(edge->id);
+    for (auto [_, edge] : result->second.inEdges)
+        RemoveEdge(edge.get().id);
 
-    for (Edge* edge : result->second->outEdges)
-        RemoveEdge(edge->id);
+    for (auto [_, edge] : result->second.outEdges)
+        RemoveEdge(edge.get().id);
 
-    delete result->second;
     vertices.erase(id);
     return true;
 }
 
-std::optional<Edge*> Graph::AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid) {
-    if (checkValid) {
-        if (vertices.find(from->id) == vertices.end())
-            return {};
-        if (vertices.find(to->id) == vertices.end())
-            return {};
-    }
-
-    for (Edge* edge: from->outEdges) {
-        if (*edge->to == *to)
-            // TODO: merge edge data
-            ErrorExit("Can't merge edges yet");
-    }
-
-    auto newEdge = new Edge{++curId, from, to, data};
-    edges[curId] = newEdge;
-
-    from->outEdges.insert(newEdge);
-    to->inEdges.insert(newEdge);
-
-    return newEdge;
+OptRef<Edge> Graph::AddEdge(int fromId, int toId, const EdgeData& data) {
+    return AddEdge(++curId, fromId, toId, data);
 }
 
-std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, EdgeData* data) {
+OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data) {
+    if (edges.find(id) != edges.end())
+        ErrorExit("Id already exists");
+
     auto fromResult = vertices.find(fromId);
     if (fromResult == vertices.end())
         return {};
@@ -81,20 +77,24 @@ std::optional<Edge*> Graph::AddEdge(int id, int fromId, int toId, EdgeData* data
     if (toResult == vertices.end())
         return {};
 
-    Vertex* from = fromResult->second;
-    Vertex* to = toResult->second;
+    Vertex& from = fromResult->second;
+    Vertex& to = toResult->second;
 
-    for (Edge* edge: from->outEdges) {
-        if (*edge->to == *to)
-            // TODO: merge edge data
-            ErrorExit("Can't merge edges yet");
+    auto edgeResult = to.inEdges.find(from.id);
+
+    if (edgeResult != to.inEdges.end() && from.outEdges.find(to.id) != from.outEdges.end()) {
+        edgeResult->second.get().data.AddSample(data);
+        return edgeResult->second;
     }
 
-    auto newEdge = new Edge{id, from, to, data};
-    edges[id] = newEdge;
+    auto emplaceResult = edges.emplace(id, Edge{id, from, to, data});
+    auto& newEdge = emplaceResult.first->second;
 
-    from->outEdges.insert(newEdge);
-    to->inEdges.insert(newEdge);
+    using std::ref;
+    from.outEdges.insert({to.id, newEdge});
+    to.inEdges.insert({from.id, newEdge});
+    // from.outEdges.insert(std::pair{to.id, ref(newEdge)});
+    // to.inEdges.insert(std::pair{from.id, ref(newEdge)});
 
     return newEdge;
 }
@@ -104,43 +104,49 @@ bool Graph::RemoveEdge(int id) {
     if (result == edges.end())
         return false;
 
-    Edge* edge = result->second;
+    auto& [_, from, to, data, edgePaths] = result->second;
 
-    edge->from->outEdges.erase(edge);
-    edge->to->inEdges.erase(edge);
+    from.get().outEdges.erase(to.get().id);
+    to.get().inEdges.erase(from.get().id);
 
-    for (auto [path, index] : edge->paths)
-        paths[path->id]->edges[index] = nullptr;
+    for (auto [pathId, index] : edgePaths)
+        paths.erase(pathId); // TODO: consider alternatives
 
-    delete edge;
     edges.erase(id);
     return true;
 }
 
 void Graph::AddPath(const Path& path) {
-    auto newPath = new Path{++curId};
-    paths[curId] = newPath;
+    ++curId;
+    auto iter = paths.emplace(std::pair{curId, Path{curId}});
+    Path& newPath = iter.first->second;
 
     if (path.edges.empty())
         return;
 
-    Vertex* firstVertex = path.edges[0]->from;
-    Vertex* curFrom = AddVertex(firstVertex->point, firstVertex->data);
+    Vertex& firstVertex = path.edges[0].get().from;
+    Vertex curFrom = AddVertex(firstVertex.point, firstVertex.data);
 
-    for (int i = 0; i < path.edges.size(); ++i) {
-        Edge* edge = path.edges[i];
-        Vertex* curTo = AddVertex(edge->to->point, edge->to->data);
-        Edge* newEdge = AddEdge(curFrom, curTo, edge->data, true).value();
-        AddEdgeToPath(newEdge, path.edgeData[i], newPath);
+    for (auto edgeRef : path.edges) {
+        Edge& edge = edgeRef.get();
+        Vertex& curTo = AddVertex(edge.to.get().point, edge.to.get().data);
+        Edge newEdge = AddEdge(curFrom.id, curTo.id, edge.data).value();
+        AddEdgeToPath(newEdge.id, newPath.id);
 
         curFrom = curTo;
     }
 }
 
-Path* Graph::AddPath() {
-    auto path = new Path{++curId};
-    paths[curId] = path;
-    return path;
+Path& Graph::AddPath() {
+    return AddPath(++curId);
+}
+
+Path& Graph::AddPath(int id) {
+    if (paths.find(id) != paths.end())
+        ErrorExit("Id already exists");
+
+    auto result = paths.emplace(id, Path{id});
+    return result.first->second;
 }
 
 bool Graph::RemovePath(int id) {
@@ -148,62 +154,74 @@ bool Graph::RemovePath(int id) {
     if (result == paths.end())
         return false;
 
-    Path* path = result->second;
-    if (!path->edges.empty()) {
-        for (Edge* edge : path->edges) {
-            edge->paths.erase(path);
+    Path& path = result->second;
+    if (!path.edges.empty()) {
+        for (auto edgeRef : path.edges) {
+            Edge& edge = edgeRef.get();
+            edge.paths.erase(path.id);
 
-            if (edge->paths.empty()) {
-                RemoveEdge(edge->id);
+            if (edge.paths.empty()) {
+                RemoveEdge(edge.id);
 
-                if (Vertex* to = edge->to; to->inEdges.empty() && to->outEdges.empty())
-                    RemoveVertex(to->id);
+                if (Vertex& to = edge.to; to.inEdges.empty() && to.outEdges.empty())
+                    RemoveVertex(to.id);
             }
         }
 
-        Vertex* firstVertex = path->edges[0]->from;
-        if (firstVertex->inEdges.empty() && firstVertex->outEdges.size() == 1)
-            RemoveVertex(firstVertex->id);
+        Vertex& firstVertex = path.edges[0].get().from;
+        if (firstVertex.inEdges.empty() && firstVertex.outEdges.size() == 1)
+            RemoveVertex(firstVertex.id);
     }
 
-    delete result->second;
     paths.erase(id);
     return true;
 }
 
-bool Graph::AddEdgeToPath(Edge* edge, EdgeData* data, Path* path) {
-    for (Edge* pathEdge : path->edges) {
-        if (*pathEdge == *edge)
+bool Graph::AddEdgeToPath(int edgeId, int pathId) {
+    auto edgeResult = edges.find(edgeId);
+    if (edgeResult == edges.end())
+        return false;
+
+    auto pathResult = paths.find(pathId);
+    if (pathResult == paths.end())
+        return false;
+
+    Edge& edge = edgeResult->second;
+    Path& path = pathResult->second;
+
+    for (Edge pathEdge : path.edges) {
+        if (pathEdge == edge)
             return false;
     }
 
-    path->edges.push_back(edge);
-    path->edgeData.push_back(data);
-    int index = static_cast<int>(path->edges.size());
-    edge->paths[path] = index;
+    path.edges.push_back(std::ref(edge));
+
+    int index = static_cast<int>(path.edges.size());
+    // edge.paths.insert(std::pair{path.id, index});
+    edge.paths.insert({path.id, index});
 
     return true;
 }
 
-inline void WriteEdgeData(std::ostream& out, EdgeData* data) {
+inline void WriteEdgeData(std::ostream& out, const EdgeData& data) {
     for (int i = 0; i < NSpectrumSamples; ++i) {
-        out << data->throughput[i] << SEP;
+        out << data.throughput[i] << SEP;
     }
-    out << data->weightedThroughput << SEP;
+    out << data.weightedThroughput << SEP << data.numSamples << SEP;
 }
 
-inline EdgeData* ReadEdgeData(std::istream& in) {
+inline EdgeData ReadEdgeData(std::istream& in) {
     std::vector<float> throughputs(NSpectrumSamples);
     for (int i = 0; i < NSpectrumSamples; ++i)
         in >> throughputs[i];
 
-    float weightedThroughput;
-    in >> weightedThroughput;
+    float weightedThroughput, numSamples;
+    in >> weightedThroughput >> numSamples;
 
-    return new EdgeData{SampledSpectrum(throughputs), weightedThroughput};
+    return EdgeData{SampledSpectrum(throughputs), weightedThroughput, numSamples};
 }
 
-void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
+void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
     out << (flags.useCoors ? "True" : "False") << SEP
         << (flags.useThroughput ? "True" : "False") << SEP
         << (flags.useRayVertexTypes ? "True" : "False") << NEW;
@@ -213,33 +231,30 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) {
            edges.size() << SEP <<
            paths.size() << NEW;
 
-    for (auto [_, vertex] : vertices) {
-        out << vertex->id << SEP << vertex->point;
+    for (auto& [id, vertex] : vertices) {
+        out << vertex.id << SEP << vertex.point;
 
         if (flags.useRayVertexTypes) {
-            std::optional<RayVertexType> vertexType = vertex->data->type;
+            std::optional<RayVertexType> vertexType = vertex.data.type;
             out << (vertexType.has_value() ? vertexType.value() : -1) << SEP;
         }
 
         if (flags.useCoors)
-            out << vertex->coors.value();
+            out << vertex.coors.value();
         out << NEW;
     }
 
-    for (auto [_, edge] : edges) {
-        out << edge->id << SEP << edge->from->id << SEP << edge->to->id << SEP;
+    for (auto& [id, edge] : edges) {
+        out << edge.id << SEP << edge.from.get().id << SEP << edge.to.get().id << SEP;
         if (flags.useThroughput)
-            WriteEdgeData(out, edge->data);
+            WriteEdgeData(out, edge.data);
         out << NEW;
     }
 
-    for (auto [_, path] : paths) {
-        out << path->id << SEP << path->edges.size() << SEP;
-        for (int i = 0; i < path->edges.size(); ++i) {
-            out << path->edges[i]->id << SEP;
-            if (flags.useThroughput)
-                WriteEdgeData(out, path->edgeData[i]);
-        }
+    for (auto& [id, path] : paths) {
+        out << path.id << SEP << path.edges.size() << SEP;
+        for (auto edge : path.edges)
+            out << edge.get().id << SEP;
         out << NEW;
     }
 }
@@ -277,19 +292,19 @@ void Graph::ReadFromStream(std::istream& in) {
                 rayType = static_cast<RayVertexType>(type);
         }
 
-        auto vertex = AddVertex(id, point, new VertexData{rayType});
+        auto& vertex = AddVertex(id, point, VertexData{rayType});
 
         if (flags.useCoors) {
             Point3i coors;
             in >> coors;
-            vertex->coors = coors;
+            vertex.coors = coors;
         }
     }
 
     for (int i = 0; i < edgesCap; ++i) {
         int id, fromId, toId;
         in >> id >> fromId >> toId;
-        EdgeData* data = flags.useThroughput ? ReadEdgeData(in) : nullptr;
+        EdgeData data = flags.useThroughput ? ReadEdgeData(in) : EdgeData{};
 
         AddEdge(id, fromId, toId, data);
     }
@@ -298,15 +313,13 @@ void Graph::ReadFromStream(std::istream& in) {
         int id, pathLength;
         in >> id >> pathLength;
 
-        auto path = new Path{id};
-        paths[id] = path;
+        Path& path = AddPath(id);
 
         for (int j = 0; j < pathLength; ++j) {
             int pathEdgeId;
             in >> pathEdgeId;
-            EdgeData* data = flags.useThroughput ? ReadEdgeData(in) : nullptr;
 
-            AddEdgeToPath(edges[pathEdgeId], data, path);
+            AddEdgeToPath(pathEdgeId, path.id);
         }
     }
 }
@@ -329,31 +342,31 @@ void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFla
     WriteToDisk(fileName, GetDescriptionName(desc), flags);
 }
 
-util::VerticesHolder Graph::GetVerticesList() {
+util::VerticesHolder Graph::GetVerticesList() const {
     std::vector<std::pair<int, Point3f>> vList;
     vList.reserve(vertices.size());
 
     std::transform(vertices.begin(), vertices.end(), std::back_inserter(vList),
-        [](std::pair<int, Vertex*> pair) {
-            return std::pair{ pair.second->id, pair.second->point };
+        [](const std::pair<int, Vertex>& pair) {
+            return std::pair{ pair.second.id, pair.second.point };
         });
     return util::VerticesHolder(vList);
 }
 
-util::VerticesHolder Graph::GetPathEndsList() {
+util::VerticesHolder Graph::GetPathEndsList() const {
     std::vector<std::pair<int, Point3f>> vList;
     vList.reserve(paths.size());
 
     std::transform(paths.begin(), paths.end(), std::back_inserter(vList),
-        [](std::pair<int, Path*> pair) {
-            Vertex* pathEnd = pair.second->edges.back()->to;
-            return std::pair{ pathEnd->id, pathEnd->point };
+        [](const std::pair<int, Path>& pair) {
+            Vertex& pathEnd = pair.second.edges.back().get().to;
+            return std::pair{ pathEnd.id, pathEnd.point };
         });
     return util::VerticesHolder(vList);
 }
 
 // UniformGraph implementations
-std::optional<Vertex*> UniformGraph::GetVertex(Point3i coors) {
+OptRef<Vertex> UniformGraph::GetVertex(Point3i coors) const {
     auto result = coorsMap.find(coors);
     if (result == coorsMap.end())
         return {};
@@ -361,36 +374,33 @@ std::optional<Vertex*> UniformGraph::GetVertex(Point3i coors) {
     return result->second;
 }
 
-Vertex* UniformGraph::AddVertex(Point3f p, VertexData* data) {
-    auto [coors, fittedPoint] = FitToGraph(p);
-    auto newVertex = new Vertex{curId + 1, fittedPoint, data, coors};
-
-    auto [iter, success] = coorsMap.insert({coors, newVertex});
-    if (success) {
-        vertices[++curId] = newVertex;
-        return newVertex;
-    }
-    else {
-        // TODO: merge vertex data
-        delete newVertex;
-        return iter->second;
-    }
+Vertex& UniformGraph::AddVertex(Point3f p, VertexData data) {
+    return AddVertex(++curId, p, data);
 }
 
-Vertex* UniformGraph::AddVertex(int id, Point3f p, VertexData* data) {
-    auto [coors, fittedPoint] = FitToGraph(p);
-    auto newVertex = new Vertex{id, fittedPoint, data, coors};
-
-    auto [iter, success] = coorsMap.insert({coors, newVertex});
-    if (success) {
-        vertices[id] = newVertex;
-        return newVertex;
-    }
-    return iter->second;
+Vertex& UniformGraph::AddVertex(int id, Point3f p, VertexData data) {
+    auto [coors, _] = FitToGraph(p);
+    return AddVertex(id, coors, data);
 }
 
-Vertex* UniformGraph::AddVertex(Point3i coors, VertexData* data) {
-    return AddVertex(Point3f(coors * spacing), data);
+Vertex& UniformGraph::AddVertex(Point3i coors, VertexData data) {
+    return AddVertex(++curId, coors, data);
+}
+
+Vertex& UniformGraph::AddVertex(int id, Point3i coors, VertexData data) {
+    if (vertices.find(id) != vertices.end())
+        ErrorExit("Id already exists");
+
+    auto findResult = coorsMap.find(coors);
+    if (findResult == coorsMap.end()) {
+        auto emplaceResult = vertices.emplace(id, Vertex{id, coors*spacing, data, coors});
+
+        coorsMap.insert({coors, emplaceResult.first->second});
+        // coorsMap.insert(std::pair{coors, std::ref(emplaceResult.first->second)});
+    }
+
+    // TODO: merge vertex data
+    return findResult->second;
 }
 
 bool UniformGraph::RemoveVertex(int id) {
@@ -398,12 +408,12 @@ bool UniformGraph::RemoveVertex(int id) {
     if (result == vertices.end())
         return false;
 
-    coorsMap.erase(result->second->coors.value());
+    coorsMap.erase(result->second.coors.value());
 
     return Graph::RemoveVertex(id);
 }
 
-inline std::tuple<Point3i, Point3f> UniformGraph::FitToGraph(const Point3f& p) const {
+inline std::pair<Point3i, Point3f> UniformGraph::FitToGraph(Point3f p) const {
     Point3i coors;
     for (int i = 0; i < 3; ++i) {
         coors[i] = static_cast<int>(std::round(p[i] / spacing));
@@ -414,7 +424,7 @@ inline std::tuple<Point3i, Point3f> UniformGraph::FitToGraph(const Point3f& p) c
     return {coors, fittedPoint};
 }
 
-void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags) {
+void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags) const {
     out << "uniform" << SEP << spacing << NEW;
 
     Graph::WriteToStream(out, flags);
@@ -427,42 +437,52 @@ void UniformGraph::ReadFromStream(std::istream& in) {
     Graph::ReadFromStream(in);
 }
 
-UniformGraph* UniformGraph::ReadFromDisk(const std::string& fileName) {
-    auto graph = new UniformGraph;
+UniformGraph UniformGraph::ReadFromDisk(const std::string& fileName) {
+    UniformGraph graph;
     std::ifstream file(util::FileNameToPath(fileName));
-    graph->ReadFromStream(file);
+    graph.ReadFromStream(file);
     return graph;
 }
 
 // FreeGraph implementations
-UniformGraph* FreeGraph::ToUniform(float spacing) {
-    auto uniform = new UniformGraph(spacing);
+Vertex& FreeGraph::AddVertex(Point3f p, VertexData data) {
+    return AddVertex(++curId, p, data);
+}
 
-    for (auto [oldId, oldVertex] : vertices) {
-        Vertex* curVertex = uniform->AddVertex(oldVertex->point, oldVertex->data);
+Vertex& FreeGraph::AddVertex(int id, Point3f p, VertexData data) {
+    auto emplaceResult = vertices.emplace(id, Vertex{id, p, data});
+    return emplaceResult.first->second;
+}
 
-        for (Edge* inEdge : oldVertex->inEdges) {
-            Vertex* inVertex = uniform->AddVertex(inEdge->from->point, inEdge->from->data);
-            uniform->AddEdge(inVertex, curVertex, inEdge->data, false);
+UniformGraph FreeGraph::ToUniform(float spacing) const {
+    UniformGraph uniform(spacing);
+
+    for (auto& [id, oldVertex] : vertices) {
+        Vertex& curVertex = uniform.AddVertex(oldVertex.point, oldVertex.data);
+
+        for (auto [otherVertexId, edge] : oldVertex.inEdges) {
+            const Vertex& otherVertex = vertices.at(otherVertexId);
+            Vertex& newVertex = uniform.AddVertex(otherVertex.point, otherVertex.data);
+            uniform.AddEdge(newVertex.id, curVertex.id, edge.get().data);
         }
-
-        for (Edge* outEdge : oldVertex->outEdges) {
-            Vertex* outVertex = uniform->AddVertex(outEdge->to->point, outEdge->to->data);
-            uniform->AddEdge(curVertex, outVertex, outEdge->data, false);
+        for (auto [otherVertexId, edge] : oldVertex.outEdges) {
+            const Vertex& otherVertex = vertices.at(otherVertexId);
+            Vertex& newVertex = uniform.AddVertex(otherVertex.point, otherVertex.data);
+            uniform.AddEdge(curVertex.id, newVertex.id, edge.get().data);
         }
     }
 
-    for (auto [oldId, oldPath] : paths) {
-        auto newPath = AddPath();
-        for (int i = 0; i < oldPath->edges.size(); ++i) {
-            AddEdgeToPath(oldPath->edges[i], oldPath->edgeData[i], newPath);
+    for (auto& [id, oldPath]: paths) {
+        Path& newPath = uniform.AddPath();
+        for (auto edge : oldPath.edges) {
+            uniform.AddEdgeToPath(edge.get().id, newPath.id);
         }
     }
 
     return uniform;
 }
 
-void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags) {
+void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags) const {
     out << "free" << NEW;
 
     Graph::WriteToStream(out, flags);
@@ -475,10 +495,10 @@ void FreeGraph::ReadFromStream(std::istream& in) {
     Graph::ReadFromStream(in);
 }
 
-FreeGraph* FreeGraph::ReadFromDisk(const std::string& fileName) {
-    auto graph = new FreeGraph;
+FreeGraph FreeGraph::ReadFromDisk(const std::string& fileName) {
+    FreeGraph graph;
     std::ifstream file(util::FileNameToPath(fileName));
-    graph->ReadFromStream(file);
+    graph.ReadFromStream(file);
     return graph;
 }
 

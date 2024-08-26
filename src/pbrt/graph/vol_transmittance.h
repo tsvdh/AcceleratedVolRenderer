@@ -13,17 +13,17 @@ using namespace pbrt;
 
 class VolTransmittance {
 public:
-    VolTransmittance(UniformGraph* boundary, util::MediumData* mediumData, Sampler sampler)
+    VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData, Sampler sampler)
         : boundary(boundary), mediumData(mediumData), sampler(std::move(sampler)) {}
 
-    [[nodiscard]] FreeGraph* CaptureTransmittance(const std::vector<Light>& lights, float amount);
+    [[nodiscard]] FreeGraph CaptureTransmittance(const std::vector<Light>& lights, float amount);
 
 private:
-    void GetLitSurfacePoints(std::vector<Vertex*>* litSurfacePoints, Vector3f lightDir);
-    void TracePath(const Vertex* surfacePoint, FreeGraph* pathGraph, Vector3f lightDir);
+    std::vector<Ref<const Vertex>> GetLitSurfacePoints(Vector3f lightDir);
+    void TracePath(const Vertex& surfacePoint, FreeGraph& pathGraph, Vector3f lightDir);
 
-    UniformGraph* boundary;
-    util::MediumData* mediumData;
+    const UniformGraph& boundary;
+    const util::MediumData& mediumData;
     Sampler sampler;
     float maxDepth = 100;
 };

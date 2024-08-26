@@ -4,7 +4,6 @@
 #include <pbrt/util/vecmath.h>
 
 #include <optional>
-#include <unordered_set>
 #include <vector>
 
 #include "util.h"
@@ -13,23 +12,16 @@ namespace graph {
 
 using namespace pbrt;
 
+template <typename T>
+using Ref = std::reference_wrapper<T>;
+template <typename T>
+using OptRef = std::optional<Ref<T>>;
+
 struct Vertex;
 struct VertexData;
 struct Edge;
 struct EdgeData;
 struct Path;
-
-struct Vertex {
-    int id = -1;
-    Point3f point;
-    VertexData* data;
-    std::optional<Point3i> coors;
-    std::unordered_set<Edge*> inEdges, outEdges;
-
-    bool operator==(const Vertex& other) const {
-        return id == other.id;
-    }
-};
 
 enum RayVertexType {
     absorp,
@@ -43,27 +35,41 @@ struct VertexData {
     std::optional<RayVertexType> type;
 };
 
+struct Vertex {
+    int id = -1;
+    Point3f point;
+    VertexData data;
+    std::optional<Point3i> coors;
+    std::unordered_map<int, Ref<Edge>> inEdges, outEdges; // other vertex ID, edge
+
+    bool operator==(const Vertex& other) const {
+        return id == other.id;
+    }
+};
+
+struct EdgeData {
+    SampledSpectrum throughput;    // average of samples
+    float weightedThroughput = -1; // average of samples
+    float numSamples = 0;
+
+    void AddSample(const EdgeData& sample);
+};
+
 struct Edge {
     int id = -1;
-    Vertex* from = nullptr;
-    Vertex* to = nullptr;
-    EdgeData* data = nullptr;
-    std::unordered_map<Path*, int> paths; // path, index in path
+    Ref<Vertex> from;
+    Ref<Vertex> to;
+    EdgeData data;
+    std::unordered_map<int, int> paths; // path ID, index in path
 
     bool operator==(const Edge& other) const {
         return id == other.id;
     }
 };
 
-struct EdgeData {
-    SampledSpectrum throughput;
-    float weightedThroughput = -1;
-};
-
 struct Path {
     int id = -1;
-    std::vector<Edge*> edges;
-    std::vector<EdgeData*> edgeData;
+    std::vector<Ref<Edge>> edges;
 
     bool operator==(const Path& other) const {
         return id == other.id;
@@ -97,45 +103,44 @@ inline std::string GetDescriptionName(Description desc) {
 
 class Graph {
 public:
-    // Graph() = default;
-    // Graph(const Graph& other) = default;
     virtual ~Graph() = default;
 
-    std::unordered_map<int, Vertex*> GetVertices() { return vertices; }
-    std::unordered_map<int, Edge*> GetEdges() { return edges; }
-    std::unordered_map<int, Path*> GetPaths() { return paths; }
+    [[nodiscard]] const std::unordered_map<int, Vertex>& GetVertices() const { return vertices; }
+    [[nodiscard]] const std::unordered_map<int, Edge>& GetEdges() const { return edges; }
+    [[nodiscard]] const std::unordered_map<int, Path>& GetPaths() const { return paths; }
 
-    virtual std::optional<Vertex*> GetVertex(int id);
-    std::optional<Edge*> GetEdge(int id);
-    std::optional<Path*> GetPath(int id);
+    [[nodiscard]] virtual OptRef<Vertex> GetVertex(int id) const;
+    [[nodiscard]] OptRef<Edge> GetEdge(int id) const;
+    [[nodiscard]] OptRef<Path> GetPath(int id) const;
 
-    virtual Vertex* AddVertex(Point3f p, VertexData* data) = 0;
-    virtual Vertex* AddVertex(int id, Point3f p, VertexData* data) = 0;
+    virtual Vertex& AddVertex(Point3f p, VertexData data) = 0;
+    virtual Vertex& AddVertex(int id, Point3f p, VertexData data) = 0;
     virtual bool RemoveVertex(int id);
 
-    std::optional<Edge*> AddEdge(Vertex* from, Vertex* to, EdgeData* data, bool checkValid);
-    std::optional<Edge*> AddEdge(int id, int fromId, int toId, EdgeData* data);
+    OptRef<Edge> AddEdge(int fromId, int toId, const EdgeData& data);
+    OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data);
     bool RemoveEdge(int id);
 
     void AddPath(const Path& path);
-    Path* AddPath();
+    Path& AddPath();
+    Path& AddPath(int id);
     bool RemovePath(int id);
 
-    static bool AddEdgeToPath(Edge* edge, EdgeData* data, Path* path);
+    bool AddEdgeToPath(int edgeId, int pathId);
 
     void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags);
     void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
 
-    util::VerticesHolder GetVerticesList();
-    util::VerticesHolder GetPathEndsList();
+    [[nodiscard]] util::VerticesHolder GetVerticesList() const;
+    [[nodiscard]] util::VerticesHolder GetPathEndsList() const;
 
 protected:
-    virtual void WriteToStream(std::ostream& out, StreamFlags flags);
+    virtual void WriteToStream(std::ostream& out, StreamFlags flags) const;
     virtual void ReadFromStream(std::istream& in);
 
-    std::unordered_map<int, Vertex*> vertices; // ID, object
-    std::unordered_map<int, Edge*> edges;      // ID, object
-    std::unordered_map<int, Path*> paths;      // ID, object
+    std::unordered_map<int, Vertex> vertices; // ID, object
+    std::unordered_map<int, Edge> edges;      // ID, object
+    std::unordered_map<int, Path> paths;      // ID, object
     int curId = -1;
 };
 
@@ -143,60 +148,44 @@ class UniformGraph final : public Graph {
 public:
     UniformGraph() = default;
     explicit UniformGraph(float spacing) : spacing(spacing) {};
-    // UniformGraph(const UniformGraph& other) = default;
 
-    float GetSpacing() { return spacing; } // NOLINT(*-make-member-function-const)
-    std::unordered_map<Point3i, Vertex*, util::PointHash> GetCoorsMap() { return coorsMap; }
+    [[nodiscard]] float GetSpacing() const { return spacing; }
+    [[nodiscard]] std::unordered_map<Point3i, Ref<Vertex>, util::PointHash> GetCoorsMap() const { return coorsMap; }
 
-    std::optional<Vertex*> GetVertex(int id) override { return Graph::GetVertex(id); }
-    std::optional<Vertex*> GetVertex(Point3i coors);
+    [[nodiscard]] OptRef<Vertex> GetVertex(int id) const override { return Graph::GetVertex(id); }
+    [[nodiscard]] OptRef<Vertex> GetVertex(Point3i coors) const;
 
-    Vertex* AddVertex(Point3f p, VertexData*) override;
-    Vertex* AddVertex(int id, Point3f p, VertexData* data) override;
-    Vertex* AddVertex(Point3i coors, VertexData* data);
+    Vertex& AddVertex(Point3f p, VertexData) override;
+    Vertex& AddVertex(int id, Point3f p, VertexData data) override;
+    Vertex& AddVertex(Point3i coors, VertexData data);
+    Vertex& AddVertex(int id, Point3i coors, VertexData data);
 
     bool RemoveVertex(int id) override;
 
-    [[nodiscard]] std::tuple<Point3i, Point3f> FitToGraph(const Point3f& p) const;
+    [[nodiscard]] std::pair<Point3i, Point3f> FitToGraph(Point3f p) const;
 
-    static UniformGraph* ReadFromDisk(const std::string& fileName);
+    static UniformGraph ReadFromDisk(const std::string& fileName);
 
-    void WriteToStream(std::ostream& out, StreamFlags flags) override;
+    void WriteToStream(std::ostream& out, StreamFlags flags) const override;
     void ReadFromStream(std::istream& in) override;
 
 private:
     float spacing = 1;
-    std::unordered_map<Point3i, Vertex*, util::PointHash> coorsMap; // coors, vertex
+    std::unordered_map<Point3i, Ref<Vertex>, util::PointHash> coorsMap; // coors, vertex
 };
 
-class FreeGraph : public Graph {
+class FreeGraph final : public Graph {
 public:
-    // FreeGraph() = default;
-    // FreeGraph(const FreeGraph& other) = default;
+    Vertex& AddVertex(Point3f p, VertexData data) override;
 
-    Vertex* AddVertex(Point3f p, VertexData* data) override {
-        return AddVertex(++curId, p, data);
-    }
+    Vertex& AddVertex(int id, Point3f p, VertexData data) override;
 
-    Vertex* AddVertex(int id, Point3f p, VertexData* data) override {
-        auto newVertex = new Vertex{id, p, data};
-        vertices[id] = newVertex;
-        return newVertex;
-    }
+    [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 
-    [[nodiscard]] UniformGraph* ToUniform(float spacing);
+    static FreeGraph ReadFromDisk(const std::string& fileName);
 
-    static FreeGraph* ReadFromDisk(const std::string& fileName);
-
-    void WriteToStream(std::ostream& out, StreamFlags flags) override;
+    void WriteToStream(std::ostream& out, StreamFlags flags) const override;
     void ReadFromStream(std::istream& in) override;
-};
-
-class ClusterableGraph : public FreeGraph {
-public:
-    virtual void Cluster() = 0;
-private:
-    bool isClustered = false;
 };
 
 }
