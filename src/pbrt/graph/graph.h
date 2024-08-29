@@ -15,7 +15,7 @@ using namespace pbrt;
 template <typename T>
 using Ref = std::reference_wrapper<T>;
 template <typename T>
-using OptRef = std::optional<Ref<T>>;
+using OptRef = std::optional<std::reference_wrapper<T>>;
 
 struct Vertex;
 struct VertexData;
@@ -40,7 +40,7 @@ struct Vertex {
     Point3f point;
     VertexData data;
     std::optional<Point3i> coors;
-    std::unordered_map<int, Ref<Edge>> inEdges, outEdges; // other vertex ID, edge
+    std::unordered_map<int, int> inEdges, outEdges; // other vertex ID, edge id
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
@@ -50,15 +50,15 @@ struct Vertex {
 struct EdgeData {
     SampledSpectrum throughput;    // average of samples
     float weightedThroughput = -1; // average of samples
-    float numSamples = 0;
+    float numSamples = 1;
 
     void AddSample(const EdgeData& sample);
 };
 
 struct Edge {
     int id = -1;
-    Ref<Vertex> from;
-    Ref<Vertex> to;
+    int from;       // vertex id
+    int to;         // vertex id
     EdgeData data;
     std::unordered_map<int, int> paths; // path ID, index in path
 
@@ -69,7 +69,7 @@ struct Edge {
 
 struct Path {
     int id = -1;
-    std::vector<Ref<Edge>> edges;
+    std::vector<int> edges; // edge id
 
     bool operator==(const Path& other) const {
         return id == other.id;
@@ -87,14 +87,16 @@ enum Description {
     surface,
     paths,
     search_queue,
-    search_surface
+    search_surface,
+    grid
 };
 const std::vector<std::string> descriptionNames{
     "basic",
     "surface",
     "paths",
     "search_queue",
-    "search_surface"
+    "search_surface",
+    "grid"
 };
 
 inline std::string GetDescriptionName(Description desc) {
@@ -121,7 +123,6 @@ public:
     OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data);
     bool RemoveEdge(int id);
 
-    void AddPath(const Path& path);
     Path& AddPath();
     Path& AddPath(int id);
     bool RemovePath(int id);
@@ -150,12 +151,12 @@ public:
     explicit UniformGraph(float spacing) : spacing(spacing) {};
 
     [[nodiscard]] float GetSpacing() const { return spacing; }
-    [[nodiscard]] std::unordered_map<Point3i, Ref<Vertex>, util::PointHash> GetCoorsMap() const { return coorsMap; }
+    [[nodiscard]] std::unordered_map<Point3i, int, util::PointHash> GetCoorsMap() const { return coorsMap; }
 
     [[nodiscard]] OptRef<Vertex> GetVertex(int id) const override { return Graph::GetVertex(id); }
     [[nodiscard]] OptRef<Vertex> GetVertex(Point3i coors) const;
 
-    Vertex& AddVertex(Point3f p, VertexData) override;
+    Vertex& AddVertex(Point3f p, VertexData data) override;
     Vertex& AddVertex(int id, Point3f p, VertexData data) override;
     Vertex& AddVertex(Point3i coors, VertexData data);
     Vertex& AddVertex(int id, Point3i coors, VertexData data);
@@ -171,7 +172,7 @@ public:
 
 private:
     float spacing = 1;
-    std::unordered_map<Point3i, Ref<Vertex>, util::PointHash> coorsMap; // coors, vertex
+    std::unordered_map<Point3i, int, util::PointHash> coorsMap; // coors, vertex id
 };
 
 class FreeGraph final : public Graph {

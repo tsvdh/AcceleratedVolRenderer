@@ -16,16 +16,17 @@ public:
     VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData, Sampler sampler)
         : boundary(boundary), mediumData(mediumData), sampler(std::move(sampler)) {}
 
-    [[nodiscard]] FreeGraph CaptureTransmittance(const std::vector<Light>& lights, float amount);
+    void CaptureTransmittance(UniformGraph& grid, const std::vector<Light>& lights, float amount, int multiplier);
 
 private:
     std::vector<Ref<const Vertex>> GetLitSurfacePoints(Vector3f lightDir);
-    void TracePath(const Vertex& surfacePoint, FreeGraph& pathGraph, Vector3f lightDir);
+    void TracePath(const Vertex& surfacePoint, UniformGraph& grid, Vector3f lightDir);
+    [[nodiscard]] SampledSpectrum Transmittance(const MediumInteraction& p0, const MediumInteraction& p1) const;
 
     const UniformGraph& boundary;
     const util::MediumData& mediumData;
     Sampler sampler;
-    float maxDepth = 100;
+    int maxDepth = 100;
 };
 
 }

@@ -44,25 +44,26 @@ void main(int argc, char* argv[]) {
     Camera camera = scene.GetCamera();
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
 
-    auto mediumData = new util::MediumData(lambda, accel);
+    util::MediumData mediumData(lambda, accel);
 
     Sampler sampler = scene.GetSampler();
 
     graph::VolBoundary boundary(mediumData);
 
     // --- cube ---
-    // auto cubeGraph = boundary.CaptureBoundary(0.5, 40, 40);
-    // boundary.ToSingleLayer(cubeGraph);
-    // cubeGraph->WriteToDisk("surfaces/cube", graph::Description::surface,
-    //     graph::StreamFlags{false, false});
+    auto cubeBoundary = boundary.CaptureBoundary(0.5f, 40, 40);
+    graph::UniformGraph cubeGrid = boundary.FillInside(cubeBoundary);
 
-    // auto cubeGraph = graph::UniformGraph::ReadFromDisk("surfaces/cube");
+    cubeBoundary.WriteToDisk("surfaces/cube", graph::surface,
+        graph::StreamFlags{false, false, false});
+    cubeGrid.WriteToDisk("grids/cube", graph::grid,
+        graph::StreamFlags{false, false, false});
 
-    // graph::VolTransmittance transmittance(cubeGraph, mediumData, sampler);
-    // graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights);
+    // graph::VolTransmittance transmittance(cubeBoundary, mediumData, sampler);
+    // transmittance.CaptureTransmittance(cubeGrid, lights, 1, 1);
     //
-    // paths->WriteToDisk("paths/cube", graph::Description::paths,
-    //     graph::StreamFlags{false, true, true});
+    // cubeGrid.WriteToDisk("grids/cube_transmittance", graph::grid,
+    //     graph::StreamFlags{false, false, false});
     // ---
 
     // --- disney ---
@@ -71,7 +72,7 @@ void main(int argc, char* argv[]) {
     // disneyGraph->WriteToDisk("surfaces/disney", graph::Description::surface,
     //     graph::StreamFlags{false, false, false});
 
-    auto disneyGraph = graph::UniformGraph::ReadFromDisk("surfaces/disney");
+    // auto disneyGraph = graph::UniformGraph::ReadFromDisk("surfaces/disney");
 
     // graph::VolTransmittance transmittance(disneyGraph, mediumData, sampler);
     // graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights, 0.1);

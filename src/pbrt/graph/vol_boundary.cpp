@@ -64,7 +64,7 @@ FreeGraph VolBoundary::CaptureBoundary(int horizontalStep, int verticalStep) con
     return graph;
 }
 
-UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int horizontalStep, int verticalStep) const {
+UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int horizontalStep, int verticalStep) {
     FreeGraph graph = CaptureBoundary(horizontalStep, verticalStep);
 
     float multRange = 1000;
@@ -93,20 +93,20 @@ UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int horizontalStep
     }
     shrinkingProgress.Done();
 
-    ToSingleLayer(curGraph);
+    ToSingleLayerAndSaveCast(curGraph);
     return curGraph;
 }
 
-UniformGraph VolBoundary::CaptureBoundary(float spacing, int horizontalStep, int verticalStep) const {
+UniformGraph VolBoundary::CaptureBoundary(float spacing, int horizontalStep, int verticalStep) {
     FreeGraph graph = CaptureBoundary(horizontalStep, verticalStep);
 
     UniformGraph spacedGraph = graph.ToUniform(spacing);
-    ToSingleLayer(spacedGraph);
+    ToSingleLayerAndSaveCast(spacedGraph);
 
     return spacedGraph;
 }
 
-inline std::vector<Point3i> GetNeighbours(Point3i p, const Bounds3i& bounds) {
+inline std::vector<Point3i> GetNeighbours(Point3i p, const Bounds3i& bounds = Bounds3i()) {
     std::vector<Point3i> neighbours;
 
     for (int i = 0; i < 6; ++i) {
@@ -122,28 +122,23 @@ inline std::vector<Point3i> GetNeighbours(Point3i p, const Bounds3i& bounds) {
     return neighbours;
 }
 
-void VolBoundary::ToSingleLayer(UniformGraph& boundary) const {
+void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
     using std::get;
     Bounds3i coorBounds(get<0>(boundary.FitToGraph(mediumData.bounds.pMin)) - Vector3i(1, 1, 1),
                         get<0>(boundary.FitToGraph(mediumData.bounds.pMax)) + Vector3i(1, 1, 1));
 
-    UniformGraph search(boundary.GetSpacing());
-    UniformGraph layer(boundary.GetSpacing());
-    layer.AddVertex(coorBounds.pMin, VertexData{});
-    layer.AddVertex(coorBounds.pMax, VertexData{});
-
     std::unordered_set<int> singleLayerSet;
-    std::unordered_set<Point3i, util::PointHash> visited;
+    std::unordered_set<Point3i, util::PointHash>& visited = castCache[&boundary];
     std::queue<Point3i> queue;
     std::unordered_set<Point3i, util::PointHash> queueSet;
     queue.push(coorBounds.pMin);
     queueSet.insert(coorBounds.pMin);
 
-
     while (!queue.empty()) {
         Point3i curPoint = queue.front();
         queue.pop();
         queueSet.erase(curPoint);
+        visited.insert(curPoint);
 
         for (Point3i neighbour : GetNeighbours(curPoint, coorBounds)) {
             if (auto optVertex = boundary.GetVertex(neighbour); optVertex) {
@@ -152,7 +147,6 @@ void VolBoundary::ToSingleLayer(UniformGraph& boundary) const {
             else if (visited.find(neighbour) == visited.end() && queueSet.find(neighbour) == queueSet.end()) {
                 queue.push(neighbour);
                 queueSet.insert(neighbour);
-                visited.insert(neighbour);
             }
         }
     }
@@ -161,6 +155,42 @@ void VolBoundary::ToSingleLayer(UniformGraph& boundary) const {
         if (singleLayerSet.find(id) == singleLayerSet.end())
             boundary.RemoveVertex(id);
     }
+}
+
+UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
+    auto result = castCache.find(&boundary);
+    if (result == castCache.end())
+        ToSingleLayerAndSaveCast(boundary);
+
+    std::unordered_set<Point3i, util::PointHash> cast = castCache[&boundary];
+
+    UniformGraph filled;
+    std::unordered_set<Point3i, util::PointHash> visited;
+    std::queue<Point3i> queue;
+    std::unordered_set<Point3i, util::PointHash> queueSet;
+
+    Point3i startPoint = boundary.GetVertices().begin()->second.coors.value();
+    queue.push(startPoint);
+    queueSet.insert(startPoint);
+
+    while (!queue.empty()) {
+        Point3i curPoint = queue.front();
+        queue.pop();
+        queueSet.erase(curPoint);
+
+        visited.insert(curPoint);
+        filled.AddVertex(curPoint, VertexData{});
+
+        for (Point3i neighbour : GetNeighbours(curPoint)) {
+            if (cast.find(neighbour) == cast.end()
+                    && visited.find(neighbour) == visited.end() && queueSet.find(neighbour) == queueSet.end()) {
+                queue.push(neighbour);
+                queueSet.insert(neighbour);
+            }
+        }
+    }
+
+    return filled;
 }
 
 }
