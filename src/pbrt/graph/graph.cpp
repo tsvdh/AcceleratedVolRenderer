@@ -1,5 +1,6 @@
 #include "graph.h"
 #include <fstream>
+#include <iostream>
 
 #include "pbrt/util/progressreporter.h"
 
@@ -366,15 +367,27 @@ Vertex& UniformGraph::AddVertex(Point3i coors, VertexData data) {
 }
 
 Vertex& UniformGraph::AddVertex(int id, Point3i coors, VertexData data) {
+    auto t1 = std::chrono::high_resolution_clock::now();
+
     if (vertices.find(id) != vertices.end())
         ErrorExit("Id already exists");
 
+    auto t2 = std::chrono::high_resolution_clock::now();
+
     auto findResult = coorsMap.find(coors);
+    auto t3 = std::chrono::high_resolution_clock::now();
     if (findResult == coorsMap.end()) {
         auto emplaceResult = vertices.emplace(id, Vertex{id, coors*spacing, data, coors});
+        auto t4 = std::chrono::high_resolution_clock::now();
 
         Vertex& newVertex = emplaceResult.first->second;
         coorsMap.insert({coors, newVertex.id});
+        auto t5 = std::chrono::high_resolution_clock::now();
+        auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+        auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
+        auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
+        auto duration4 = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4);
+        auto duration5 = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t1);
         return newVertex;
     }
 
