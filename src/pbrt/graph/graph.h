@@ -15,7 +15,11 @@ using namespace pbrt;
 template <typename T>
 using Ref = std::reference_wrapper<T>;
 template <typename T>
-using OptRef = std::optional<std::reference_wrapper<T>>;
+using OptRef = std::optional<Ref<T>>;
+template <typename T>
+using RefConst = std::reference_wrapper<const T>;
+template <typename T>
+using OptRefConst = std::optional<RefConst<T>>;
 
 struct Vertex;
 struct VertexData;
@@ -111,12 +115,16 @@ public:
     [[nodiscard]] const std::unordered_map<int, Edge>& GetEdges() const { return edges; }
     [[nodiscard]] const std::unordered_map<int, Path>& GetPaths() const { return paths; }
 
-    [[nodiscard]] virtual OptRef<Vertex> GetVertex(int id) const;
-    [[nodiscard]] OptRef<Edge> GetEdge(int id) const;
-    [[nodiscard]] OptRef<Path> GetPath(int id) const;
+    [[nodiscard]] virtual OptRefConst<Vertex> GetVertexConst(int id) const;
+    [[nodiscard]] OptRefConst<Edge> GetEdgeConst(int id) const;
+    [[nodiscard]] OptRefConst<Path> GetPathConst(int id) const;
 
-    virtual Vertex& AddVertex(Point3f p, VertexData data) = 0;
-    virtual Vertex& AddVertex(int id, Point3f p, VertexData data) = 0;
+    [[nodiscard]] virtual OptRef<Vertex> GetVertex(int id);
+    [[nodiscard]] OptRef<Edge> GetEdge(int id);
+    [[nodiscard]] OptRef<Path> GetPath(int id);
+
+    virtual Vertex& AddVertex(Point3f p, const VertexData& data) = 0;
+    virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data) = 0;
     virtual bool RemoveVertex(int id);
 
     OptRef<Edge> AddEdge(int fromId, int toId, const EdgeData& data);
@@ -153,13 +161,16 @@ public:
     [[nodiscard]] float GetSpacing() const { return spacing; }
     [[nodiscard]] std::unordered_map<Point3i, int, util::PointHash> GetCoorsMap() const { return coorsMap; }
 
-    [[nodiscard]] OptRef<Vertex> GetVertex(int id) const override { return Graph::GetVertex(id); }
-    [[nodiscard]] OptRef<Vertex> GetVertex(Point3i coors) const;
+    [[nodiscard]] OptRefConst<Vertex> GetVertexConst(int id) const override { return Graph::GetVertexConst(id); }
+    [[nodiscard]] OptRefConst<Vertex> GetVertexConst(Point3i coors) const;
 
-    Vertex& AddVertex(Point3f p, VertexData data) override;
-    Vertex& AddVertex(int id, Point3f p, VertexData data) override;
-    Vertex& AddVertex(Point3i coors, VertexData data);
-    Vertex& AddVertex(int id, Point3i coors, VertexData data);
+    [[nodiscard]] OptRef<Vertex> GetVertex(int id) override { return Graph::GetVertex(id); }
+    [[nodiscard]] OptRef<Vertex> GetVertex(Point3i coors);
+
+    Vertex& AddVertex(Point3f p, const VertexData& data) override;
+    Vertex& AddVertex(int id, Point3f p, const VertexData& data) override;
+    Vertex& AddVertex(Point3i coors, const VertexData& data);
+    Vertex& AddVertex(int id, Point3i coors, const VertexData& data);
 
     bool RemoveVertex(int id) override;
 
@@ -177,9 +188,8 @@ private:
 
 class FreeGraph final : public Graph {
 public:
-    Vertex& AddVertex(Point3f p, VertexData data) override;
-
-    Vertex& AddVertex(int id, Point3f p, VertexData data) override;
+    Vertex& AddVertex(Point3f p, const VertexData& data) override;
+    Vertex& AddVertex(int id, Point3f p, const VertexData& data) override;
 
     [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 

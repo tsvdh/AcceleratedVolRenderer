@@ -1,6 +1,5 @@
 #include "graph.h"
 #include <fstream>
-#include <iostream>
 
 #include "pbrt/util/progressreporter.h"
 
@@ -11,7 +10,7 @@ char NEW('\n');
 
 // Helper methods
 template<class T>
-std::ostream& operator<<(std::ostream& out, Point3<T>& p) {
+std::ostream& operator<<(std::ostream& out, const Point3<T>& p) {
     out << p.x << SEP << p.y << SEP << p.z << SEP;
     return out;
 }
@@ -37,17 +36,30 @@ void EdgeData::AddSample(const EdgeData& sample) {
 
 // Graph implementations
 template<typename T>
-OptRef<T> GetById(int id, std::unordered_map<int, T> collection) {
+OptRefConst<T> GetByIdConst(int id, const std::unordered_map<int, T>& collection) {
     auto result = collection.find(id);
+
     if (result == collection.end())
         return {};
 
     return result->second;
 }
+OptRefConst<Vertex> Graph::GetVertexConst(int id) const { return GetByIdConst(id, vertices); }
+OptRefConst<Edge> Graph::GetEdgeConst(int id) const { return GetByIdConst(id, edges); }
+OptRefConst<Path> Graph::GetPathConst(int id) const { return GetByIdConst(id, paths); }
 
-OptRef<Vertex> Graph::GetVertex(int id) const { return GetById(id, vertices); }
-OptRef<Edge> Graph::GetEdge(int id) const { return GetById(id, edges); }
-OptRef<Path> Graph::GetPath(int id) const { return GetById(id, paths); }
+template<typename T>
+OptRef<T> GetById(int id,  std::unordered_map<int, T>& collection) {
+    auto result = collection.find(id);
+
+    if (result == collection.end())
+        return {};
+
+    return result->second;
+}
+OptRef<Vertex> Graph::GetVertex(int id)  { return GetById(id, vertices); }
+OptRef<Edge> Graph::GetEdge(int id)  { return GetById(id, edges); }
+OptRef<Path> Graph::GetPath(int id)  { return GetById(id, paths); }
 
 bool Graph::RemoveVertex(int id) {
     auto result = vertices.find(id);
@@ -338,14 +350,22 @@ util::VerticesHolder Graph::GetPathEndsList() const {
 
     std::transform(paths.begin(), paths.end(), std::back_inserter(vList),
         [this](const std::pair<int, Path>& pair) {
-            Vertex& pathEnd = GetVertex(pair.second.edges.back()).value();
+            const Vertex& pathEnd = GetVertexConst(pair.second.edges.back()).value();
             return std::pair{ pathEnd.id, pathEnd.point };
         });
     return util::VerticesHolder(vList);
 }
 
 // UniformGraph implementations
-OptRef<Vertex> UniformGraph::GetVertex(Point3i coors) const {
+OptRefConst<Vertex> UniformGraph::GetVertexConst(Point3i coors) const {
+    auto result = coorsMap.find(coors);
+    if (result == coorsMap.end())
+        return {};
+
+    return GetVertexConst(result->second);
+}
+
+OptRef<Vertex> UniformGraph::GetVertex(Point3i coors) {
     auto result = coorsMap.find(coors);
     if (result == coorsMap.end())
         return {};
@@ -353,41 +373,30 @@ OptRef<Vertex> UniformGraph::GetVertex(Point3i coors) const {
     return GetVertex(result->second);
 }
 
-Vertex& UniformGraph::AddVertex(Point3f p, VertexData data) {
+Vertex& UniformGraph::AddVertex(Point3f p, const VertexData& data) {
     return AddVertex(++curId, p, data);
 }
 
-Vertex& UniformGraph::AddVertex(int id, Point3f p, VertexData data) {
+Vertex& UniformGraph::AddVertex(int id, Point3f p, const VertexData& data) {
     auto [coors, _] = FitToGraph(p);
     return AddVertex(id, coors, data);
 }
 
-Vertex& UniformGraph::AddVertex(Point3i coors, VertexData data) {
+Vertex& UniformGraph::AddVertex(Point3i coors, const VertexData& data) {
     return AddVertex(++curId, coors, data);
 }
 
-Vertex& UniformGraph::AddVertex(int id, Point3i coors, VertexData data) {
-    auto t1 = std::chrono::high_resolution_clock::now();
-
+Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data) {
     if (vertices.find(id) != vertices.end())
         ErrorExit("Id already exists");
 
-    auto t2 = std::chrono::high_resolution_clock::now();
-
     auto findResult = coorsMap.find(coors);
-    auto t3 = std::chrono::high_resolution_clock::now();
     if (findResult == coorsMap.end()) {
         auto emplaceResult = vertices.emplace(id, Vertex{id, coors*spacing, data, coors});
-        auto t4 = std::chrono::high_resolution_clock::now();
 
         Vertex& newVertex = emplaceResult.first->second;
         coorsMap.insert({coors, newVertex.id});
-        auto t5 = std::chrono::high_resolution_clock::now();
-        auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-        auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
-        auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
-        auto duration4 = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4);
-        auto duration5 = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t1);
+
         return newVertex;
     }
 
@@ -437,11 +446,11 @@ UniformGraph UniformGraph::ReadFromDisk(const std::string& fileName) {
 }
 
 // FreeGraph implementations
-Vertex& FreeGraph::AddVertex(Point3f p, VertexData data) {
+Vertex& FreeGraph::AddVertex(Point3f p, const VertexData& data) {
     return AddVertex(++curId, p, data);
 }
 
-Vertex& FreeGraph::AddVertex(int id, Point3f p, VertexData data) {
+Vertex& FreeGraph::AddVertex(int id, Point3f p, const VertexData& data) {
     auto emplaceResult = vertices.emplace(id, Vertex{id, p, data});
     return emplaceResult.first->second;
 }
@@ -449,7 +458,7 @@ Vertex& FreeGraph::AddVertex(int id, Point3f p, VertexData data) {
 UniformGraph FreeGraph::ToUniform(float spacing) const {
     UniformGraph uniform(spacing);
 
-    ProgressReporter progress(static_cast<int>(vertices.size()), "Converting graph to uniform", false);
+    ProgressReporter progress(static_cast<int>(vertices.size()), "Converting graph to uniform", true);
 
     for (auto& [id, oldVertex] : vertices) {
         Vertex& curVertex = uniform.AddVertex(oldVertex.point, oldVertex.data);
@@ -457,13 +466,13 @@ UniformGraph FreeGraph::ToUniform(float spacing) const {
         for (auto [otherVertexId, edgeId] : oldVertex.inEdges) {
             const Vertex& otherVertex = vertices.at(otherVertexId);
             Vertex& newVertex = uniform.AddVertex(otherVertex.point, otherVertex.data);
-            Edge& oldEdge = GetEdge(edgeId).value();
+            const Edge& oldEdge = GetEdgeConst(edgeId).value();
             uniform.AddEdge(newVertex.id, curVertex.id, oldEdge.data);
         }
         for (auto [otherVertexId, edgeId] : oldVertex.outEdges) {
             const Vertex& otherVertex = vertices.at(otherVertexId);
             Vertex& newVertex = uniform.AddVertex(otherVertex.point, otherVertex.data);
-            Edge& oldEdge = GetEdge(edgeId).value();
+            const Edge& oldEdge = GetEdgeConst(edgeId).value();
             uniform.AddEdge(curVertex.id, newVertex.id, oldEdge.data);
         }
 

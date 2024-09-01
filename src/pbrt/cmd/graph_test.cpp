@@ -51,6 +51,7 @@ void main(int argc, char* argv[]) {
     graph::VolBoundary boundary(mediumData);
 
     // --- cube ---
+    // boundary.CaptureBoundary(40, 40).WriteToDisk("test", graph::basic, graph::StreamFlags{false, false, false});
     graph::FreeGraph::ReadFromDisk("test").ToUniform(0.5);
     // auto cubeBoundary = boundary.CaptureBoundary(0.5f, 40, 40);
     // graph::UniformGraph cubeGrid = boundary.FillInside(cubeBoundary);
