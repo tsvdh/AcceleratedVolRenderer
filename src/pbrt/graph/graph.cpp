@@ -1,4 +1,6 @@
 #include "graph.h"
+
+#include <filesystem>
 #include <fstream>
 
 #include "pbrt/util/progressreporter.h"
@@ -316,7 +318,11 @@ void Graph::ReadFromStream(std::istream& in) {
 }
 
 void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags) {
-    std::ofstream file(util::FileNameToPath(fileName));
+    std::string fullPath = util::FileNameToPath(fileName);
+    std::string parentPath = fullPath.substr(0, fullPath.find_last_of('/'));
+    std::filesystem::create_directories(parentPath);
+
+    std::ofstream file(fullPath);
     file << desc << NEW;
 
     auto asUniform = dynamic_cast<UniformGraph*>(this);

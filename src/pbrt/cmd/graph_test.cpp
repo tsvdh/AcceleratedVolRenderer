@@ -52,14 +52,17 @@ void main(int argc, char* argv[]) {
 
     // --- cube ---
     // boundary.CaptureBoundary(40, 40).WriteToDisk("test", graph::basic, graph::StreamFlags{false, false, false});
-    graph::FreeGraph::ReadFromDisk("test").ToUniform(0.5);
+    // graph::FreeGraph::ReadFromDisk("test").ToUniform(0.5).WriteToDisk("test2", graph::basic, graph::StreamFlags{});
+
     // auto cubeBoundary = boundary.CaptureBoundary(0.5f, 40, 40);
-    // graph::UniformGraph cubeGrid = boundary.FillInside(cubeBoundary);
-    //
-    // cubeBoundary.WriteToDisk("surfaces/cube", graph::surface,
+    // cubeBoundary.WriteToDisk("cube", graph::surface,
     //     graph::StreamFlags{false, false, false});
-    // cubeGrid.WriteToDisk("grids/cube", graph::grid,
-    //     graph::StreamFlags{false, false, false});
+
+    auto cubeBoundary = graph::UniformGraph::ReadFromDisk("surfaces/cube");
+
+    graph::UniformGraph cubeGrid = boundary.FillInside(cubeBoundary);
+    cubeGrid.WriteToDisk("grids/cube", graph::grid,
+        graph::StreamFlags{false, false, false});
 
     // graph::VolTransmittance transmittance(cubeBoundary, mediumData, sampler);
     // transmittance.CaptureTransmittance(cubeGrid, lights, 1, 1);

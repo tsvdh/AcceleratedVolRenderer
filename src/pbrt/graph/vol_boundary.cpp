@@ -106,16 +106,16 @@ UniformGraph VolBoundary::CaptureBoundary(float spacing, int horizontalStep, int
     return spacedGraph;
 }
 
-inline std::vector<Point3i> GetNeighbours(Point3i p, const Bounds3i& bounds = Bounds3i()) {
+inline std::vector<Point3i> GetNeighbours(Point3i coors, const std::optional<Bounds3i>& bounds) {
     std::vector<Point3i> neighbours;
 
     for (int i = 0; i < 6; ++i) {
-        Point3i newP(p);
+        Point3i newP(coors);
         int index = i / 2;
         int toAdd = i % 2 == 0 ? -1 : 1;
         newP[index] += toAdd;
 
-        if (Inside(newP, bounds)) {
+        if (!bounds.has_value() ? true : Inside(newP, bounds.value())) {
             neighbours.push_back(newP);
         }
     }
@@ -164,7 +164,7 @@ UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
 
     std::unordered_set<Point3i, util::PointHash> cast = castCache[&boundary];
 
-    UniformGraph filled;
+    UniformGraph filled(boundary.GetSpacing());
     std::unordered_set<Point3i, util::PointHash> visited;
     std::queue<Point3i> queue;
     std::unordered_set<Point3i, util::PointHash> queueSet;
@@ -179,9 +179,9 @@ UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
         queueSet.erase(curPoint);
 
         visited.insert(curPoint);
-        filled.AddVertex(curPoint, VertexData{});
+        filled.AddVertex(curPoint * boundary.GetSpacing(), VertexData{});
 
-        for (Point3i neighbour : GetNeighbours(curPoint)) {
+        for (Point3i neighbour : GetNeighbours(curPoint, {})) {
             if (cast.find(neighbour) == cast.end()
                     && visited.find(neighbour) == visited.end() && queueSet.find(neighbour) == queueSet.end()) {
                 queue.push(neighbour);
