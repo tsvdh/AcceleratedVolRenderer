@@ -19,7 +19,7 @@ public:
     void CaptureTransmittance(UniformGraph& grid, const std::vector<Light>& lights, float amount, int multiplier);
 
 private:
-    std::vector<Ref<const Vertex>> GetLitSurfacePoints(Vector3f lightDir);
+    std::vector<RefConst<Vertex>> GetLitSurfacePoints(Vector3f lightDir);
     void TracePath(const Vertex& surfacePoint, UniformGraph& grid, Vector3f lightDir);
     [[nodiscard]] SampledSpectrum Transmittance(const MediumInteraction& p0, const MediumInteraction& p1) const;
 

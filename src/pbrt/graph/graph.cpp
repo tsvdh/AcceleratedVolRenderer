@@ -63,6 +63,14 @@ OptRef<Vertex> Graph::GetVertex(int id)  { return GetById(id, vertices); }
 OptRef<Edge> Graph::GetEdge(int id)  { return GetById(id, edges); }
 OptRef<Path> Graph::GetPath(int id)  { return GetById(id, paths); }
 
+Vertex& Graph::AddVertex(Point3f p, const VertexData& data) {
+    return AddVertex(curId, p, data, true);
+}
+
+Vertex& Graph::AddVertex(int id, Point3f p, const VertexData& data) {
+    return AddVertex(id, p, data, false);
+}
+
 bool Graph::RemoveVertex(int id) {
     auto result = vertices.find(id);
     if (result == vertices.end())
@@ -79,39 +87,11 @@ bool Graph::RemoveVertex(int id) {
 }
 
 OptRef<Edge> Graph::AddEdge(int fromId, int toId, const EdgeData& data) {
-    return AddEdge(++curId, fromId, toId, data);
+    return AddEdge(curId, fromId, toId, data, true);
 }
 
 OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data) {
-    if (edges.find(id) != edges.end())
-        ErrorExit("Id already exists");
-
-    auto fromResult = vertices.find(fromId);
-    if (fromResult == vertices.end())
-        return {};
-
-    auto toResult = vertices.find(toId);
-    if (toResult == vertices.end())
-        return {};
-
-    Vertex& from = fromResult->second;
-    Vertex& to = toResult->second;
-
-    auto edgeResult = to.inEdges.find(from.id);
-
-    if (edgeResult != to.inEdges.end() && from.outEdges.find(to.id) != from.outEdges.end()) {
-        OptRef<Edge> edge = GetEdge(edgeResult->second);
-        edge.value().get().data.AddSample(data);
-        return edge;
-    }
-
-    auto emplaceResult = edges.emplace(id, Edge{id, from.id, to.id, data});
-    auto& newEdge = emplaceResult.first->second;
-
-    from.outEdges.insert({to.id, newEdge.id});
-    to.inEdges.insert({from.id, newEdge.id});
-
-    return newEdge;
+    return AddEdge(id, fromId, toId, data, false);
 }
 
 bool Graph::RemoveEdge(int id) {
@@ -194,6 +174,41 @@ bool Graph::AddEdgeToPath(int edgeId, int pathId) {
     edge.paths.insert({path.id, index});
 
     return true;
+}
+
+OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, bool incrId) {
+    if (edges.find(id) != edges.end())
+        ErrorExit("Id already exists");
+
+    auto fromResult = vertices.find(fromId);
+    if (fromResult == vertices.end())
+        return {};
+
+    auto toResult = vertices.find(toId);
+    if (toResult == vertices.end())
+        return {};
+
+    Vertex& from = fromResult->second;
+    Vertex& to = toResult->second;
+
+    auto edgeResult = to.inEdges.find(from.id);
+
+    if (edgeResult != to.inEdges.end() && from.outEdges.find(to.id) != from.outEdges.end()) {
+        OptRef<Edge> edge = GetEdge(edgeResult->second);
+        edge.value().get().data.AddSample(data);
+        return edge;
+    }
+
+    auto emplaceResult = edges.emplace(id, Edge{id, from.id, to.id, data});
+    auto& newEdge = emplaceResult.first->second;
+
+    from.outEdges.insert({to.id, newEdge.id});
+    to.inEdges.insert({from.id, newEdge.id});
+
+    if (incrId)
+        ++curId;
+
+    return newEdge;
 }
 
 inline void WriteEdgeData(std::ostream& out, const EdgeData& data) {
@@ -379,35 +394,12 @@ OptRef<Vertex> UniformGraph::GetVertex(Point3i coors) {
     return GetVertex(result->second);
 }
 
-Vertex& UniformGraph::AddVertex(Point3f p, const VertexData& data) {
-    return AddVertex(++curId, p, data);
-}
-
-Vertex& UniformGraph::AddVertex(int id, Point3f p, const VertexData& data) {
-    auto [coors, _] = FitToGraph(p);
-    return AddVertex(id, coors, data);
-}
-
 Vertex& UniformGraph::AddVertex(Point3i coors, const VertexData& data) {
-    return AddVertex(++curId, coors, data);
+    return AddVertex(curId, coors, data, true);
 }
 
 Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data) {
-    if (vertices.find(id) != vertices.end())
-        ErrorExit("Id already exists");
-
-    auto findResult = coorsMap.find(coors);
-    if (findResult == coorsMap.end()) {
-        auto emplaceResult = vertices.emplace(id, Vertex{id, coors*spacing, data, coors});
-
-        Vertex& newVertex = emplaceResult.first->second;
-        coorsMap.insert({coors, newVertex.id});
-
-        return newVertex;
-    }
-
-    // TODO: merge vertex data
-    return GetVertex(findResult->second).value();
+    return AddVertex(id, coors, data, false);
 }
 
 bool UniformGraph::RemoveVertex(int id) {
@@ -431,6 +423,32 @@ inline std::pair<Point3i, Point3f> UniformGraph::FitToGraph(Point3f p) const {
     return {coors, fittedPoint};
 }
 
+Vertex& UniformGraph::AddVertex(int id, Point3f p, const VertexData& data, bool incrId) {
+    auto [coors, _] = FitToGraph(p);
+    return AddVertex(id, coors, data, incrId);
+}
+
+Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data, bool incrId) {
+    if (vertices.find(id) != vertices.end())
+        ErrorExit("Id already exists");
+
+    auto findResult = coorsMap.find(coors);
+    if (findResult != coorsMap.end()) {
+        // TODO: merge vertex data
+        return GetVertex(findResult->second).value();
+    }
+
+    auto emplaceResult = vertices.emplace(id, Vertex{id, coors*spacing, data, coors});
+
+    Vertex& newVertex = emplaceResult.first->second;
+    coorsMap.insert({coors, newVertex.id});
+
+    if (incrId)
+        ++curId;
+
+    return newVertex;
+}
+
 void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags) const {
     out << "uniform" << SEP << spacing << NEW;
 
@@ -452,12 +470,12 @@ UniformGraph UniformGraph::ReadFromDisk(const std::string& fileName) {
 }
 
 // FreeGraph implementations
-Vertex& FreeGraph::AddVertex(Point3f p, const VertexData& data) {
-    return AddVertex(++curId, p, data);
-}
-
-Vertex& FreeGraph::AddVertex(int id, Point3f p, const VertexData& data) {
+Vertex& FreeGraph::AddVertex(int id, Point3f p, const VertexData& data, bool incrId) {
     auto emplaceResult = vertices.emplace(id, Vertex{id, p, data});
+
+    if (incrId)
+        ++curId;
+
     return emplaceResult.first->second;
 }
 

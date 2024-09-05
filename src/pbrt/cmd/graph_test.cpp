@@ -57,18 +57,18 @@ void main(int argc, char* argv[]) {
     // auto cubeBoundary = boundary.CaptureBoundary(0.5f, 40, 40);
     // cubeBoundary.WriteToDisk("cube", graph::surface,
     //     graph::StreamFlags{false, false, false});
-
     auto cubeBoundary = graph::UniformGraph::ReadFromDisk("surfaces/cube");
 
-    graph::UniformGraph cubeGrid = boundary.FillInside(cubeBoundary);
-    cubeGrid.WriteToDisk("grids/cube", graph::grid,
-        graph::StreamFlags{false, false, false});
-
-    // graph::VolTransmittance transmittance(cubeBoundary, mediumData, sampler);
-    // transmittance.CaptureTransmittance(cubeGrid, lights, 1, 1);
-    //
-    // cubeGrid.WriteToDisk("grids/cube_transmittance", graph::grid,
+    // graph::UniformGraph cubeGrid = boundary.FillInside(cubeBoundary);
+    // cubeGrid.WriteToDisk("grids/cube", graph::grid,
     //     graph::StreamFlags{false, false, false});
+    auto cubeGrid = graph::UniformGraph::ReadFromDisk("grids/cube");
+
+    graph::VolTransmittance transmittance(cubeBoundary, mediumData, sampler);
+    transmittance.CaptureTransmittance(cubeGrid, lights, 1, 10000);
+
+    cubeGrid.WriteToDisk("grids/cube_transmittance", graph::grid_transmittance,
+        graph::StreamFlags{false, true, false});
     // ---
 
     // --- disney ---

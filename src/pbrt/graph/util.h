@@ -103,3 +103,30 @@ private:
 };
 
 }
+
+namespace graph {
+
+enum Description {
+    basic,
+    surface,
+    paths,
+    search_queue,
+    search_surface,
+    grid,
+    grid_transmittance
+};
+const std::vector<std::string> descriptionNames{
+    "basic",
+    "surface",
+    "paths",
+    "search_queue",
+    "search_surface",
+    "grid",
+    "grid_transmittance"
+};
+
+inline std::string GetDescriptionName(Description desc) {
+    return descriptionNames[desc];
+}
+
+}

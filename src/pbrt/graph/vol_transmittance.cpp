@@ -5,14 +5,14 @@
 
 namespace graph {
 
-std::vector<Ref<const Vertex>> VolTransmittance::GetLitSurfacePoints(Vector3f lightDir) {
+std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints(Vector3f lightDir) {
     float maxDistToVertex = mediumData.medium.Is<HomogeneousMedium>()
                             ? boundary.GetSpacing()
                             : boundary.GetSpacing() * 4;
 
     float maxRayLength = mediumData.maxDistToCenter * 2;
 
-    std::vector<Ref<const Vertex>> litSurfacePoints;
+    std::vector<RefConst<Vertex>> litSurfacePoints;
 
     ScratchBuffer buffer;
     for (auto& pair : boundary.GetVertices()) {
@@ -53,7 +53,7 @@ std::vector<Ref<const Vertex>> VolTransmittance::GetLitSurfacePoints(Vector3f li
 
 void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid, Vector3f lightDir) {
     Vertex curVertex = surfacePoint;
-    RayDifferential ray(curVertex.point, lightDir);
+    RayDifferential ray(curVertex.point, lightDir, 0.f, mediumData.medium);
     int depth = 0;
     bool scattered = false;
 
@@ -163,7 +163,6 @@ SampledSpectrum VolTransmittance::Transmittance(const MediumInteraction& p0, con
     Tr *= T_majRemain / T_majRemain[0];
     inv_w *= T_majRemain / T_majRemain[0];
 
-
     return Tr / inv_w.Average();
 }
 
@@ -187,9 +186,9 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, const std::vecto
     auto distantLight = light.Cast<DistantLight>();
     Vector3f lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
-    std::vector<Ref<const Vertex>> litSurfacePoints = GetLitSurfacePoints(lightDir);
+    std::vector<RefConst<Vertex>> litSurfacePoints = GetLitSurfacePoints(lightDir);
 
-    std::vector<Ref<const Vertex>> selectedSurfacePoints;
+    std::vector<RefConst<Vertex>> selectedSurfacePoints;
     int increment = static_cast<int>(std::round(1 / amount));
     for (int i = 0; i < litSurfacePoints.size(); i += increment) {
         selectedSurfacePoints.push_back(litSurfacePoints[i]);
@@ -200,8 +199,8 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, const std::vecto
 
     for (int i = 0; i < selectedSurfacePoints.size(); ++i) {
         for (int j = 0; j < multiplier; ++j) {
-            sampler.StartPixelSample(Point2i(i, j), 0);
-            TracePath(boundary.GetVertex(1).value(), grid, lightDir);
+            sampler.StartPixelSample(Point2i(i, j), j);
+            TracePath(selectedSurfacePoints[i], grid, lightDir);
             progress.Update();
         }
     }

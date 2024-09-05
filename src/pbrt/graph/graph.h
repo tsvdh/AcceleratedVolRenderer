@@ -86,27 +86,6 @@ struct StreamFlags {
     bool useRayVertexTypes = false;
 };
 
-enum Description {
-    basic,
-    surface,
-    paths,
-    search_queue,
-    search_surface,
-    grid
-};
-const std::vector<std::string> descriptionNames{
-    "basic",
-    "surface",
-    "paths",
-    "search_queue",
-    "search_surface",
-    "grid"
-};
-
-inline std::string GetDescriptionName(Description desc) {
-    return descriptionNames[desc];
-}
-
 class Graph {
 public:
     virtual ~Graph() = default;
@@ -123,8 +102,8 @@ public:
     [[nodiscard]] OptRef<Edge> GetEdge(int id);
     [[nodiscard]] OptRef<Path> GetPath(int id);
 
-    virtual Vertex& AddVertex(Point3f p, const VertexData& data) = 0;
-    virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data) = 0;
+    Vertex& AddVertex(Point3f p, const VertexData& data);
+    Vertex& AddVertex(int id, Point3f p, const VertexData& data);
     virtual bool RemoveVertex(int id);
 
     OptRef<Edge> AddEdge(int fromId, int toId, const EdgeData& data);
@@ -144,13 +123,16 @@ public:
     [[nodiscard]] util::VerticesHolder GetPathEndsList() const;
 
 protected:
+    virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) = 0;
+    OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data, bool incrId);
+
     virtual void WriteToStream(std::ostream& out, StreamFlags flags) const;
     virtual void ReadFromStream(std::istream& in);
 
     std::unordered_map<int, Vertex> vertices; // ID, object
     std::unordered_map<int, Edge> edges;      // ID, object
     std::unordered_map<int, Path> paths;      // ID, object
-    int curId = -1;
+    int curId = 0;
 };
 
 class UniformGraph final : public Graph {
@@ -167,8 +149,7 @@ public:
     [[nodiscard]] OptRef<Vertex> GetVertex(int id) override { return Graph::GetVertex(id); }
     [[nodiscard]] OptRef<Vertex> GetVertex(Point3i coors);
 
-    Vertex& AddVertex(Point3f p, const VertexData& data) override;
-    Vertex& AddVertex(int id, Point3f p, const VertexData& data) override;
+    using Graph::AddVertex;
     Vertex& AddVertex(Point3i coors, const VertexData& data);
     Vertex& AddVertex(int id, Point3i coors, const VertexData& data);
 
@@ -181,6 +162,10 @@ public:
     void WriteToStream(std::ostream& out, StreamFlags flags) const override;
     void ReadFromStream(std::istream& in) override;
 
+protected:
+    Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) override;
+    Vertex& AddVertex(int id, Point3i coors, const VertexData& data, bool incrId);
+
 private:
     float spacing = 1;
     std::unordered_map<Point3i, int, util::PointHash> coorsMap; // coors, vertex id
@@ -188,8 +173,7 @@ private:
 
 class FreeGraph final : public Graph {
 public:
-    Vertex& AddVertex(Point3f p, const VertexData& data) override;
-    Vertex& AddVertex(int id, Point3f p, const VertexData& data) override;
+    using Graph::AddVertex;
 
     [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 
@@ -197,6 +181,9 @@ public:
 
     void WriteToStream(std::ostream& out, StreamFlags flags) const override;
     void ReadFromStream(std::istream& in) override;
+
+protected:
+    Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) override;
 };
 
 }
