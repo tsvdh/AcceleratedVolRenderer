@@ -863,6 +863,7 @@ target_include_directories(graph_lib PUBLIC
         ${CMAKE_CURRENT_BINARY_DIR}
         ${GLFW_INCLUDE}
         ${GLAD_INCLUDE}
+        src/pbrt/graph/deps/Eigen
 )
 
 target_compile_options(graph_lib PUBLIC ${PBRT_CXX_FLAGS})
