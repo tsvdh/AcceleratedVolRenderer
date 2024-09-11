@@ -864,6 +864,7 @@ target_include_directories(graph_lib PUBLIC
         ${GLFW_INCLUDE}
         ${GLAD_INCLUDE}
         src/pbrt/graph/deps/Eigen
+        src/pbrt/graph/deps/Eigen_Unsupported
 )
 
 target_compile_options(graph_lib PUBLIC ${PBRT_CXX_FLAGS})
