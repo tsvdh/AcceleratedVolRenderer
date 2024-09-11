@@ -113,7 +113,8 @@ enum Description {
     search_queue,
     search_surface,
     grid,
-    grid_transmittance
+    grid_transmittance,
+    grid_lighting
 };
 const std::vector<std::string> descriptionNames{
     "basic",
@@ -122,7 +123,8 @@ const std::vector<std::string> descriptionNames{
     "search_queue",
     "search_surface",
     "grid",
-    "grid_transmittance"
+    "grid_transmittance",
+    "grid_lighting"
 };
 
 inline std::string GetDescriptionName(Description desc) {

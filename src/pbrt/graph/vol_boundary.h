@@ -17,7 +17,7 @@ public:
     [[nodiscard]] UniformGraph CaptureBoundary(int wantedVertices, int horizontalStep, int verticalStep);
     [[nodiscard]] UniformGraph CaptureBoundary(float spacing, int horizontalStep, int verticalStep);
 
-    UniformGraph FillInside(UniformGraph& boundary);
+    [[nodiscard]] UniformGraph FillInside(UniformGraph& boundary);
 
 private:
     [[nodiscard]] FreeGraph CaptureBoundary(int horizontalStep, int verticalStep) const;

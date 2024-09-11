@@ -833,6 +833,8 @@ set(GRAPH
         src/pbrt/graph/vol_transmittance.cpp
         src/pbrt/graph/graph_integrator.h
         src/pbrt/graph/graph_integrator.cpp
+        src/pbrt/graph/lighting_calculator.h
+        src/pbrt/graph/lighting_calculator.cpp
 
         src/pbrt/graph/deps/nanoflann.hpp
 )

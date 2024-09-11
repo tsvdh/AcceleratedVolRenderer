@@ -37,6 +37,7 @@ enum RayVertexType {
 
 struct VertexData {
     std::optional<RayVertexType> type;
+    std::optional<SampledSpectrum> lighting;
 };
 
 struct Vertex {
@@ -84,6 +85,7 @@ struct StreamFlags {
     bool useCoors = false;
     bool useThroughput = false;
     bool useRayVertexTypes = false;
+    bool useLighting = false;
 };
 
 class Graph {
@@ -145,9 +147,11 @@ public:
 
     [[nodiscard]] OptRefConst<Vertex> GetVertexConst(int id) const override { return Graph::GetVertexConst(id); }
     [[nodiscard]] OptRefConst<Vertex> GetVertexConst(Point3i coors) const;
+    [[nodiscard]] OptRefConst<Vertex> GetVertexConst(Point3f point) const;
 
     [[nodiscard]] OptRef<Vertex> GetVertex(int id) override { return Graph::GetVertex(id); }
     [[nodiscard]] OptRef<Vertex> GetVertex(Point3i coors);
+    [[nodiscard]] OptRef<Vertex> GetVertex(Point3f point);
 
     using Graph::AddVertex;
     Vertex& AddVertex(Point3i coors, const VertexData& data);

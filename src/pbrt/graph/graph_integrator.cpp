@@ -119,9 +119,9 @@ void GraphIntegrator::Render() {
                        });
     }
 
-    std::string sceneGraph = Options->sceneFileName;
-    sceneGraph = std::regex_replace(sceneGraph, std::regex("\\.pbrt"), ".txt");
-    // pathGraph = FreeGraph::ReadFromDisk(sceneGraph);
+    std::string sceneGridName = Options->sceneFileName;
+    sceneGridName = std::regex_replace(sceneGridName, std::regex("\\.pbrt"), ".txt");
+    sceneGrid = UniformGraph::ReadFromDisk(sceneGridName);
 
     // Render image in waves
     while (waveStart < spp) {
@@ -291,30 +291,34 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
     //
     // util::VerticesHolder vHolder = pathGraph.GetPathEndsList();
     // TreeType searchTree(3, vHolder);
-    //
-    // pstd::optional<ShapeIntersection> shapeIsect = Intersect(ray);
-    // if (!shapeIsect)
-    //     return SampledSpectrum(0);
-    //
-    // if (!ray.medium)
-    //     shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
-    //
-    // auto iter = ray.medium.SampleRay((Ray&)ray, Infinity, lambda, scratchBuffer);
-    // while (true) {
-    //     pstd::optional<RayMajorantSegment> segment = iter.Next();
-    //     if (!segment)
-    //         return SampledSpectrum(0);
-    //     if (segment->sigma_maj[0] != 0) {
-    //         Point3f p = ray(segment->tMin);
-    //         Float searchPoint[3] = {p.x, p.y, p.z};
-    //
-    //         std::vector<ResultItem<int, Float>> searchRes;
-    //         searchTree.radiusSearch(searchPoint, 0.25, searchRes);
-    //
-    //         return SampledSpectrum(searchRes.empty() ? 0 : 1);
-    //     }
-    // }
-    return SampledSpectrum(1);
+
+    pstd::optional<ShapeIntersection> shapeIsect = Intersect(ray);
+    if (!shapeIsect)
+        return SampledSpectrum(0);
+
+    if (!ray.medium)
+        shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
+
+    auto iter = ray.medium.SampleRay((Ray&)ray, Infinity, lambda, scratchBuffer);
+    while (true) {
+        pstd::optional<RayMajorantSegment> segment = iter.Next();
+        if (!segment)
+            return SampledSpectrum(0);
+        if (segment->sigma_maj[0] != 0) {
+            Point3f p = ray(segment->tMin);
+            // Float searchPoint[3] = {p.x, p.y, p.z};
+            //
+            // std::vector<ResultItem<int, Float>> searchRes;
+            // searchTree.radiusSearch(searchPoint, 0.25, searchRes);
+            //
+            // return SampledSpectrum(searchRes.empty() ? 0 : 1);
+
+            if (std::optional<Vertex> optVertex = sceneGrid.GetVertexConst(p))
+                return optVertex.value().data.lighting.value();
+
+            return SampledSpectrum(0);
+        }
+    }
 }
 
 SampledSpectrum GraphIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,

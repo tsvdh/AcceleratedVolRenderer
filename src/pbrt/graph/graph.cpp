@@ -211,6 +211,39 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
     return newEdge;
 }
 
+inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFlags flags) {
+    if (flags.useRayVertexTypes)
+        out << (data.type.has_value() ? data.type.value() : -1) << SEP;
+
+    if (flags.useLighting) {
+        if (data.lighting.has_value()) {
+            for (int i = 0; i < NSpectrumSamples; ++i)
+                out << data.lighting.value()[i] << SEP;
+        }
+        else {
+            for (int i = 0; i < NSpectrumSamples; ++i)
+                out << -1 << SEP;
+        }
+    }
+}
+
+inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
+    int rayVertexType = -1;
+    if (flags.useRayVertexTypes)
+        in >> rayVertexType;
+
+    SampledSpectrum lighting(-1);
+    if (flags.useLighting) {
+        for (int i = 0; i < 4; ++i)
+            in >> lighting[i];
+    }
+
+    // std::optional<SampledSpectrum> optLighting = ;
+    // std::optional<RayVertexType> optRayVertexType = ;
+    return VertexData{rayVertexType == -1 ? std::nullopt : std::optional(static_cast<RayVertexType>(rayVertexType)),
+                      lighting[0] == -1 ? std::nullopt : std::optional(lighting)};
+}
+
 inline void WriteEdgeData(std::ostream& out, const EdgeData& data) {
     for (int i = 0; i < NSpectrumSamples; ++i) {
         out << data.throughput[i] << SEP;
@@ -232,7 +265,8 @@ inline EdgeData ReadEdgeData(std::istream& in) {
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
     out << (flags.useCoors ? "True" : "False") << SEP
         << (flags.useThroughput ? "True" : "False") << SEP
-        << (flags.useRayVertexTypes ? "True" : "False") << NEW;
+        << (flags.useRayVertexTypes ? "True" : "False") << SEP
+        << (flags.useLighting ? "True" : "False") << NEW;
 
     out << curId << SEP <<
            vertices.size() << SEP <<
@@ -242,13 +276,11 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
     for (auto& [id, vertex] : vertices) {
         out << vertex.id << SEP << vertex.point;
 
-        if (flags.useRayVertexTypes) {
-            std::optional<RayVertexType> vertexType = vertex.data.type;
-            out << (vertexType.has_value() ? vertexType.value() : -1) << SEP;
-        }
-
         if (flags.useCoors)
             out << vertex.coors.value();
+
+        WriteVertexData(out, vertex.data, flags);
+
         out << NEW;
     }
 
@@ -270,14 +302,16 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
 void Graph::ReadFromStream(std::istream& in) {
     StreamFlags flags;
 
-    std::string useCoors, useThroughput, useRayVertexType;
-    in >> useCoors >> useThroughput >> useRayVertexType;
+    std::string useCoors, useThroughput, useRayVertexType, useLighting;
+    in >> useCoors >> useThroughput >> useRayVertexType >> useLighting;
     if (useCoors == "True")
         flags.useCoors = true;
     if (useThroughput == "True")
         flags.useThroughput = true;
     if (useRayVertexType == "True")
         flags.useRayVertexTypes = true;
+    if (useLighting == "True")
+        flags.useLighting = true;
 
     int verticesCap, edgesCap, pathsCap;
     in >> curId >> verticesCap >> edgesCap >> pathsCap;
@@ -290,17 +324,9 @@ void Graph::ReadFromStream(std::istream& in) {
         Point3f point;
         in >> id >> point;
 
-        std::optional<RayVertexType> rayType;
+        VertexData data = ReadVertexData(in, flags);
 
-        if (flags.useRayVertexTypes) {
-            int type;
-            in >> type;
-
-            if (type != -1)
-                rayType = static_cast<RayVertexType>(type);
-        }
-
-        auto& vertex = AddVertex(id, point, VertexData{rayType});
+        auto& vertex = AddVertex(id, point, data);
 
         if (flags.useCoors) {
             Point3i coors;
@@ -392,6 +418,14 @@ OptRef<Vertex> UniformGraph::GetVertex(Point3i coors) {
         return {};
 
     return GetVertex(result->second);
+}
+
+OptRefConst<Vertex> UniformGraph::GetVertexConst(Point3f point) const {
+    return GetVertexConst(FitToGraph(point).first);
+}
+
+OptRef<Vertex> UniformGraph::GetVertex(Point3f point) {
+    return GetVertex(FitToGraph(point).first);
 }
 
 Vertex& UniformGraph::AddVertex(Point3i coors, const VertexData& data) {

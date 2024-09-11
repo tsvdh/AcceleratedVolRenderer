@@ -5,7 +5,22 @@
 
 namespace graph {
 
-std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints(Vector3f lightDir) {
+VolTransmittance::VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData,
+                                   const std::vector<Light>& lights, Sampler sampler)
+                                       : boundary(boundary), mediumData(mediumData), sampler(std::move(sampler)) {
+    if (lights.size() != 1)
+        ErrorExit("Expected exactly one light source");
+
+    light = lights[0];
+    if (!light.Is<DistantLight>())
+        ErrorExit("Expected a directional light");
+
+    auto distantLight = light.Cast<DistantLight>();
+    lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
+}
+
+
+std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
     float maxDistToVertex = mediumData.medium.Is<HomogeneousMedium>()
                             ? boundary.GetSpacing()
                             : boundary.GetSpacing() * 4;
@@ -51,7 +66,7 @@ std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints(Vector3f lig
     return litSurfacePoints;
 }
 
-void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid, Vector3f lightDir) {
+void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid) {
     Vertex curVertex = surfacePoint;
     RayDifferential ray(curVertex.point, lightDir, 0.f, mediumData.medium);
     int depth = 0;
@@ -166,16 +181,9 @@ SampledSpectrum VolTransmittance::Transmittance(const MediumInteraction& p0, con
     return Tr / inv_w.Average();
 }
 
-void VolTransmittance::CaptureTransmittance(UniformGraph& grid, const std::vector<Light>& lights, float amount, int multiplier) {
+void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float amount, int multiplier) {
     if (grid.GetSpacing() != boundary.GetSpacing())
         ErrorExit("Spacing of grid and boundary must be equal");
-
-    if (lights.size() != 1)
-        ErrorExit("Expected exactly one light source");
-
-    Light light = lights[0];
-    if (!light.Is<DistantLight>())
-        ErrorExit("Expected a directional light");
 
     if (amount < 0 || amount > 1)
         ErrorExit("Amount should be a ratio");
@@ -183,10 +191,7 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, const std::vecto
     if (multiplier < 1)
         ErrorExit("Multiplier must be greater or equal than 1");
 
-    auto distantLight = light.Cast<DistantLight>();
-    Vector3f lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
-
-    std::vector<RefConst<Vertex>> litSurfacePoints = GetLitSurfacePoints(lightDir);
+    std::vector<RefConst<Vertex>> litSurfacePoints = GetLitSurfacePoints();
 
     std::vector<RefConst<Vertex>> selectedSurfacePoints;
     int increment = static_cast<int>(std::round(1 / amount));
@@ -200,7 +205,7 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, const std::vecto
     for (int i = 0; i < selectedSurfacePoints.size(); ++i) {
         for (int j = 0; j < multiplier; ++j) {
             sampler.StartPixelSample(Point2i(i, j), j);
-            TracePath(selectedSurfacePoints[i], grid, lightDir);
+            TracePath(selectedSurfacePoints[i], grid);
             progress.Update();
         }
     }

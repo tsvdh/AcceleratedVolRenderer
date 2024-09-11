@@ -2,8 +2,9 @@ graph desc  string-description                                              supe
 extra meta	string-name (float-spacing)
 
 flags 		string-useCoors string-useThroughput string-useRayVertexTypes   base class
+                string-useLighting
 base meta	int-curId,vertices,edges,paths
-vertices	int-id float-x,y,z (int type) (int-x,y,z)
+vertices	int-id float-x,y,z (int-x,y,z) (int type) (float-lighting(x4))
 ...
 edges		int-id,from,to (float-throughput(x6))
 ...

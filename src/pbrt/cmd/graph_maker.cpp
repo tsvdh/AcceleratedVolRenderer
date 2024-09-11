@@ -1,12 +1,11 @@
-#include <iostream>
-
-#include <pbrt/graph/graph.h>
 #include <pbrt/scene.h>
+#include <pbrt/graph/graph.h>
 #include <pbrt/graph/vol_transmittance.h>
 #include <pbrt/util/args.h>
 
 #include <regex>
 
+#include "pbrt/graph/lighting_calculator.h"
 #include "pbrt/graph/vol_boundary.h"
 
 using namespace pbrt;
@@ -55,21 +54,27 @@ void main(int argc, char* argv[]) {
     Camera camera = scene.GetCamera();
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
 
-    auto mediumData = new util::MediumData(lambda, accel);
+    util::MediumData mediumData(lambda, accel);
 
     Sampler sampler = scene.GetSampler();
 
     graph::VolBoundary boundary(mediumData);
 
-    graph::UniformGraph* boundaryGraph;
+    graph::UniformGraph boundaryGraph;
     if (wantedVertices != -1)
-        boundaryGraph = boundary.CaptureBoundary(wantedVertices, 40, 40);
+        boundaryGraph = boundary.CaptureBoundary(wantedVertices, 90, 90);
     else if (spacing != -1)
-        boundaryGraph = boundary.CaptureBoundary(spacing, 40, 40);
+        boundaryGraph = boundary.CaptureBoundary(spacing, 90, 90);
 
-    graph::VolTransmittance transmittance(boundaryGraph, mediumData, sampler);
-    graph::FreeGraph* paths = transmittance.CaptureTransmittance(lights, 1);
+    graph::UniformGraph grid = boundary.FillInside(boundaryGraph);
+
+    graph::VolTransmittance transmittance(boundaryGraph, mediumData, lights, sampler);
+    transmittance.CaptureTransmittance(grid, 1, 1);
+
+    graph::LightingCalculator lighting(grid, mediumData, transmittance.GetLitSurfacePoints());
+    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(0);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
-    paths->WriteToDisk(fileName, graph::paths, {false, true, true});
+    finalLighting.WriteToDisk(fileName, graph::grid_lighting,
+        graph::StreamFlags{false, false, false, true});
 }

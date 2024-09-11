@@ -13,9 +13,9 @@ class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
     GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate,
-                           std::vector<Light> lights,
-                           const std::string &lightSampleStrategy = "bvh",
-                           bool regularize = false)
+                    std::vector<Light> lights,
+                    const std::string &lightSampleStrategy = "bvh",
+                    bool regularize = false)
             : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
             maxDepth(maxDepth),
             lightSampler(LightSampler::Create(lightSampleStrategy, lights, Allocator())),
@@ -46,7 +46,7 @@ private:
     int maxDepth;
     LightSampler lightSampler;
     bool regularize;
-    FreeGraph pathGraph;
+    UniformGraph sceneGrid;
 };
 
 }
