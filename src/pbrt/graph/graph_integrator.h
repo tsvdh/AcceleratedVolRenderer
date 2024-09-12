@@ -2,6 +2,8 @@
 
 #include <pbrt/pbrt.h>
 
+#include <regex>
+
 #include "graph.h"
 #include "pbrt/cpu/integrators.h"
 
@@ -19,7 +21,13 @@ public:
             : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
             maxDepth(maxDepth),
             lightSampler(LightSampler::Create(lightSampleStrategy, lights, Allocator())),
-            regularize(regularize) {}
+            regularize(regularize) {
+
+        std::string sceneGridName = Options->sceneFileName;
+        sceneGridName = std::regex_replace(sceneGridName, std::regex("\\.pbrt"), ".txt");
+        sceneGrid = UniformGraph::ReadFromDisk(sceneGridName);
+        worldFromRender = camera.GetCameraTransform().WorldFromRender();
+    }
 
     void Render() override;
 
@@ -47,6 +55,7 @@ private:
     LightSampler lightSampler;
     bool regularize;
     UniformGraph sceneGrid;
+    Transform worldFromRender;
 };
 
 }

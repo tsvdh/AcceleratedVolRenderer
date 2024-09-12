@@ -19,7 +19,6 @@ VolTransmittance::VolTransmittance(const UniformGraph& boundary, const util::Med
     lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
 
-
 std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
     float maxDistToVertex = mediumData.medium.Is<HomogeneousMedium>()
                             ? boundary.GetSpacing()

@@ -34,6 +34,7 @@ void main(int argc, char* argv[]) {
     PBRTOptions options;
     options.disablePixelJitter = true;
     options.disableWavelengthJitter = true;
+    options.renderingSpace = RenderingCoordinateSystem::World;
     InitPBRT(options);
 
     BasicScene scene;
@@ -51,8 +52,7 @@ void main(int argc, char* argv[]) {
     scene.CreateMaterials(textures, &namedMaterials, &materials);
     Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
 
-    Camera camera = scene.GetCamera();
-    SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.5);
+    SampledWavelengths lambda = scene.GetCamera().GetFilm().SampleWavelengths(0.5);
 
     util::MediumData mediumData(lambda, accel);
 

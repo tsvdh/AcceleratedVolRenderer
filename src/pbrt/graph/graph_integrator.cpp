@@ -119,10 +119,6 @@ void GraphIntegrator::Render() {
                        });
     }
 
-    std::string sceneGridName = Options->sceneFileName;
-    sceneGridName = std::regex_replace(sceneGridName, std::regex("\\.pbrt"), ".txt");
-    sceneGrid = UniformGraph::ReadFromDisk(sceneGridName);
-
     // Render image in waves
     while (waveStart < spp) {
         // Render current wave's image in series
@@ -306,6 +302,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             return SampledSpectrum(0);
         if (segment->sigma_maj[0] != 0) {
             Point3f p = ray(segment->tMin);
+            p = worldFromRender(p);
             // Float searchPoint[3] = {p.x, p.y, p.z};
             //
             // std::vector<ResultItem<int, Float>> searchRes;
