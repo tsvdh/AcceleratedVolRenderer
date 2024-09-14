@@ -160,13 +160,13 @@ void VolPathCustomIntegrator::Render() {
                     sampler.StartPixelSample(pPixel, sampleIndex);
                     EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer, surfaceGraph);
                     scratchBuffer.Reset();
+                    progress.Update(1);
                 }
 
                 StatsReportPixelEnd(pPixel);
 
                 PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
                          tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
-                progress.Update(1);
             }
         }
 

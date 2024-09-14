@@ -16,10 +16,14 @@ LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::Med
 }
 
 UniformGraph LightingCalculator::GetFinalLightGrid(int numIterations) const {
-    if (numIterations != 0)
-        ErrorExit("must be zero iterations");
+    if (numIterations < 0  || numIterations > 1)
+        ErrorExit("Must be zero or one iteration");
 
     Eigen::VectorXf light = GetLightVector();
+
+    if (numIterations == 1)
+        light += GetTransmittanceMatrix() * light;
+
     UniformGraph finalGrid(grid.GetSpacing());
 
     for (auto& pair : grid.GetVertices()) {
@@ -64,10 +68,10 @@ Eigen::MatrixXf LightingCalculator::GetPhaseMatrix() const {
     return phase;
 }
 
-Eigen::MatrixXf LightingCalculator::GetTransmittanceMatrix() const {
+Eigen::MatrixXf LightingCalculator::GetGMatrix() const {
     auto& vertices = grid.GetVertices();
     auto& edges = grid.GetEdges();
-    Eigen::MatrixXf transmittance = Eigen::MatrixXf::Zero(numVertices, numVertices);
+    Eigen::MatrixXf gMatrix = Eigen::MatrixXf::Zero(numVertices, numVertices);
 
     for (auto& vertexPair : grid.GetVertices()) {
         for (auto& edgePair : vertexPair.second.outEdges) {
@@ -77,11 +81,15 @@ Eigen::MatrixXf LightingCalculator::GetTransmittanceMatrix() const {
 
             float T = edge.data.throughput[0];
             float G = 1 / static_cast<float>(std::pow(Length(from.point - to.point), 2));
-            transmittance(to.id, from.id) = T * G / static_cast<float>(numVertices);
+            gMatrix(to.id, from.id) = T * G;
         }
     }
 
-    return transmittance;
+    return gMatrix;
+}
+
+Eigen::MatrixXf LightingCalculator::GetTransmittanceMatrix() const {
+    return GetPhaseMatrix() * GetGMatrix() / static_cast<float>(numVertices);
 }
 
 }

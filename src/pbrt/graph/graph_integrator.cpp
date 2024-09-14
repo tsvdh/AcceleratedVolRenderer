@@ -61,8 +61,7 @@ void GraphIntegrator::Render() {
     ThreadLocal<Sampler> samplers([this]() { return samplerPrototype.Clone(); });
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
-    // int spp = samplerPrototype.SamplesPerPixel();
-    int spp = 1;
+    int spp = samplerPrototype.SamplesPerPixel();
     ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering",
                               Options->quiet);
 
@@ -139,13 +138,13 @@ void GraphIntegrator::Render() {
                     sampler.StartPixelSample(pPixel, sampleIndex);
                     EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
                     scratchBuffer.Reset();
+                    progress.Update(1);
                 }
 
                 StatsReportPixelEnd(pPixel);
 
                 PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
                          tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
-                progress.Update(1);
             }
         }
 
@@ -310,8 +309,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             //
             // return SampledSpectrum(searchRes.empty() ? 0 : 1);
 
-            if (std::optional<Vertex> optVertex = sceneGrid.GetVertexConst(p))
-                return optVertex.value().data.lighting.value();
+            if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(p))
+                return optVertex.value().get().data.lighting.value();
 
             return SampledSpectrum(0);
         }

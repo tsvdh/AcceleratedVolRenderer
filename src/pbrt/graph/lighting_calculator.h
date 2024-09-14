@@ -15,6 +15,7 @@ private:
     [[nodiscard]] bool HasSequentialIds() const;
     [[nodiscard]] Eigen::VectorXf GetLightVector() const;
     [[nodiscard]] Eigen::MatrixXf GetTransmittanceMatrix() const;
+    [[nodiscard]] Eigen::MatrixXf GetGMatrix() const;
     [[nodiscard]] Eigen::MatrixXf GetPhaseMatrix() const;
 
     const UniformGraph& grid;
