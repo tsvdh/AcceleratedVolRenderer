@@ -102,6 +102,16 @@ private:
     std::vector<std::pair<int, Point3f>> verticesList;
 };
 
+inline DistantLight* GetLight(std::vector<Light>& lights) {
+    if (lights.size() != 1)
+        ErrorExit("Expected exactly one light source");
+
+    if (!lights[0].Is<DistantLight>())
+        ErrorExit("Expected a directional light");
+
+    return lights[0].Cast<DistantLight>();
+}
+
 }
 
 namespace graph {

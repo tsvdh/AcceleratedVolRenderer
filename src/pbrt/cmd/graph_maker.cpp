@@ -46,6 +46,7 @@ void main(int argc, char* argv[]) {
     NamedTextures textures = scene.CreateTextures();
     std::map<int, pstd::vector<Light>*> shapeIndexToAreaLights;
     std::vector<Light> lights = scene.CreateLights(textures, &shapeIndexToAreaLights);
+    DistantLight* light = util::GetLight(lights);
 
     std::map<std::string, Material> namedMaterials;
     std::vector<Material> materials;
@@ -55,6 +56,7 @@ void main(int argc, char* argv[]) {
     SampledWavelengths lambda = scene.GetCamera().GetFilm().SampleWavelengths(0.5);
 
     util::MediumData mediumData(lambda, accel);
+    light->Preprocess(mediumData.bounds);
 
     Sampler sampler = scene.GetSampler();
 
@@ -68,10 +70,10 @@ void main(int argc, char* argv[]) {
 
     graph::UniformGraph grid = boundary.FillInside(boundaryGraph);
 
-    graph::VolTransmittance transmittance(boundaryGraph, mediumData, lights, sampler);
-    transmittance.CaptureTransmittance(grid, 1, 10000);
+    graph::VolTransmittance transmittance(boundaryGraph, mediumData, light, sampler);
+    transmittance.CaptureTransmittance(grid, 1, 1000);
 
-    graph::LightingCalculator lighting(grid, mediumData, transmittance.GetLitSurfacePoints());
+    graph::LightingCalculator lighting(grid, mediumData, light, transmittance.GetLitSurfacePoints());
     graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");

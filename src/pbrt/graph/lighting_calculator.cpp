@@ -1,10 +1,12 @@
 #include "lighting_calculator.h"
 
+#include "pbrt/lights.h"
+
 namespace graph {
 
 LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::MediumData& mediumData,
-                                       const std::vector<RefConst<Vertex>>& litVertices)
-    : grid(grid), mediumData(mediumData), litVertices(litVertices) {
+                                       DistantLight* light, const std::vector<RefConst<Vertex>>& litVertices)
+    : grid(grid), mediumData(mediumData), light(light), litVertices(litVertices) {
 
     if (!mediumData.medium.Is<HomogeneousMedium>())
         ErrorExit("Only homogeneous media supported");
@@ -19,16 +21,18 @@ UniformGraph LightingCalculator::GetFinalLightGrid(int numIterations) const {
     if (numIterations < 0  || numIterations > 1)
         ErrorExit("Must be zero or one iteration");
 
-    Eigen::VectorXf light = GetLightVector();
+    auto light = GetLightVector();
 
-    if (numIterations == 1)
-        light += GetTransmittanceMatrix() * light;
+    for (int i = 0; i < NSpectrumSamples; ++i) {
+        if (numIterations == 1)
+            light += GetTransmittanceMatrix() * light;
+    }
 
     UniformGraph finalGrid(grid.GetSpacing());
 
     for (auto& pair : grid.GetVertices()) {
         auto& v = pair.second;
-        finalGrid.AddVertex(v.id, v.coors.value(), VertexData{{}, SampledSpectrum(light[v.id])});
+        finalGrid.AddVertex(v.id, v.coors.value(), VertexData{{}, light[v.id]});
     }
 
     return finalGrid;
@@ -49,29 +53,33 @@ bool LightingCalculator::HasSequentialIds() const {
     return total == totalExpected;
 }
 
-Eigen::VectorXf LightingCalculator::GetLightVector() const {
-    Eigen::VectorXf light = Eigen::VectorXf::Zero(numVertices);
+Matrix<SampledSpectrum, Dynamic, 1> LightingCalculator::GetLightVector() const {
+    // lambda only relevant parameter for distant light
+    SampledSpectrum L = light->SampleLi(LightSampleContext{Interaction()},
+                                        Point2f(), mediumData.lambda, false).value().L;
+
+    Matrix<SampledSpectrum, Dynamic, 1> lightVector = Matrix<SampledSpectrum, Dynamic, 1>::Zero(numVertices);
 
     for (auto vertex : litVertices) {
-        light(grid.GetVertexConst(vertex.get().coors.value()).value().get().id) = 1;
+        lightVector(grid.GetVertexConst(vertex.get().coors.value()).value().get().id) = L;
     }
 
-    return light;
+    return lightVector;
 }
 
-Eigen::MatrixXf LightingCalculator::GetPhaseMatrix() const {
-    Eigen::MatrixXf phase = Eigen::MatrixXf::Zero(numVertices, numVertices);
+Matrix<SampledSpectrum, Dynamic, Dynamic> LightingCalculator::GetPhaseMatrix() const {
+    Matrix<SampledSpectrum, Dynamic, Dynamic> phase = Matrix<SampledSpectrum, Dynamic, Dynamic>::Zero(numVertices, numVertices);
 
     for (int i = 0; i < numVertices; ++i)
-        phase(i, i) = 1 / (4 * Pi);
+        phase(i, i) = SampledSpectrum(1 / (4 * Pi));
 
     return phase;
 }
 
-Eigen::MatrixXf LightingCalculator::GetGMatrix() const {
+Matrix<SampledSpectrum, Dynamic, Dynamic> LightingCalculator::GetGMatrix() const {
     auto& vertices = grid.GetVertices();
     auto& edges = grid.GetEdges();
-    Eigen::MatrixXf gMatrix = Eigen::MatrixXf::Zero(numVertices, numVertices);
+    Matrix<SampledSpectrum, Dynamic, Dynamic> gMatrix = Matrix<SampledSpectrum, Dynamic, Dynamic>::Zero(numVertices, numVertices);
 
     for (auto& vertexPair : grid.GetVertices()) {
         for (auto& edgePair : vertexPair.second.outEdges) {
@@ -79,7 +87,7 @@ Eigen::MatrixXf LightingCalculator::GetGMatrix() const {
             const Vertex& to = vertices.at(edgePair.first);
             const Edge& edge = edges.at(edgePair.second);
 
-            float T = edge.data.throughput[0];
+            SampledSpectrum T = edge.data.throughput;
             float G = 1 / static_cast<float>(std::pow(Length(from.point - to.point), 2));
             gMatrix(to.id, from.id) = T * G;
         }
@@ -88,8 +96,8 @@ Eigen::MatrixXf LightingCalculator::GetGMatrix() const {
     return gMatrix;
 }
 
-Eigen::MatrixXf LightingCalculator::GetTransmittanceMatrix() const {
-    return GetPhaseMatrix() * GetGMatrix() / static_cast<float>(numVertices);
+Matrix<SampledSpectrum, Dynamic, Dynamic> LightingCalculator::GetTransmittanceMatrix() const {
+    return GetPhaseMatrix() * GetGMatrix() / SampledSpectrum(static_cast<float>(numVertices));
 }
 
 }

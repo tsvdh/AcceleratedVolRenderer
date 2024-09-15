@@ -1,7 +1,5 @@
 #pragma once
 
-#include <utility>
-
 #include <pbrt/lights.h>
 #include <pbrt/pbrt.h>
 
@@ -14,7 +12,7 @@ using namespace pbrt;
 class VolTransmittance {
 public:
     VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData,
-                     const std::vector<Light>& lights, Sampler sampler);
+                     DistantLight* light, Sampler sampler);
 
     void CaptureTransmittance(UniformGraph& grid, float amount, int multiplier);
     [[nodiscard]] std::vector<RefConst<Vertex>> GetLitSurfacePoints();
@@ -25,7 +23,7 @@ private:
 
     const UniformGraph& boundary;
     const util::MediumData& mediumData;
-    Light light;
+    DistantLight* light;
     Vector3f lightDir;
     Sampler sampler;
     int maxDepth = 100;

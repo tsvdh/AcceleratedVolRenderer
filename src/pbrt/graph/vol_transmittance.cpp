@@ -6,17 +6,10 @@
 namespace graph {
 
 VolTransmittance::VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData,
-                                   const std::vector<Light>& lights, Sampler sampler)
-                                       : boundary(boundary), mediumData(mediumData), sampler(std::move(sampler)) {
-    if (lights.size() != 1)
-        ErrorExit("Expected exactly one light source");
-
-    light = lights[0];
-    if (!light.Is<DistantLight>())
-        ErrorExit("Expected a directional light");
-
-    auto distantLight = light.Cast<DistantLight>();
-    lightDir = -Normalize(distantLight->GetRenderFromLight()(Vector3f(0, 0, 1)));
+                                   DistantLight* light, Sampler sampler)
+                                       : boundary(boundary), mediumData(mediumData), light(light),
+                                         sampler(std::move(sampler)) {
+    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
 
 std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
