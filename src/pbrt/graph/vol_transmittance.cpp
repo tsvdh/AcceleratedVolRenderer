@@ -32,10 +32,11 @@ std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
             continue;
 
         shapeInter->intr.SkipIntersection(&ray, shapeInter->tHit);
+        float tMax = mediumData.aggregate->Intersect(ray, Infinity).value().tHit;
 
         bool directlyLit = false;
 
-        auto iter = mediumData.medium.SampleRay((Ray&)ray, Infinity, mediumData.lambda, buffer);
+        auto iter = mediumData.medium.SampleRay((Ray&)ray, tMax, mediumData.lambda, buffer);
         while (true) {
             auto segment = iter.Next();
             if (!segment)
@@ -60,9 +61,8 @@ std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
 
 void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid) {
     Vertex curVertex = surfacePoint;
-    RayDifferential ray(curVertex.point, lightDir, 0.f, mediumData.medium);
+    Ray ray(curVertex.point, lightDir, 0.f, mediumData.medium);
     int depth = 0;
-    bool scattered = false;
 
     MediumInteraction curIntr(curVertex.point, -lightDir, 0, mediumData.medium,
         mediumData.medium.SamplePoint(curVertex.point, mediumData.lambda).phase);
@@ -73,11 +73,17 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
         uint64_t hash1 = Hash(sampler.Get1D());
         RNG rng(hash0, hash1);
 
-        MediumInteraction newIntr;
+        std::optional<MediumInteraction> optNewIntr;
+
+        pstd::optional<ShapeIntersection> optIsect = mediumData.aggregate->Intersect(ray, Infinity);
+        if (!optIsect)
+            return;
+
+        float tMax = optIsect.value().tHit;
 
         // Sample new point on ray
         SampleT_maj(
-            (Ray&)ray, Infinity, sampler.Get1D(), rng, mediumData.lambda,
+            ray, tMax, sampler.Get1D(), rng, mediumData.lambda,
             [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                 // Handle medium scattering event for ray
 
@@ -102,9 +108,7 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
                         return false;
                     }
 
-                    newIntr = MediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
-
-                    scattered = true;
+                    optNewIntr = MediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
                     return false;
                 }
                 else {
@@ -114,10 +118,11 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
             });
 
         // Handle terminated, scattered, and unscattered medium rays
-        // if unscattered then path is done
-        if (!scattered) {
+        // if no new interaction then path is done
+        if (!optNewIntr) {
             return;
         }
+        MediumInteraction newIntr = optNewIntr.value();
 
         auto [coors, fittedPoint] = grid.FitToGraph(newIntr.p());
         OptRef<Vertex> optVertex = grid.GetVertex(coors);
