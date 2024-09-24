@@ -24,21 +24,27 @@ LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::Med
 }
 
 UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations, int transmittanceIterations) {
-    if (transmittanceIterations < 0  || transmittanceIterations > 1)
-        ErrorExit("Must be zero or one iteration");
+    SparseVec light = GetLightVector(initialLightingIterations);
 
-    auto light = GetLightVector(initialLightingIterations);
+    if (transmittanceIterations > 0) {
+        SparseMat transmittance = GetTransmittanceMatrix();
+        SparseVec curLight = light;
 
-    for (int i = 0; i < NSpectrumSamples; ++i) {
-        if (transmittanceIterations == 1)
-            light += GetTransmittanceMatrix() * light;
+        ProgressReporter progress(transmittanceIterations - 1, "Computing final lighting", false);
+
+        for (int i = 0; i < transmittanceIterations; ++i) {
+            curLight = transmittance * curLight;
+            light += curLight;
+            progress.Update();
+        }
+        progress.Done();
     }
 
     UniformGraph finalGrid(grid.GetSpacing());
 
     for (auto& pair : grid.GetVertices()) {
-        auto& v = pair.second;
-        finalGrid.AddVertex(v.id, v.coors.value(), VertexData{{}, light[v.id]});
+        const Vertex& v = pair.second;
+        finalGrid.AddVertex(v.id, v.coors.value(), VertexData{{}, light.coeffRef(v.id)});
     }
 
     return finalGrid;
@@ -59,7 +65,7 @@ bool LightingCalculator::HasSequentialIds() const {
     return total == totalExpected;
 }
 
-Matrix<SampledSpectrum, Dynamic, 1> LightingCalculator::GetLightVector(int initialLightingIterations) {
+SparseVec LightingCalculator::GetLightVector(int initialLightingIterations) {
     // lambda only relevant parameter for distant light
     SampledSpectrum L = light->SampleLi(LightSampleContext{Interaction()},
                                         Point2f(), mediumData.lambda, false).value().L;
@@ -68,7 +74,9 @@ Matrix<SampledSpectrum, Dynamic, 1> LightingCalculator::GetLightVector(int initi
         "Computing initial lighting", false);
 
     float maxRayLength = mediumData.maxDistToCenter * 2;
-    Matrix<SampledSpectrum, Dynamic, 1> lightVector = Matrix<SampledSpectrum, Dynamic, 1>::Zero(numVertices);
+
+    std::unordered_map<int, SampledSpectrum> lightMap;
+    lightMap.reserve(numVertices); // rarely need this amount, but better to have enough capacity
 
     for (auto vertex : litVertices) {
         for (int i = 0; i < initialLightingIterations; ++i) {
@@ -118,8 +126,11 @@ Matrix<SampledSpectrum, Dynamic, 1> LightingCalculator::GetLightVector(int initi
                 });
 
             if (coors) {
-                int scatterId = grid.GetVertexConst(coors.value()).value().get().id;
-                lightVector(scatterId) += L / static_cast<float>(initialLightingIterations);
+                int id = grid.GetVertexConst(coors.value()).value().get().id;
+                if (lightMap.find(id) == lightMap.end())
+                    lightMap[id] = SampledSpectrum(0);
+
+                lightMap[id] += L / static_cast<float>(initialLightingIterations);
             }
 
             progress.Update();
@@ -127,41 +138,56 @@ Matrix<SampledSpectrum, Dynamic, 1> LightingCalculator::GetLightVector(int initi
     }
 
     progress.Done();
+
+    std::vector<std::pair<int, SampledSpectrum>> lightPairs(lightMap.begin(), lightMap.end());
+    std::sort(lightPairs.begin(), lightPairs.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    SparseVec lightVector(numVertices);
+    for (auto& pair : lightPairs) {
+        lightVector.coeffRef(pair.first) = pair.second;
+    }
+
     return lightVector;
 }
 
-Matrix<SampledSpectrum, Dynamic, Dynamic> LightingCalculator::GetPhaseMatrix() const {
-    Matrix<SampledSpectrum, Dynamic, Dynamic> phase = Matrix<SampledSpectrum, Dynamic, Dynamic>::Zero(numVertices, numVertices);
+SparseMat LightingCalculator::GetPhaseMatrix() const {
+    std::vector<Eigen::Triplet<SampledSpectrum>> phaseEntries;
+    phaseEntries.reserve(numVertices);
 
     for (int i = 0; i < numVertices; ++i)
-        phase(i, i) = SampledSpectrum(1 / (4 * Pi));
+        phaseEntries.emplace_back(i, i, SampledSpectrum(1 / (4 * Pi)));
 
-    return phase;
+    SparseMat phaseMatrix(numVertices, numVertices);
+    phaseMatrix.setFromTriplets(phaseEntries.begin(), phaseEntries.end());
+    return phaseMatrix;
 }
 
-Matrix<SampledSpectrum, Dynamic, Dynamic> LightingCalculator::GetGMatrix() const {
+SparseMat LightingCalculator::GetGMatrix() const {
     auto& vertices = grid.GetVertices();
     auto& edges = grid.GetEdges();
-    Matrix<SampledSpectrum, Dynamic, Dynamic> gMatrix = Matrix<SampledSpectrum, Dynamic, Dynamic>::Zero(numVertices, numVertices);
 
-    for (auto& vertexPair : grid.GetVertices()) {
-        for (auto& edgePair : vertexPair.second.outEdges) {
-            const Vertex& from = vertexPair.second;
-            const Vertex& to = vertices.at(edgePair.first);
-            const Edge& edge = edges.at(edgePair.second);
+    std::vector<Eigen::Triplet<SampledSpectrum>> gEntries;
+    gEntries.reserve(grid.GetEdges().size());
 
-            SampledSpectrum T = edge.data.throughput;
-            double voxelSize = std::pow(grid.GetSpacing(), 3);
-            double edgeLength = std::pow(Length(from.point - to.point), 2);
-            auto G = static_cast<float>(voxelSize / edgeLength);
-            gMatrix(to.id, from.id) = T * G;
-        }
+    for (auto& edge : edges) {
+        const Vertex& from = vertices.at(edge.second.from);
+        const Vertex& to = vertices.at(edge.second.to);
+
+        SampledSpectrum T = edge.second.data.throughput;
+        double voxelSize = std::pow(grid.GetSpacing(), 3);
+        double edgeLength = std::pow(Length(from.point - to.point), 2);
+        auto G = static_cast<float>(voxelSize / edgeLength);
+
+        gEntries.emplace_back(to.id, from.id, T * G);
     }
 
+    SparseMat gMatrix(numVertices, numVertices);
+    gMatrix.setFromTriplets(gEntries.begin(), gEntries.end());
     return gMatrix;
 }
 
-Matrix<SampledSpectrum, Dynamic, Dynamic> LightingCalculator::GetTransmittanceMatrix() const {
+SparseMat LightingCalculator::GetTransmittanceMatrix() const {
     return GetPhaseMatrix() * GetGMatrix() / SampledSpectrum(static_cast<float>(numVertices));
 }
 
