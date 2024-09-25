@@ -60,12 +60,15 @@ std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
 }
 
 void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid) {
-    Vertex curVertex = surfacePoint;
-    Ray ray(curVertex.point, lightDir, 0.f, mediumData.medium);
+    Vertex& startVertex = grid.GetVertex(surfacePoint.coors.value()).value().get();
+    int curVertexId = startVertex.id;
+    Point3f startPoint = startVertex.point;
+
+    Ray ray(startPoint, lightDir, 0.f, mediumData.medium);
     int depth = 0;
 
-    MediumInteraction curIntr(curVertex.point, -lightDir, 0, mediumData.medium,
-        mediumData.medium.SamplePoint(curVertex.point, mediumData.lambda).phase);
+    MediumInteraction curIntr(startPoint, -lightDir, 0, mediumData.medium,
+        mediumData.medium.SamplePoint(startPoint, mediumData.lambda).phase);
 
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
@@ -130,12 +133,12 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
             return;
         }
 
-        Vertex& newVertex = optVertex.value().get();
+        int newVertexId = optVertex.value().get().id;
 
-        if (newVertex == curVertex)
+        if (newVertexId == curVertexId)
             continue;
 
-        grid.AddEdge(curVertex.id, newVertex.id, EdgeData{Transmittance(curIntr, newIntr)});
+        grid.AddEdge(curVertexId, newVertexId, EdgeData{Transmittance(curIntr, newIntr)});
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
@@ -144,7 +147,7 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
         ray.o = newIntr.p();
         ray.d = ps->wi;
         curIntr = newIntr;
-        curVertex = newVertex;
+        curVertexId = newVertexId;
     }
 }
 
@@ -178,11 +181,11 @@ SampledSpectrum VolTransmittance::Transmittance(const MediumInteraction& p0, con
     return Tr / inv_w.Average();
 }
 
-void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float amount, int multiplier) {
+void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float ratio, int multiplier) {
     if (grid.GetSpacing() != boundary.GetSpacing())
         ErrorExit("Spacing of grid and boundary must be equal");
 
-    if (amount < 0 || amount > 1)
+    if (ratio < 0 || ratio > 1)
         ErrorExit("Amount should be a ratio");
 
     if (multiplier < 1)
@@ -191,7 +194,7 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float amount, in
     std::vector<RefConst<Vertex>> litSurfacePoints = GetLitSurfacePoints();
 
     std::vector<RefConst<Vertex>> selectedSurfacePoints;
-    int increment = static_cast<int>(std::round(1 / amount));
+    int increment = static_cast<int>(std::round(1 / ratio));
     for (int i = 0; i < litSurfacePoints.size(); i += increment) {
         selectedSurfacePoints.push_back(litSurfacePoints[i]);
     }
@@ -201,7 +204,7 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float amount, in
 
     for (int i = 0; i < selectedSurfacePoints.size(); ++i) {
         for (int j = 0; j < multiplier; ++j) {
-            sampler.StartPixelSample(Point2i(i, j), j);
+            sampler.StartPixelSample(Point2i(i, i), j);
             TracePath(selectedSurfacePoints[i], grid);
             progress.Update();
         }

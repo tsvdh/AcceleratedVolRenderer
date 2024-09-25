@@ -14,7 +14,7 @@ public:
     VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData,
                      DistantLight* light, Sampler sampler);
 
-    void CaptureTransmittance(UniformGraph& grid, float amount, int multiplier);
+    void CaptureTransmittance(UniformGraph& grid, float ratio, int multiplier);
     [[nodiscard]] std::vector<RefConst<Vertex>> GetLitSurfacePoints();
 
 private:

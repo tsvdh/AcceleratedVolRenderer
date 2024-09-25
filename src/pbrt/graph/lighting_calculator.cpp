@@ -1,7 +1,5 @@
 #include "lighting_calculator.h"
 
-#include <iostream>
-
 #include "pbrt/lights.h"
 #include "pbrt/media.h"
 #include "pbrt/util/progressreporter.h"
@@ -30,7 +28,7 @@ UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations
         SparseMat transmittance = GetTransmittanceMatrix();
         SparseVec curLight = light;
 
-        ProgressReporter progress(transmittanceIterations - 1, "Computing final lighting", false);
+        ProgressReporter progress(transmittanceIterations, "Computing final lighting", false);
 
         for (int i = 0; i < transmittanceIterations; ++i) {
             curLight = transmittance * curLight;
@@ -188,7 +186,7 @@ SparseMat LightingCalculator::GetGMatrix() const {
 }
 
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
-    return GetPhaseMatrix() * GetGMatrix() / SampledSpectrum(static_cast<float>(numVertices));
+    return GetPhaseMatrix() * GetGMatrix();
 }
 
 }
