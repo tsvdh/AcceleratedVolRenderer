@@ -33,8 +33,8 @@ FreeGraph VolBoundary::CaptureBoundary(int horizontalStep, int verticalStep) con
             yVector *= stepSize;
 
             ScratchBuffer buffer;
-            for (int i = -numSteps; i < numSteps; ++i) {
-                for (int j = -numSteps; j < numSteps; ++j) {
+            for (int i = -numSteps; i <= numSteps; ++i) {
+                for (int j = -numSteps; j <= numSteps; ++j) {
                     Point3f newOrigin = origin + xVector * i + yVector * j;
                     RayDifferential gridRay(newOrigin, dir);
 

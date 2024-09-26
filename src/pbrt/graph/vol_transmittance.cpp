@@ -12,63 +12,15 @@ VolTransmittance::VolTransmittance(const UniformGraph& boundary, const util::Med
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
 
-std::vector<RefConst<Vertex>> VolTransmittance::GetLitSurfacePoints() {
-    float maxDistToVertex = mediumData.medium.Is<HomogeneousMedium>()
-                            ? boundary.GetSpacing()
-                            : boundary.GetSpacing() * 4;
+void VolTransmittance::TraceTransmittancePath(const Vertex& gridPoint, UniformGraph& grid) {
+    Point3f startPoint = gridPoint.point - lightDir * mediumData.maxDistToCenter * 2;
+    RayDifferential ray(startPoint, lightDir);
+    auto shapeIsect = mediumData.aggregate->Intersect(ray, Infinity).value();
+    shapeIsect.intr.SkipIntersection(&ray, shapeIsect.tHit);
 
-    float maxRayLength = mediumData.maxDistToCenter * 2;
-
-    std::vector<RefConst<Vertex>> litSurfacePoints;
-
-    ScratchBuffer buffer;
-    for (auto& pair : boundary.GetVertices()) {
-        const Vertex& vertex = pair.second;
-
-        RayDifferential ray(vertex.point - lightDir * maxRayLength, lightDir);
-
-        auto shapeInter = mediumData.aggregate->Intersect(ray, Infinity);
-        if (!shapeInter)
-            continue;
-
-        shapeInter->intr.SkipIntersection(&ray, shapeInter->tHit);
-        float tMax = mediumData.aggregate->Intersect(ray, Infinity).value().tHit;
-
-        bool directlyLit = false;
-
-        auto iter = mediumData.medium.SampleRay((Ray&)ray, tMax, mediumData.lambda, buffer);
-        while (true) {
-            auto segment = iter.Next();
-            if (!segment)
-                break;
-
-            if (segment->sigma_maj[0] == 0)
-                continue;
-
-            float distToVertex = Length(vertex.point - ray(segment->tMin));
-            if (distToVertex <= maxDistToVertex)
-                directlyLit = true;
-
-            break;
-        }
-
-        if (directlyLit)
-            litSurfacePoints.push_back(std::ref(vertex));
-    }
-
-    return litSurfacePoints;
-}
-
-void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid) {
-    Vertex& startVertex = grid.GetVertex(surfacePoint.coors.value()).value().get();
-    int curVertexId = startVertex.id;
-    Point3f startPoint = startVertex.point;
-
-    Ray ray(startPoint, lightDir, 0.f, mediumData.medium);
     int depth = 0;
-
-    MediumInteraction curIntr(startPoint, -lightDir, 0, mediumData.medium,
-        mediumData.medium.SamplePoint(startPoint, mediumData.lambda).phase);
+    int curVertexId = -1;
+    MediumInteraction curIntr;
 
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
@@ -86,7 +38,7 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
 
         // Sample new point on ray
         SampleT_maj(
-            ray, tMax, sampler.Get1D(), rng, mediumData.lambda,
+            (Ray&)ray, tMax, sampler.Get1D(), rng, mediumData.lambda,
             [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                 // Handle medium scattering event for ray
 
@@ -125,11 +77,13 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
         if (!optNewIntr) {
             return;
         }
-        MediumInteraction newIntr = optNewIntr.value();
+        MediumInteraction& newIntr = optNewIntr.value();
 
-        auto [coors, fittedPoint] = grid.FitToGraph(newIntr.p());
+        auto [coors, fittedPoint] = grid.FitToGraph(optNewIntr->p());
         OptRef<Vertex> optVertex = grid.GetVertex(coors);
         if (!optVertex) {
+            if (curVertexId == -1)
+                ErrorExit("Path died silently");
             return;
         }
 
@@ -138,7 +92,8 @@ void VolTransmittance::TracePath(const Vertex& surfacePoint, UniformGraph& grid)
         if (newVertexId == curVertexId)
             continue;
 
-        grid.AddEdge(curVertexId, newVertexId, EdgeData{Transmittance(curIntr, newIntr)});
+        if (curVertexId != -1)
+            grid.AddEdge(curVertexId, newVertexId, EdgeData{Transmittance(curIntr, newIntr)});
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
@@ -181,31 +136,20 @@ SampledSpectrum VolTransmittance::Transmittance(const MediumInteraction& p0, con
     return Tr / inv_w.Average();
 }
 
-void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float ratio, int multiplier) {
+void VolTransmittance::CaptureTransmittance(UniformGraph& grid, int multiplier) {
     if (grid.GetSpacing() != boundary.GetSpacing())
         ErrorExit("Spacing of grid and boundary must be equal");
-
-    if (ratio < 0 || ratio > 1)
-        ErrorExit("Amount should be a ratio");
 
     if (multiplier < 1)
         ErrorExit("Multiplier must be greater or equal than 1");
 
-    std::vector<RefConst<Vertex>> litSurfacePoints = GetLitSurfacePoints();
-
-    std::vector<RefConst<Vertex>> selectedSurfacePoints;
-    int increment = static_cast<int>(std::round(1 / ratio));
-    for (int i = 0; i < litSurfacePoints.size(); i += increment) {
-        selectedSurfacePoints.push_back(litSurfacePoints[i]);
-    }
-
-    int workNeeded = static_cast<int>(selectedSurfacePoints.size()) * multiplier;
+    int workNeeded = static_cast<int>(grid.GetVertices().size()) * multiplier;
     auto progress = ProgressReporter(workNeeded, "Tracing lit surface", false);
 
-    for (int i = 0; i < selectedSurfacePoints.size(); ++i) {
+    for (auto& pair : grid.GetVertices()) {
         for (int j = 0; j < multiplier; ++j) {
-            sampler.StartPixelSample(Point2i(i, i), j);
-            TracePath(selectedSurfacePoints[i], grid);
+            sampler.StartPixelSample(Point2i(pair.first, pair.first), j);
+            TraceTransmittancePath(pair.second, grid);
             progress.Update();
         }
     }

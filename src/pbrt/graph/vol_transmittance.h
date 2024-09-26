@@ -14,11 +14,10 @@ public:
     VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData,
                      DistantLight* light, Sampler sampler);
 
-    void CaptureTransmittance(UniformGraph& grid, float ratio, int multiplier);
-    [[nodiscard]] std::vector<RefConst<Vertex>> GetLitSurfacePoints();
+    void CaptureTransmittance(UniformGraph& grid, int multiplier);
 
 private:
-    void TracePath(const Vertex& surfacePoint, UniformGraph& grid);
+    void TraceTransmittancePath(const Vertex& gridPoint, UniformGraph& grid);
     [[nodiscard]] SampledSpectrum Transmittance(const MediumInteraction& p0, const MediumInteraction& p1) const;
 
     const UniformGraph& boundary;

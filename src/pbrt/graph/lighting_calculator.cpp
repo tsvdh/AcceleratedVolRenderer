@@ -1,5 +1,7 @@
 #include "lighting_calculator.h"
 
+#include <iostream>
+
 #include "pbrt/lights.h"
 #include "pbrt/media.h"
 #include "pbrt/util/progressreporter.h"
@@ -7,8 +9,8 @@
 namespace graph {
 
 LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::MediumData& mediumData,
-                                       DistantLight* light, Sampler sampler, const std::vector<RefConst<Vertex>>& litVertices)
-    : grid(grid), mediumData(mediumData), light(light), sampler(std::move(sampler)), litVertices(litVertices) {
+                                       DistantLight* light, Sampler sampler)
+    : grid(grid), mediumData(mediumData), light(light), sampler(std::move(sampler)) {
 
     if (!mediumData.medium.Is<HomogeneousMedium>())
         ErrorExit("Only homogeneous media supported");
@@ -21,8 +23,8 @@ LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::Med
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
 
-UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations, int transmittanceIterations) {
-    SparseVec light = GetLightVector(initialLightingIterations);
+UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations, int lightRaysPerVoxelDist, int transmittanceIterations) {
+    SparseVec light = GetLightVector(initialLightingIterations, lightRaysPerVoxelDist);
 
     if (transmittanceIterations > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
@@ -63,75 +65,111 @@ bool LightingCalculator::HasSequentialIds() const {
     return total == totalExpected;
 }
 
-SparseVec LightingCalculator::GetLightVector(int initialLightingIterations) {
+SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int lightRaysPerVoxelDist) {
+    if (initialLightingIterations <= 0)
+        ErrorExit("Must have at least one lighting iteration");
+
+    if (lightRaysPerVoxelDist <= 0)
+        ErrorExit("Must have at least one ray per voxel");
+
     // lambda only relevant parameter for distant light
     SampledSpectrum L = light->SampleLi(LightSampleContext{Interaction()},
                                         Point2f(), mediumData.lambda, false).value().L;
 
-    ProgressReporter progress(static_cast<int>(litVertices.size()) * initialLightingIterations,
-        "Computing initial lighting", false);
+    L /= static_cast<float>(initialLightingIterations) * static_cast<float>(std::pow(lightRaysPerVoxelDist, 2));
 
-    float maxRayLength = mediumData.maxDistToCenter * 2;
+    Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
+
+    Vector3f xVector;
+    Vector3f yVector;
+    CoordinateSystem(lightDir, &xVector, &yVector);
+
+    float distBetweenRays = grid.GetSpacing() / static_cast<float>(lightRaysPerVoxelDist);
+    xVector *= distBetweenRays;
+    yVector *= distBetweenRays;
+
+    int numSteps = std::ceil(mediumData.maxDistToCenter / distBetweenRays);
 
     std::unordered_map<int, SampledSpectrum> lightMap;
     lightMap.reserve(numVertices); // rarely need this amount, but better to have enough capacity
 
-    for (auto vertex : litVertices) {
-        for (int i = 0; i < initialLightingIterations; ++i) {
-            // Initialize _RNG_ for sampling the majorant transmittance
-            uint64_t hash0 = Hash(sampler.Get1D());
-            uint64_t hash1 = Hash(sampler.Get1D());
-            RNG rng(hash0, hash1);
+    std::cout << "Estimating initial lighting duration... ";
+    int raysHitting = 0;
+    for (int x = -numSteps; x <= numSteps; ++x) {
+        for (int y = -numSteps; y <= numSteps; ++y) {
+            Point3f newOrigin = origin + xVector * x + yVector * y;
+            RayDifferential gridRay(newOrigin, lightDir);
 
-            RayDifferential ray(vertex.get().point - lightDir * maxRayLength, lightDir);
+            if (auto shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity))
+                ++raysHitting;
+        }
+    }
+    std::cout << "done" << std::endl;
 
-            auto shapeInter = mediumData.aggregate->Intersect(ray, Infinity);
-            shapeInter->intr.SkipIntersection(&ray, shapeInter->tHit);
-            float tMax = mediumData.aggregate->Intersect(ray, Infinity).value().tHit;
+    ProgressReporter progress(raysHitting * initialLightingIterations, "Computing initial lighting", false);
 
-            std::optional<Point3i> coors;
+    for (int x = -numSteps; x <= numSteps; ++x) {
+        for (int y = -numSteps; y <= numSteps; ++y) {
+            Point3f newOrigin = origin + xVector * x + yVector * y;
+            RayDifferential gridRay(newOrigin, lightDir);
 
-            // Sample new point on ray
-            SampleT_maj(
-                (Ray&)ray, tMax, sampler.Get1D(), rng, mediumData.lambda,
-                [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-                    // Handle medium scattering event for ray
+            auto shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity);
+            if (!shapeIsect)
+                continue;
 
-                    // Compute medium event probabilities for interaction
-                    Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
-                    Float pScatter = mp.sigma_s[0] / sigma_maj[0];
-                    Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+            shapeIsect->intr.SkipIntersection(&gridRay, shapeIsect->tHit);
+            float tMax = mediumData.aggregate->Intersect(gridRay, Infinity).value().tHit;
 
-                    CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
-                    // Sample medium scattering event type and update path
-                    Float um = rng.Uniform<Float>();
-                    int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+            for (int i = 0; i < initialLightingIterations; ++i) {
+                // Initialize _RNG_ for sampling the majorant transmittance
+                uint64_t hash0 = Hash(sampler.Get1D());
+                uint64_t hash1 = Hash(sampler.Get1D());
+                RNG rng(hash0, hash1);
 
-                    if (mode == 0) {
-                        // Handle absorption along ray path
-                        return false;
-                    }
-                    if (mode == 1) {
-                        // Handle scattering along ray path
-                        // Stop path sampling if maximum depth has been reached
-                        coors = grid.FitToGraph(p).first;
-                        return false;
-                    }
-                    else {
-                        // Handle null scattering along ray path
-                        return true;
-                    }
-                });
+                std::optional<Point3i> coors;
 
-            if (coors) {
-                int id = grid.GetVertexConst(coors.value()).value().get().id;
-                if (lightMap.find(id) == lightMap.end())
-                    lightMap[id] = SampledSpectrum(0);
+                // Sample new point on ray
+                SampleT_maj(
+                    (Ray&)gridRay, tMax, sampler.Get1D(), rng, mediumData.lambda,
+                    [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                        // Handle medium scattering event for ray
 
-                lightMap[id] += L / static_cast<float>(initialLightingIterations);
+                        // Compute medium event probabilities for interaction
+                        Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+                        Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+                        Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+
+                        CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+                        // Sample medium scattering event type and update path
+                        Float um = rng.Uniform<Float>();
+                        int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+
+                        if (mode == 0) {
+                            // Handle absorption along ray path
+                            return false;
+                        }
+                        if (mode == 1) {
+                            // Handle scattering along ray path
+                            // Stop path sampling if maximum depth has been reached
+                            coors = grid.FitToGraph(p).first;
+                            return false;
+                        }
+                        else {
+                            // Handle null scattering along ray path
+                            return true;
+                        }
+                    });
+
+                if (coors) {
+                    int id = grid.GetVertexConst(coors.value()).value().get().id;
+                    if (lightMap.find(id) == lightMap.end())
+                        lightMap[id] = SampledSpectrum(0);
+
+                    lightMap[id] += L;
+                }
+
+                progress.Update();
             }
-
-            progress.Update();
         }
     }
 
