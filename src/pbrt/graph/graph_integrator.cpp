@@ -279,42 +279,59 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
 SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
                                            Sampler sampler, ScratchBuffer& scratchBuffer,
                                            VisibleSurface* visibleSurface) const {
-    // using namespace nanoflann;
-    // using TreeType = KDTreeSingleIndexAdaptor<
-    //     L2_Simple_Adaptor<Float, util::VerticesHolder>,
-    //     util::VerticesHolder, 3, int>;
-    //
-    // util::VerticesHolder vHolder = pathGraph.GetPathEndsList();
-    // TreeType searchTree(3, vHolder);
-
     pstd::optional<ShapeIntersection> shapeIsect = Intersect(ray);
     if (!shapeIsect)
         return SampledSpectrum(0);
 
-    if (!ray.medium)
+    if (!ray.medium) {
         shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
-
-    auto iter = ray.medium.SampleRay((Ray&)ray, Infinity, lambda, scratchBuffer);
-    while (true) {
-        pstd::optional<RayMajorantSegment> segment = iter.Next();
-        if (!segment)
-            return SampledSpectrum(0);
-        if (segment->sigma_maj[0] != 0) {
-            Point3f p = ray(segment->tMin);
-            p = worldFromRender(p);
-            // Float searchPoint[3] = {p.x, p.y, p.z};
-            //
-            // std::vector<ResultItem<int, Float>> searchRes;
-            // searchTree.radiusSearch(searchPoint, 0.25, searchRes);
-            //
-            // return SampledSpectrum(searchRes.empty() ? 0 : 1);
-
-            if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(p))
-                return optVertex.value().get().data.lighting.value();
-
-            return SampledSpectrum(0);
-        }
+        shapeIsect = Intersect(ray);
     }
+    float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
+
+    // Initialize _RNG_ for sampling the majorant transmittance
+    uint64_t hash0 = Hash(sampler.Get1D());
+    uint64_t hash1 = Hash(sampler.Get1D());
+    RNG rng(hash0, hash1);
+
+    OptRefConst<Vertex> optVertex;
+
+    // Sample new point on ray
+    SampleT_maj(
+        static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
+        [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+            // Handle medium scattering event for ray
+
+            // Compute medium event probabilities for interaction
+            Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+            Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+            Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+
+            CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+            // Sample medium scattering event type and update path
+            Float um = rng.Uniform<Float>();
+            int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+
+            if (mode == 0) {
+                // Handle absorption along ray path
+                return false;
+            }
+            if (mode == 1) {
+                // Handle scattering along ray path
+                p = worldFromRender(p);
+                optVertex = sceneGrid.GetVertexConst(p);
+                return false;
+            }
+            else {
+                // Handle null scattering along ray path
+                return true;
+            }
+        });
+
+    if (optVertex)
+        return optVertex.value().get().data.lighting.value();
+
+    return SampledSpectrum(0);
 }
 
 SampledSpectrum GraphIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,

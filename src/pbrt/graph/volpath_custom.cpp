@@ -365,7 +365,7 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
             RNG rng(hash0, hash1);
 
             SampledSpectrum T_majRemain = SampleT_maj(
-                (Ray&)ray, tMax, sampler.Get1D(), rng, lambda,
+                static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
                 [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                     // Handle medium scattering event for ray
                     if (!beta) {
