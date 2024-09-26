@@ -120,43 +120,13 @@ void GraphIntegrator::Render() {
 
     // Render image in waves
     while (waveStart < spp) {
-        // Render current wave's image in series
-        for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
-            for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
-                Point2i pPixel(x, y);
-                ScratchBuffer& scratchBuffer = scratchBuffers.Get();
-                Sampler& sampler = samplers.Get();
-                PBRT_DBG("Starting image tile (%d,%d)-(%d,%d) waveStart %d, waveEnd %d\n",
-                         tileBounds.pMin.x, tileBounds.pMin.y, tileBounds.pMax.x,
-                         tileBounds.pMax.y, waveStart, waveEnd);
-
-                StatsReportPixelStart(pPixel);
-                threadPixel = pPixel;
-                // Render samples in pixel _pPixel_
-                for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
-                    threadSampleIndex = sampleIndex;
-                    sampler.StartPixelSample(pPixel, sampleIndex);
-                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
-                    scratchBuffer.Reset();
-                    progress.Update(1);
-                }
-
-                StatsReportPixelEnd(pPixel);
-
-                PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
-                         tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
-            }
-        }
-
-        // // Render current wave's image tiles in parallel
-        // ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
-        //     // Render image tile given by _tileBounds_
-        //     ScratchBuffer &scratchBuffer = scratchBuffers.Get();
-        //     Sampler &sampler = samplers.Get();
-        //     PBRT_DBG("Starting image tile (%d,%d)-(%d,%d) waveStart %d, waveEnd %d\n",
-        //              tileBounds.pMin.x, tileBounds.pMin.y, tileBounds.pMax.x,
-        //              tileBounds.pMax.y, waveStart, waveEnd);
-        //     for (Point2i pPixel : tileBounds) {
+        // // Render current wave's image in series
+        // for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
+        //     for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
+        //         Point2i pPixel(x, y);
+        //         ScratchBuffer& scratchBuffer = scratchBuffers.Get();
+        //         Sampler& sampler = samplers.Get();
+        //
         //         StatsReportPixelStart(pPixel);
         //         threadPixel = pPixel;
         //         // Render samples in pixel _pPixel_
@@ -165,14 +135,34 @@ void GraphIntegrator::Render() {
         //             sampler.StartPixelSample(pPixel, sampleIndex);
         //             EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
         //             scratchBuffer.Reset();
+        //             progress.Update(1);
         //         }
         //
         //         StatsReportPixelEnd(pPixel);
         //     }
-        //     PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
-        //              tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
-        //     progress.Update((waveEnd - waveStart) * tileBounds.Area());
-        // });
+        // }
+
+        // Render current wave's image tiles in parallel
+        ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
+            // Render image tile given by _tileBounds_
+            ScratchBuffer &scratchBuffer = scratchBuffers.Get();
+            Sampler &sampler = samplers.Get();
+
+            for (Point2i pPixel : tileBounds) {
+                StatsReportPixelStart(pPixel);
+                threadPixel = pPixel;
+                // Render samples in pixel _pPixel_
+                for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
+                    threadSampleIndex = sampleIndex;
+                    sampler.StartPixelSample(pPixel, sampleIndex);
+                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
+                    scratchBuffer.Reset();
+                }
+
+                StatsReportPixelEnd(pPixel);
+            }
+            progress.Update((waveEnd - waveStart) * tileBounds.Area());
+        });
 
         // Update start and end wave
         waveStart = waveEnd;
