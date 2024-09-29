@@ -71,10 +71,10 @@ void main(int argc, char* argv[]) {
     graph::UniformGraph grid = boundary.FillInside(boundaryGraph);
 
     graph::VolTransmittance transmittance(boundaryGraph, mediumData, light, sampler);
-    transmittance.CaptureTransmittance(grid, 100);
+    transmittance.CaptureTransmittance(grid, 1);
 
     graph::LightingCalculator lighting(grid, mediumData, light, sampler);
-    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(500, 4, 50);
+    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1000, 4, 0);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
     finalLighting.WriteToDisk(fileName, graph::grid_lighting,

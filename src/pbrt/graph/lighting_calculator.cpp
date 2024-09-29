@@ -118,7 +118,16 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
                 continue;
 
             shapeIsect->intr.SkipIntersection(&gridRay, shapeIsect->tHit);
-            float tMax = mediumData.aggregate->Intersect(gridRay, Infinity).value().tHit;
+
+            if (!gridRay.medium) {
+                continue;
+            }
+
+            shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity);
+            if (!shapeIsect)
+                continue;
+
+            float tMax = shapeIsect->tHit;
 
             for (int i = 0; i < initialLightingIterations; ++i) {
                 // Initialize _RNG_ for sampling the majorant transmittance
@@ -161,7 +170,13 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
                     });
 
                 if (coors) {
-                    int id = grid.GetVertexConst(coors.value()).value().get().id;
+                    OptRefConst<Vertex> optVertex = grid.GetVertexConst(coors.value());
+                    if (!optVertex) {
+                        std::cout << "screwed by floating point" << std::endl;
+                        continue;
+                    }
+
+                    int id = optVertex->get().id;
                     if (lightMap.find(id) == lightMap.end())
                         lightMap[id] = SampledSpectrum(0);
 

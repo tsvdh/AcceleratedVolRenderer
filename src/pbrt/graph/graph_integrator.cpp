@@ -62,6 +62,8 @@ void GraphIntegrator::Render() {
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
     int spp = samplerPrototype.SamplesPerPixel();
+    if (Options->graphDebug)
+        spp = 8;
     ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering",
                               Options->quiet);
 
@@ -277,7 +279,29 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
         shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
         shapeIsect = Intersect(ray);
     }
+
+    if (!ray.medium)
+        return SampledSpectrum(0);
+
     float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
+
+    if (Options->graphDebug) {
+        auto iter = ray.medium.SampleRay(static_cast<Ray&>(ray), tMax, lambda, scratchBuffer);
+        while (true) {
+            pstd::optional<RayMajorantSegment> segment = iter.Next();
+            if (!segment)
+                return SampledSpectrum(0);
+            if (segment->sigma_maj[0] != 0) {
+                Point3f p = ray(segment->tMin);
+                p = worldFromRender(p);
+
+                if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(p))
+                    return optVertex.value().get().data.lighting.value();
+
+                return SampledSpectrum(0);
+            }
+        }
+    }
 
     // Initialize _RNG_ for sampling the majorant transmittance
     uint64_t hash0 = Hash(sampler.Get1D());

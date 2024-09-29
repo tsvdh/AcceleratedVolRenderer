@@ -96,6 +96,9 @@ Reformatting options:
                                 standard output and convert all triangle meshes to
                                 PLY files. Does not render an image.
   --upgrade                     Upgrade a pbrt-v3 file to pbrt-v4's format.
+
+Graph integrator options:
+  --graph-debug                 Shows light values of voxels
 )",
             NSpectrumSamples);
     exit(msg.empty() ? 0 : 1);
@@ -201,7 +204,8 @@ int main(int argc, char *argv[]) {
             ParseArg(&iter, args.end(), "wavefront", &options.wavefront, onError) ||
             ParseArg(&iter, args.end(), "write-partial-images",
                      &options.writePartialImages, onError) ||
-            ParseArg(&iter, args.end(), "upgrade", &options.upgrade, onError)) {
+            ParseArg(&iter, args.end(), "upgrade", &options.upgrade, onError) ||
+            ParseArg(&iter, args.end(), "graph-debug", &options.graphDebug, onError)) {
             // success
         } else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
             usage();
