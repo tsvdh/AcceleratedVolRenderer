@@ -28,12 +28,14 @@
 #include <string>
 #include <vector>
 
+#include "pbrt/graph/spectrum_helper.h"
+
 namespace pbrt {
 
 // Spectrum Constants
 constexpr Float Lambda_min = 360, Lambda_max = 830;
 
-static constexpr int NSpectrumSamples = 4;
+static constexpr int NSpectrumSamples = util::NSpectrumSamples;
 
 static constexpr Float CIE_Y_integral = 106.856895;
 
@@ -258,6 +260,9 @@ class SampledSpectrum {
         for (int i = 1; i < NSpectrumSamples; ++i)
             sum += values[i];
         return sum / NSpectrumSamples;
+    }
+    pstd::span<const Float> GetValues() {
+      return { &values[0], NSpectrumSamples };
     }
 
   private:

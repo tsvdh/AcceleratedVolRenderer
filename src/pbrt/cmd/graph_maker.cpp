@@ -53,7 +53,7 @@ void main(int argc, char* argv[]) {
     scene.CreateMaterials(textures, &namedMaterials, &materials);
     Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
 
-    SampledWavelengths lambda = scene.GetCamera().GetFilm().SampleWavelengths(0.5);
+    SampledWavelengths lambda = scene.GetCamera().GetFilm().SampleWavelengths(0.05);
 
     util::MediumData mediumData(lambda, accel);
     light->Preprocess(mediumData.bounds);
@@ -68,13 +68,13 @@ void main(int argc, char* argv[]) {
     else if (spacing != -1)
         boundaryGraph = boundary.CaptureBoundary(spacing, 90, 90);
 
-    graph::UniformGraph grid = boundary.FillInside(boundaryGraph);
+    graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
 
     graph::VolTransmittance transmittance(boundaryGraph, mediumData, light, sampler);
-    transmittance.CaptureTransmittance(grid, 1);
+    transmittance.CaptureTransmittance(transmittanceGrid, 500);
 
-    graph::LightingCalculator lighting(grid, mediumData, light, sampler);
-    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1000, 4, 0);
+    graph::LightingCalculator lighting(transmittanceGrid, mediumData, light, sampler);
+    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1000, 4, 50);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
     finalLighting.WriteToDisk(fileName, graph::grid_lighting,

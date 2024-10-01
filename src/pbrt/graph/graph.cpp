@@ -117,7 +117,7 @@ Path& Graph::AddPath() {
 
 Path& Graph::AddPath(int id) {
     if (paths.find(id) != paths.end())
-        ErrorExit("Id %i already exists", id);
+        ErrorExit("Path id %i already exists", id);
 
     auto result = paths.emplace(id, Path{id});
     return result.first->second;
@@ -178,7 +178,7 @@ bool Graph::AddEdgeToPath(int edgeId, int pathId) {
 
 OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, bool incrId) {
     if (edges.find(id) != edges.end())
-        ErrorExit("Id %i already exists", id);
+        ErrorExit("Edge id %i already exists", id);
 
     auto fromResult = vertices.find(fromId);
     if (fromResult == vertices.end())
@@ -234,7 +234,7 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
 
     SampledSpectrum lighting(-1);
     if (flags.useLighting) {
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < NSpectrumSamples; ++i)
             in >> lighting[i];
     }
 
@@ -464,7 +464,7 @@ Vertex& UniformGraph::AddVertex(int id, Point3f p, const VertexData& data, bool 
 
 Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data, bool incrId) {
     if (vertices.find(id) != vertices.end())
-        ErrorExit("Id %i already exists", id);
+        ErrorExit("Vertex id %i already exists", id);
 
     auto findResult = coorsMap.find(coors);
     if (findResult != coorsMap.end()) {

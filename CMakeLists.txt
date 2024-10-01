@@ -835,6 +835,7 @@ set(GRAPH
         src/pbrt/graph/graph_integrator.cpp
         src/pbrt/graph/lighting_calculator.h
         src/pbrt/graph/lighting_calculator.cpp
+        src/pbrt/graph/spectrum_helper.h
 
         src/pbrt/graph/deps/nanoflann.hpp
 )

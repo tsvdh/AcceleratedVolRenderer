@@ -55,6 +55,21 @@ void GraphIntegrator::Render() {
                             threadPixel.x, threadPixel.y, threadSampleIndex);
     });
 
+    if (!Options->graphDebug) {
+        ProgressReporter progress(static_cast<int>(sceneGrid.GetVerticesConst().size()), "Preprocessing spectral data", false);
+
+        SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.05);
+        pstd::span<const float> lambdaSpan(&lambda[0], NSpectrumSamples);
+
+        for (auto& pair : sceneGrid.GetVertices()) {
+            Vertex& vertex = pair.second;
+            vertex.data.continuousLighting = PiecewiseLinearSpectrum(lambdaSpan, vertex.data.lighting->GetValues());
+            vertex.data.lighting = std::nullopt;
+            progress.Update();
+        }
+        progress.Done();
+    }
+
     // Declare common variables for rendering image in tiles
     ThreadLocal<ScratchBuffer> scratchBuffers([]() { return ScratchBuffer(); });
 
@@ -207,8 +222,8 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
                                         ScratchBuffer &scratchBuffer) {
     // Sample wavelengths for the ray
     Float lu = sampler.Get1D();
-    if (Options->disableWavelengthJitter)
-        lu = 0.5;
+    if (Options->graphDebug)
+        lu = 0.05;
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(lu);
 
     // Initialize _CameraSample_ for current sample
@@ -343,7 +358,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
         });
 
     if (optVertex)
-        return optVertex.value().get().data.lighting.value();
+        return optVertex.value().get().data.continuousLighting->Sample(lambda);
 
     return SampledSpectrum(0);
 }

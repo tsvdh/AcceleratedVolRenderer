@@ -143,10 +143,10 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, int multiplier) 
     if (multiplier < 1)
         ErrorExit("Multiplier must be greater or equal than 1");
 
-    int workNeeded = static_cast<int>(grid.GetVertices().size()) * multiplier;
+    int workNeeded = static_cast<int>(grid.GetVerticesConst().size()) * multiplier;
     auto progress = ProgressReporter(workNeeded, "Tracing lit surface", false);
 
-    for (auto& pair : grid.GetVertices()) {
+    for (auto& pair : grid.GetVerticesConst()) {
         for (int j = 0; j < multiplier; ++j) {
             sampler.StartPixelSample(Point2i(pair.first, pair.first), j);
             TraceTransmittancePath(pair.second, grid);

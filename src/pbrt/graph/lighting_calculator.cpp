@@ -10,15 +10,12 @@ namespace graph {
 
 LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::MediumData& mediumData,
                                        DistantLight* light, Sampler sampler)
-    : grid(grid), mediumData(mediumData), light(light), sampler(std::move(sampler)) {
-
-    if (!mediumData.medium.Is<HomogeneousMedium>())
-        ErrorExit("Only homogeneous media supported");
+    : transmittanceGrid(grid), mediumData(mediumData), light(light), sampler(std::move(sampler)) {
 
     if (!HasSequentialIds())
         ErrorExit("Grid must have sequential ids for mapping to matrices");
 
-    numVertices = static_cast<int>(grid.GetVertices().size());
+    numVertices = static_cast<int>(grid.GetVerticesConst().size());
 
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
@@ -40,9 +37,9 @@ UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations
         progress.Done();
     }
 
-    UniformGraph finalGrid(grid.GetSpacing());
+    UniformGraph finalGrid(transmittanceGrid.GetSpacing());
 
-    for (auto& pair : grid.GetVertices()) {
+    for (auto& pair : transmittanceGrid.GetVerticesConst()) {
         const Vertex& v = pair.second;
         finalGrid.AddVertex(v.id, v.coors.value(), VertexData{{}, light.coeffRef(v.id)});
     }
@@ -54,7 +51,7 @@ bool LightingCalculator::HasSequentialIds() const {
     int total = 0;
     int max = 0;
 
-    for (auto& pair : grid.GetVertices()) {
+    for (auto& pair : transmittanceGrid.GetVerticesConst()) {
         total += pair.first;
         max = std::max(max, pair.first);
     }
@@ -67,7 +64,7 @@ bool LightingCalculator::HasSequentialIds() const {
 
 SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int lightRaysPerVoxelDist) {
     if (initialLightingIterations <= 0)
-        ErrorExit("Must have at least one lighting iteration");
+        ErrorExit("Must have at least one initial lighting iteration");
 
     if (lightRaysPerVoxelDist <= 0)
         ErrorExit("Must have at least one ray per voxel");
@@ -84,7 +81,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
     Vector3f yVector;
     CoordinateSystem(lightDir, &xVector, &yVector);
 
-    float distBetweenRays = grid.GetSpacing() / static_cast<float>(lightRaysPerVoxelDist);
+    float distBetweenRays = transmittanceGrid.GetSpacing() / static_cast<float>(lightRaysPerVoxelDist);
     xVector *= distBetweenRays;
     yVector *= distBetweenRays;
 
@@ -93,7 +90,6 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
     std::unordered_map<int, SampledSpectrum> lightMap;
     lightMap.reserve(numVertices); // rarely need this amount, but better to have enough capacity
 
-    std::cout << "Estimating initial lighting duration... ";
     int raysHitting = 0;
     for (int x = -numSteps; x <= numSteps; ++x) {
         for (int y = -numSteps; y <= numSteps; ++y) {
@@ -104,7 +100,6 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
                 ++raysHitting;
         }
     }
-    std::cout << "done" << std::endl;
 
     ProgressReporter progress(raysHitting * initialLightingIterations, "Computing initial lighting", false);
 
@@ -160,7 +155,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
                         if (mode == 1) {
                             // Handle scattering along ray path
                             // Stop path sampling if maximum depth has been reached
-                            coors = grid.FitToGraph(p).first;
+                            coors = transmittanceGrid.FitToGraph(p).first;
                             return false;
                         }
                         else {
@@ -170,7 +165,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
                     });
 
                 if (coors) {
-                    OptRefConst<Vertex> optVertex = grid.GetVertexConst(coors.value());
+                    OptRefConst<Vertex> optVertex = transmittanceGrid.GetVertexConst(coors.value());
                     if (!optVertex) {
                         std::cout << "screwed by floating point" << std::endl;
                         continue;
@@ -215,18 +210,18 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
 }
 
 SparseMat LightingCalculator::GetGMatrix() const {
-    auto& vertices = grid.GetVertices();
-    auto& edges = grid.GetEdges();
+    auto& vertices = transmittanceGrid.GetVerticesConst();
+    auto& edges = transmittanceGrid.GetEdgesConst();
 
     std::vector<Eigen::Triplet<SampledSpectrum>> gEntries;
-    gEntries.reserve(grid.GetEdges().size());
+    gEntries.reserve(transmittanceGrid.GetEdgesConst().size());
 
     for (auto& edge : edges) {
         const Vertex& from = vertices.at(edge.second.from);
         const Vertex& to = vertices.at(edge.second.to);
 
         SampledSpectrum T = edge.second.data.throughput;
-        double voxelSize = std::pow(grid.GetSpacing(), 3);
+        double voxelSize = std::pow(transmittanceGrid.GetSpacing(), 3);
         double edgeLength = std::pow(Length(from.point - to.point), 2);
         auto G = static_cast<float>(voxelSize / edgeLength);
 

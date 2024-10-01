@@ -72,7 +72,7 @@ UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int horizontalStep
 
     ProgressReporter shrinkingProgress(stepsNeeded, "Shrinking boundary graph", false);
 
-    bool spacingGTE1 = graph.ToUniform(1).GetVertices().size() >= wantedVertices;
+    bool spacingGTE1 = graph.ToUniform(1).GetVerticesConst().size() >= wantedVertices;
     shrinkingProgress.Update();
 
     float min = 1;
@@ -84,7 +84,7 @@ UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int horizontalStep
 
         curGraph = graph.ToUniform(middle / (spacingGTE1 ? 1 : multRange));
 
-        if (curGraph.GetVertices().size() > wantedVertices)
+        if (curGraph.GetVerticesConst().size() > wantedVertices)
             min = middle;
         else
             max = middle;
@@ -151,7 +151,7 @@ void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
         }
     }
 
-    for (auto& [id, vertex] : boundary.GetVertices()) {
+    for (auto& [id, vertex] : boundary.GetVerticesConst()) {
         if (singleLayerSet.find(id) == singleLayerSet.end())
             boundary.RemoveVertex(id);
     }
@@ -169,7 +169,7 @@ UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
     std::queue<Point3i> queue;
     std::unordered_set<Point3i, util::PointHash> queueSet;
 
-    Point3i startPoint = boundary.GetVertices().begin()->second.coors.value();
+    Point3i startPoint = boundary.GetVerticesConst().begin()->second.coors.value();
     queue.push(startPoint);
     queueSet.insert(startPoint);
 

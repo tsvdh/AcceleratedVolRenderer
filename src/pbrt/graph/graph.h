@@ -38,6 +38,7 @@ enum RayVertexType {
 struct VertexData {
     std::optional<RayVertexType> type;
     std::optional<SampledSpectrum> lighting;
+    std::optional<PiecewiseLinearSpectrum> continuousLighting; // only filled and used by renderer
 };
 
 struct Vertex {
@@ -92,9 +93,13 @@ class Graph {
 public:
     virtual ~Graph() = default;
 
-    [[nodiscard]] const std::unordered_map<int, Vertex>& GetVertices() const { return vertices; }
-    [[nodiscard]] const std::unordered_map<int, Edge>& GetEdges() const { return edges; }
-    [[nodiscard]] const std::unordered_map<int, Path>& GetPaths() const { return paths; }
+    [[nodiscard]] const std::unordered_map<int, Vertex>& GetVerticesConst() const { return vertices; }
+    [[nodiscard]] const std::unordered_map<int, Edge>& GetEdgesConst() const { return edges; }
+    [[nodiscard]] const std::unordered_map<int, Path>& GetPathsConst() const { return paths; }
+
+    [[nodiscard]] std::unordered_map<int, Vertex>& GetVertices() { return vertices; }
+    [[nodiscard]] std::unordered_map<int, Edge>& GetEdges() { return edges; }
+    [[nodiscard]] std::unordered_map<int, Path>& GetPaths() { return paths; }
 
     [[nodiscard]] virtual OptRefConst<Vertex> GetVertexConst(int id) const;
     [[nodiscard]] OptRefConst<Edge> GetEdgeConst(int id) const;

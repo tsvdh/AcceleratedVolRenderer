@@ -22,7 +22,7 @@ private:
     [[nodiscard]] SparseMat GetGMatrix() const;
     [[nodiscard]] SparseMat GetPhaseMatrix() const;
 
-    const UniformGraph& grid;
+    const UniformGraph& transmittanceGrid;
     const util::MediumData& mediumData;
     DistantLight* light;
     Sampler sampler;
