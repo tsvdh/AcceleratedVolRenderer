@@ -1,5 +1,7 @@
 #include "vol_transmittance.h"
 
+#include <iostream>
+
 #include "pbrt/media.h"
 #include "pbrt/util/progressreporter.h"
 
@@ -15,8 +17,10 @@ VolTransmittance::VolTransmittance(const UniformGraph& boundary, const util::Med
 void VolTransmittance::TraceTransmittancePath(const Vertex& gridPoint, UniformGraph& grid) {
     Point3f startPoint = gridPoint.point - lightDir * mediumData.maxDistToCenter * 2;
     RayDifferential ray(startPoint, lightDir);
-    auto shapeIsect = mediumData.aggregate->Intersect(ray, Infinity).value();
-    shapeIsect.intr.SkipIntersection(&ray, shapeIsect.tHit);
+    auto optShapeIsect = mediumData.aggregate->Intersect(ray, Infinity);
+    if (!optShapeIsect)
+        return;
+    optShapeIsect->intr.SkipIntersection(&ray, optShapeIsect->tHit);
 
     int depth = 0;
     int curVertexId = -1;
@@ -83,7 +87,7 @@ void VolTransmittance::TraceTransmittancePath(const Vertex& gridPoint, UniformGr
         OptRef<Vertex> optVertex = grid.GetVertex(coors);
         if (!optVertex) {
             if (curVertexId == -1)
-                ErrorExit("Path died silently");
+                ++numPathsScatteredOutsideGrid;
             return;
         }
 
@@ -146,6 +150,8 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, int multiplier) 
     int workNeeded = static_cast<int>(grid.GetVerticesConst().size()) * multiplier;
     auto progress = ProgressReporter(workNeeded, "Tracing lit surface", false);
 
+    numPathsScatteredOutsideGrid = 0;
+
     for (auto& pair : grid.GetVerticesConst()) {
         for (int j = 0; j < multiplier; ++j) {
             sampler.StartPixelSample(Point2i(pair.first, pair.first), j);
@@ -154,6 +160,8 @@ void VolTransmittance::CaptureTransmittance(UniformGraph& grid, int multiplier) 
         }
     }
     progress.Done();
+
+    std::cout << numPathsScatteredOutsideGrid << " / " << workNeeded << " paths died scattering outside grid" << std::endl;
 }
 
 }

@@ -516,7 +516,7 @@ Vertex& FreeGraph::AddVertex(int id, Point3f p, const VertexData& data, bool inc
 UniformGraph FreeGraph::ToUniform(float spacing) const {
     UniformGraph uniform(spacing);
 
-    ProgressReporter progress(static_cast<int>(vertices.size()), "Converting graph to uniform", true);
+    ProgressReporter progress(static_cast<int>(vertices.size()), "Converting graph to uniform", false);
 
     for (auto& [id, oldVertex] : vertices) {
         Vertex& curVertex = uniform.AddVertex(oldVertex.point, oldVertex.data);

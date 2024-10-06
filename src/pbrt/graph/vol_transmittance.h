@@ -26,6 +26,7 @@ private:
     Vector3f lightDir;
     Sampler sampler;
     int maxDepth = 100;
+    int numPathsScatteredOutsideGrid = 0;
 };
 
 }

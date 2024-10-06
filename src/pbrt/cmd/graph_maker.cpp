@@ -3,6 +3,7 @@
 #include <pbrt/graph/vol_transmittance.h>
 #include <pbrt/util/args.h>
 
+#include <iostream>
 #include <regex>
 
 #include "pbrt/graph/lighting_calculator.h"
@@ -64,17 +65,18 @@ void main(int argc, char* argv[]) {
 
     graph::UniformGraph boundaryGraph;
     if (wantedVertices != -1)
-        boundaryGraph = boundary.CaptureBoundary(wantedVertices, 90, 90);
+        boundaryGraph = boundary.CaptureBoundary(wantedVertices, 45, 45);
     else if (spacing != -1)
-        boundaryGraph = boundary.CaptureBoundary(spacing, 90, 90);
+        boundaryGraph = boundary.CaptureBoundary(spacing, 45, 45);
 
     graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
+    std::cout << "grid size: " << transmittanceGrid.GetVertices().size() << std::endl;
 
     graph::VolTransmittance transmittance(boundaryGraph, mediumData, light, sampler);
-    transmittance.CaptureTransmittance(transmittanceGrid, 500);
+    transmittance.CaptureTransmittance(transmittanceGrid, 1);
 
     graph::LightingCalculator lighting(transmittanceGrid, mediumData, light, sampler);
-    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1000, 4, 50);
+    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1, 4, 50);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
     finalLighting.WriteToDisk(fileName, graph::grid_lighting,

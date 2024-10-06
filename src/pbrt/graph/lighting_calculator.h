@@ -28,6 +28,7 @@ private:
     Sampler sampler;
     Vector3f lightDir;
     int numVertices;
+    int numRaysScatteredOutsideGrid = 0;
 };
 
 }

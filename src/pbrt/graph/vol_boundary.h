@@ -24,7 +24,7 @@ private:
     void ToSingleLayerAndSaveCast(UniformGraph& boundary);
 
     const util::MediumData& mediumData;
-    std::map<UniformGraph*, std::unordered_set<Point3i, util::PointHash>> castCache;
+    std::unordered_map<int, std::unordered_set<Point3i, util::PointHash>> castCache;
 };
 
 }

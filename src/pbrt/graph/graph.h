@@ -89,6 +89,8 @@ struct StreamFlags {
     bool useLighting = false;
 };
 
+static int curId = -1;
+
 class Graph {
 public:
     virtual ~Graph() = default;
@@ -129,6 +131,8 @@ public:
     [[nodiscard]] util::VerticesHolder GetVerticesList() const;
     [[nodiscard]] util::VerticesHolder GetPathEndsList() const;
 
+    [[nodiscard]] int GetId() const { return id; }
+
 protected:
     virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) = 0;
     OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data, bool incrId);
@@ -140,6 +144,7 @@ protected:
     std::unordered_map<int, Edge> edges;      // ID, object
     std::unordered_map<int, Path> paths;      // ID, object
     int curId = 0;
+    int id = ++curId;
 };
 
 class UniformGraph final : public Graph {

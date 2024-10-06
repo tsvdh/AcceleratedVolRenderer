@@ -3,6 +3,7 @@
 #include <pbrt/media.h>
 #include <pbrt/cpu/aggregates.h>
 
+#include <iostream>
 #include <queue>
 
 #include "pbrt/shapes.h"
@@ -127,8 +128,11 @@ void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
     Bounds3i coorBounds(get<0>(boundary.FitToGraph(mediumData.bounds.pMin)) - Vector3i(1, 1, 1),
                         get<0>(boundary.FitToGraph(mediumData.bounds.pMax)) + Vector3i(1, 1, 1));
 
+    auto start = std::chrono::system_clock::now();
+    std::cout << "starting to single layer... ";
+
     std::unordered_set<int> singleLayerSet;
-    std::unordered_set<Point3i, util::PointHash>& visited = castCache[&boundary];
+    std::unordered_set<Point3i, util::PointHash>& visited = castCache[boundary.GetId()];
     std::queue<Point3i> queue;
     std::unordered_set<Point3i, util::PointHash> queueSet;
     queue.push(coorBounds.pMin);
@@ -151,18 +155,28 @@ void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
         }
     }
 
-    for (auto& [id, vertex] : boundary.GetVerticesConst()) {
-        if (singleLayerSet.find(id) == singleLayerSet.end())
-            boundary.RemoveVertex(id);
+    std::unordered_set<int> boundaryIds;
+    for (auto& pair : boundary.GetVerticesConst())
+        boundaryIds.insert(pair.first);
+
+    for (int boundaryId : boundaryIds) {
+        if (singleLayerSet.find(boundaryId) == singleLayerSet.end())
+            boundary.RemoveVertex(boundaryId);
     }
+
+    auto end = std::chrono::system_clock::now();
+    std::cout << "done " << visited.size() << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s" << std::endl;
 }
 
 UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
-    auto result = castCache.find(&boundary);
+    auto result = castCache.find(boundary.GetId());
     if (result == castCache.end())
         ToSingleLayerAndSaveCast(boundary);
 
-    std::unordered_set<Point3i, util::PointHash> cast = castCache[&boundary];
+    auto start = std::chrono::system_clock::now();
+    std::cout << "starting filling... ";
+
+    std::unordered_set<Point3i, util::PointHash> cast = castCache[boundary.GetId()];
 
     UniformGraph filled(boundary.GetSpacing());
     std::unordered_set<Point3i, util::PointHash> visited;
@@ -189,6 +203,9 @@ UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
             }
         }
     }
+
+    auto end = std::chrono::system_clock::now();
+    std::cout << "done " << visited.size() << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s" << std::endl;
 
     return filled;
 }

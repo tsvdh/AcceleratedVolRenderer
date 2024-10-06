@@ -101,7 +101,10 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
         }
     }
 
-    ProgressReporter progress(raysHitting * initialLightingIterations, "Computing initial lighting", false);
+    int workNeeded = raysHitting * initialLightingIterations;
+    ProgressReporter progress(workNeeded, "Computing initial lighting", false);
+
+    numRaysScatteredOutsideGrid = 0;
 
     for (int x = -numSteps; x <= numSteps; ++x) {
         for (int y = -numSteps; y <= numSteps; ++y) {
@@ -167,7 +170,8 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
                 if (coors) {
                     OptRefConst<Vertex> optVertex = transmittanceGrid.GetVertexConst(coors.value());
                     if (!optVertex) {
-                        std::cout << "screwed by floating point" << std::endl;
+                        ++numRaysScatteredOutsideGrid;
+                        progress.Update();
                         continue;
                     }
 
@@ -184,6 +188,8 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
     }
 
     progress.Done();
+
+    std::cout << numRaysScatteredOutsideGrid << " / " << workNeeded << " rays scattered outsided grid" << std::endl;
 
     std::vector<std::pair<int, SampledSpectrum>> lightPairs(lightMap.begin(), lightMap.end());
     std::sort(lightPairs.begin(), lightPairs.end(),
