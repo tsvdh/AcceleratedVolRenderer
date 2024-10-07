@@ -70,7 +70,6 @@ void main(int argc, char* argv[]) {
         boundaryGraph = boundary.CaptureBoundary(spacing, 45, 45);
 
     graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
-    std::cout << "grid size: " << transmittanceGrid.GetVertices().size() << std::endl;
 
     graph::VolTransmittance transmittance(boundaryGraph, mediumData, light, sampler);
     transmittance.CaptureTransmittance(transmittanceGrid, 1);

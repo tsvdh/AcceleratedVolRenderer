@@ -128,31 +128,49 @@ void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
     Bounds3i coorBounds(get<0>(boundary.FitToGraph(mediumData.bounds.pMin)) - Vector3i(1, 1, 1),
                         get<0>(boundary.FitToGraph(mediumData.bounds.pMax)) + Vector3i(1, 1, 1));
 
+    int numVisited = 0;
     auto start = std::chrono::system_clock::now();
     std::cout << "starting to single layer... ";
 
     std::unordered_set<int> singleLayerSet;
-    std::unordered_set<Point3i, util::PointHash>& visited = castCache[boundary.GetId()];
-    std::queue<Point3i> queue;
-    std::unordered_set<Point3i, util::PointHash> queueSet;
-    queue.push(coorBounds.pMin);
-    queueSet.insert(coorBounds.pMin);
 
-    while (!queue.empty()) {
-        Point3i curPoint = queue.front();
-        queue.pop();
-        queueSet.erase(curPoint);
-        visited.insert(curPoint);
+    std::unordered_set<Point3i, util::PointHash>& cast = castCache[boundary.GetId()];
 
-        for (Point3i neighbour : GetNeighbours(curPoint, coorBounds)) {
-            if (auto optVertex = boundary.GetVertex(neighbour); optVertex) {
-                singleLayerSet.insert(optVertex.value().get().id);
-            }
-            else if (visited.find(neighbour) == visited.end() && queueSet.find(neighbour) == queueSet.end()) {
-                queue.push(neighbour);
-                queueSet.insert(neighbour);
+    std::unordered_set<Point3i, util::PointHash> setA;
+    std::unordered_set<Point3i, util::PointHash> setB;
+    std::unordered_set<Point3i, util::PointHash> setC;
+
+    std::unordered_set<Point3i, util::PointHash>* prevSet = &setA;
+    std::unordered_set<Point3i, util::PointHash>* curSet = &setB;
+    std::unordered_set<Point3i, util::PointHash>* nextSet = &setC;
+    curSet->insert(coorBounds.pMin);
+
+    while (true) {
+        for (const Point3i& curPoint : *curSet) {
+            ++numVisited;
+
+            for (Point3i neighbour : GetNeighbours(curPoint, coorBounds)) {
+                if (auto optVertex = boundary.GetVertex(neighbour); optVertex) {
+                    singleLayerSet.insert(optVertex.value().get().id);
+                    cast.insert(curPoint);
+                }
+                else if (prevSet->find(neighbour) == prevSet->end()
+                        && curSet->find(neighbour) == curSet->end()) {
+                    nextSet->insert(neighbour);
+                }
             }
         }
+
+        if (nextSet->empty())
+            break;
+
+        prevSet->clear();
+
+        std::unordered_set<Point3i, util::PointHash>* tempSet;
+        tempSet = prevSet;
+        prevSet = curSet;
+        curSet = nextSet;
+        nextSet = tempSet;
     }
 
     std::unordered_set<int> boundaryIds;
@@ -165,7 +183,7 @@ void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
     }
 
     auto end = std::chrono::system_clock::now();
-    std::cout << "done " << visited.size() << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s" << std::endl;
+    std::cout << "done (" << numVisited << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s)" << std::endl;
 }
 
 UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
@@ -205,7 +223,7 @@ UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
     }
 
     auto end = std::chrono::system_clock::now();
-    std::cout << "done " << visited.size() << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s" << std::endl;
+    std::cout << "done (" << visited.size() << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s)" << std::endl;
 
     return filled;
 }
