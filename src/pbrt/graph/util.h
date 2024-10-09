@@ -112,6 +112,10 @@ inline DistantLight* GetLight(std::vector<Light>& lights) {
     return lights[0].Cast<DistantLight>();
 }
 
+inline std::vector<Point3f> GetSpherePoints(Point3f center, int numPointsOnEquator) {
+
+}
+
 }
 
 namespace graph {
