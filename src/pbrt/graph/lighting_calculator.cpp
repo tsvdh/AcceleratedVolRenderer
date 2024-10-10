@@ -128,6 +128,8 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
             float tMax = shapeIsect->tHit;
 
             for (int i = 0; i < initialLightingIterations; ++i) {
+                sampler.StartPixelSample(Point2i(x, y), i);
+
                 // Initialize _RNG_ for sampling the majorant transmittance
                 uint64_t hash0 = Hash(sampler.Get1D());
                 uint64_t hash1 = Hash(sampler.Get1D());

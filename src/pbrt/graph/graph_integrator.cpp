@@ -76,9 +76,7 @@ void GraphIntegrator::Render() {
     ThreadLocal<Sampler> samplers([this]() { return samplerPrototype.Clone(); });
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
-    int spp = samplerPrototype.SamplesPerPixel();
-    if (Options->graphDebug)
-        spp = 8;
+    int spp = Options->graphDebug ? 8 : 64;
     ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering",
                               Options->quiet);
 
