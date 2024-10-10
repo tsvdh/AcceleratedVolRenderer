@@ -15,13 +15,11 @@
 using namespace pbrt;
 
 void main(int argc, char* argv[]) {
-    graph::FreeGraph test;
+    graph::FreeGraph a;
+    graph::FreeGraph b;
+    graph::FreeGraph c;
 
-    for (auto point : util::GetSpherePoints(Point3f{100, 0, 0}, 10, 15)) {
-        test.AddVertex(point, graph::VertexData{});
-    }
-
-    test.WriteToDisk("test", graph::basic, graph::StreamFlags{});
+    int bla = 1;
 
     // std::vector<std::string> args = GetCommandLineArguments(argv);
     //

@@ -14,13 +14,14 @@ class VolBoundary {
 public:
     explicit VolBoundary(const util::MediumData& mediumData) : mediumData(mediumData) {}
 
-    [[nodiscard]] UniformGraph CaptureBoundary(int wantedVertices, int horizontalStep, int verticalStep);
-    [[nodiscard]] UniformGraph CaptureBoundary(float spacing, int horizontalStep, int verticalStep);
+    [[nodiscard]] UniformGraph CaptureBoundary(int wantedVertices, int equatorStepSize);
+    [[nodiscard]] UniformGraph CaptureBoundary(float spacing, int equatorStepSize);
 
     [[nodiscard]] UniformGraph FillInside(UniformGraph& boundary);
 
 private:
-    [[nodiscard]] FreeGraph CaptureBoundary(int horizontalStep, int verticalStep) const;
+    [[nodiscard]] Bounds3i GetBounds(const UniformGraph& boundary);
+    [[nodiscard]] FreeGraph CaptureBoundary(int equatorStepSize) const;
     void ToSingleLayerAndSaveCast(UniformGraph& boundary);
 
     const util::MediumData& mediumData;
