@@ -112,8 +112,50 @@ inline DistantLight* GetLight(std::vector<Light>& lights) {
     return lights[0].Cast<DistantLight>();
 }
 
-inline std::vector<Point3f> GetSpherePoints(Point3f center, int numPointsOnEquator) {
+inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, int equatorStepDegrees) {
+    if (equatorStepDegrees < 0 || equatorStepDegrees > 90)
+        ErrorExit("Step must be between 0 and 90 degrees");
+    if (360 % equatorStepDegrees != 0)
+        ErrorExit("Equator must be divisible into whole steps");
 
+    Transform toWorld = RotateX(-90);
+    std::vector<Point3f> points;
+
+    float curElevation = 0;
+    while (curElevation <= 90) {
+        float theta = 90 - curElevation;
+        float thetaRad = theta * Pi / 180;
+        float sinTheta = std::sin(thetaRad);
+        float cosTheta = std::cos(thetaRad);
+
+        float thetaDown = 90 + curElevation;
+        float thetaRadDown = thetaDown * Pi / 180;
+        float sinThetaDown = std::sin(thetaRadDown);
+        float cosThetaDown = std::cos(thetaRadDown);
+
+        Vector3f dir = toWorld(SphericalDirection(sinTheta, cosTheta, 0));
+        dir.y = 0;
+        float curRatio = Length(dir);
+        float stepSize = static_cast<float>(equatorStepDegrees) / curRatio;
+
+        // at least two points on circle, except when adding top point
+        if (stepSize >= 180 && curRatio > std::pow(10, -6))
+            break;
+
+        float phi = 0;
+        while (phi < 360) {
+            float phiRad = phi * Pi / 180;
+            points.push_back(center + toWorld(SphericalDirection(sinTheta, cosTheta, phiRad)) * radius);
+            if (curElevation != 0)
+                points.push_back(center + toWorld(SphericalDirection(sinThetaDown, cosThetaDown, phiRad)) * radius);
+
+            phi += stepSize;
+        }
+
+        curElevation += static_cast<float>(equatorStepDegrees);
+    }
+
+    return points;
 }
 
 }
