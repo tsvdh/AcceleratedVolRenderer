@@ -58,7 +58,7 @@ void GraphIntegrator::Render() {
     if (!Options->graphDebug) {
         ProgressReporter progress(static_cast<int>(sceneGrid.GetVerticesConst().size()), "Preprocessing spectral data", false);
 
-        SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0.05);
+        SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0);
         pstd::span<const float> lambdaSpan(&lambda[0], NSpectrumSamples);
 
         for (auto& pair : sceneGrid.GetVertices()) {
@@ -221,7 +221,7 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
     // Sample wavelengths for the ray
     Float lu = sampler.Get1D();
     if (Options->graphDebug)
-        lu = 0.05;
+        lu = 0;
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(lu);
 
     // Initialize _CameraSample_ for current sample
@@ -356,7 +356,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
         });
 
     if (optVertex)
-        return optVertex.value().get().data.continuousLighting->Sample(lambda);
+        return optVertex.value().get().data.continuousLighting->Sample(lambda) * Inv4Pi;
 
     return SampledSpectrum(0);
 }

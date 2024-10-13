@@ -73,7 +73,9 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
     SampledSpectrum L = light->SampleLi(LightSampleContext{Interaction()},
                                         Point2f(), mediumData.lambda, false).value().L;
 
-    L /= static_cast<float>(initialLightingIterations) * static_cast<float>(std::pow(lightRaysPerVoxelDist, 2));
+    L /= static_cast<float>(initialLightingIterations)
+       * static_cast<float>(std::pow(lightRaysPerVoxelDist, 2))
+       * transmittanceGrid.GetSpacing();
 
     Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
 
@@ -210,7 +212,7 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
     phaseEntries.reserve(numVertices);
 
     for (int i = 0; i < numVertices; ++i)
-        phaseEntries.emplace_back(i, i, SampledSpectrum(1 / (4 * Pi)));
+        phaseEntries.emplace_back(i, i, SampledSpectrum(Inv4Pi));
 
     SparseMat phaseMatrix(numVertices, numVertices);
     phaseMatrix.setFromTriplets(phaseEntries.begin(), phaseEntries.end());

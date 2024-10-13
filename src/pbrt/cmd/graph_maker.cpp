@@ -53,7 +53,7 @@ void main(int argc, char* argv[]) {
     scene.CreateMaterials(textures, &namedMaterials, &materials);
     Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
 
-    SampledWavelengths lambda = scene.GetCamera().GetFilm().SampleWavelengths(0.05);
+    SampledWavelengths lambda = scene.GetCamera().GetFilm().SampleWavelengths(0);
 
     util::MediumData mediumData(lambda, accel);
     light->Preprocess(mediumData.bounds);
