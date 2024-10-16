@@ -55,7 +55,20 @@ void GraphIntegrator::Render() {
                             threadPixel.x, threadPixel.y, threadSampleIndex);
     });
 
-    if (!Options->graphDebug) {
+    if (Options->graphDebug) {
+        ProgressReporter progress(static_cast<int>(sceneGrid.GetVertices().size()), "Preprocessing voxels", false);
+
+        Vector3f voxelHalfDiagonal = Vector3f(1, 1, 1) * sceneGrid.GetSpacing() / 2;
+
+        for (auto& pair : sceneGrid.GetVertices()) {
+            if (pair.second.data.lighting->operator[](0) == 0)
+                continue;
+
+            Point3f voxelMiddle = pair.second.point;
+            voxelBounds.emplace_back(voxelMiddle - voxelHalfDiagonal, voxelMiddle + voxelHalfDiagonal);
+        }
+    }
+    else {
         ProgressReporter progress(static_cast<int>(sceneGrid.GetVerticesConst().size()), "Preprocessing spectral data", false);
 
         SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0);
@@ -135,7 +148,8 @@ void GraphIntegrator::Render() {
 
     // Render image in waves
     while (waveStart < spp) {
-        // // Render current wave's image in series
+
+        // // Render current wave's image pixels in series
         // for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
         //     for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
         //         Point2i pPixel(x, y);
@@ -299,21 +313,32 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
     float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
 
     if (Options->graphDebug) {
-        auto iter = ray.medium.SampleRay(static_cast<Ray&>(ray), tMax, lambda, scratchBuffer);
-        while (true) {
-            pstd::optional<RayMajorantSegment> segment = iter.Next();
-            if (!segment)
-                return SampledSpectrum(0);
-            if (segment->sigma_maj[0] != 0) {
-                Point3f p = ray(segment->tMin);
-                p = worldFromRender(p);
+        float A = -1;
+        float B = -1;
+        float* hit0 = &A;
+        float* hit1 = &B;
 
-                if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(p))
-                    return optVertex.value().get().data.lighting.value();
+        float minHit0 = Infinity;
+        float minHit1 = Infinity;
 
-                return SampledSpectrum(0);
+        RayDifferential worldRay = worldFromRender(ray);
+
+        for (const Bounds3f& voxelBounds : voxelBounds) {
+            if (voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0, hit1)) {
+                if (*hit0 < minHit0) {
+                    minHit0 = *hit0;
+                    minHit1 = *hit1;
+                }
             }
         }
+
+        if (minHit0 != Infinity) {
+            Point3f middle = worldRay((minHit0 + minHit1) / 2);
+            if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(middle))
+                return optVertex.value().get().data.lighting.value();
+        }
+
+        return SampledSpectrum(0);
     }
 
     // Initialize _RNG_ for sampling the majorant transmittance

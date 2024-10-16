@@ -56,6 +56,7 @@ private:
     bool regularize;
     UniformGraph sceneGrid;
     Transform worldFromRender;
+    std::vector<Bounds3f> voxelBounds;
 };
 
 }

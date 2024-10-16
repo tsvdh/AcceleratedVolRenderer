@@ -23,6 +23,9 @@ LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::Med
 UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations, int lightRaysPerVoxelDist, int transmittanceIterations) {
     SparseVec light = GetLightVector(initialLightingIterations, lightRaysPerVoxelDist);
 
+    // SparseVec light(numVertices);
+    // light.coeffRef(transmittanceGrid.GetVertexConst(Point3f(1, 1, -1))->get().id) = SampledSpectrum(0.1);
+
     if (transmittanceIterations > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
         SparseVec curLight = light;
