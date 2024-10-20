@@ -34,14 +34,14 @@ inline std::string FileNameToPath(const std::string& fileName) {
 }
 
 struct MediumData {
-    SampledWavelengths lambda;
+    SampledWavelengths defaultLambda;
     Medium medium;
     BVHAggregate* aggregate;
     Bounds3f bounds;
     Point3f boundsCenter;
     float maxDistToCenter;
 
-    MediumData(const SampledWavelengths& lambda, Primitive accel) : lambda(lambda) {
+    explicit MediumData(Primitive accel, const SampledWavelengths& defaultLambda) : defaultLambda(defaultLambda) {
         if (!accel.Is<BVHAggregate>())
             ErrorExit("Accelerator primitive must be a 'BVHAggregate' type");
 
@@ -112,11 +112,9 @@ inline DistantLight* GetLight(std::vector<Light>& lights) {
     return lights[0].Cast<DistantLight>();
 }
 
-inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, int equatorStepDegrees) {
-    if (equatorStepDegrees < 0 || equatorStepDegrees > 90)
+inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, float equatorStepDegrees) {
+    if (equatorStepDegrees <= 0 || equatorStepDegrees > 90)
         ErrorExit("Step must be between 0 and 90 degrees");
-    if (360 % equatorStepDegrees != 0)
-        ErrorExit("Equator must be divisible into whole steps");
 
     Transform toWorld = RotateX(-90);
     std::vector<Point3f> points;
@@ -136,7 +134,7 @@ inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, int eq
         Vector3f dir = toWorld(SphericalDirection(sinTheta, cosTheta, 0));
         dir.y = 0;
         float curRatio = Length(dir);
-        float stepSize = static_cast<float>(equatorStepDegrees) / curRatio;
+        float stepSize = equatorStepDegrees / curRatio;
 
         // at least two points on circle, except when adding top point
         if (stepSize >= 180 && curRatio > std::pow(10, -6))
@@ -152,10 +150,27 @@ inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, int eq
             phi += stepSize;
         }
 
-        curElevation += static_cast<float>(equatorStepDegrees);
+        curElevation += equatorStepDegrees;
     }
 
     return points;
+}
+
+inline std::pair<Point3i, Point3f> FitToGraph(Point3f p, float spacing) {
+    Point3i coors;
+    for (int i = 0; i < 3; ++i) {
+        coors[i] = static_cast<int>(std::round(p[i] / spacing));
+    }
+
+    Point3f fittedPoint = coors * spacing;
+
+    return {coors, fittedPoint};
+}
+
+inline Bounds3i FitBounds(const Bounds3f& bounds, float spacing) {
+    using std::get;
+    return {get<0>(FitToGraph(bounds.pMin, spacing)) - Vector3i(1, 1, 1),
+              get<0>(FitToGraph(bounds.pMax, spacing)) + Vector3i(1, 1, 1)};
 }
 
 }

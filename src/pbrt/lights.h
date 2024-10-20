@@ -290,6 +290,12 @@ class DistantLight : public LightBase {
                              Interaction(pOutside, nullptr));
     }
 
+    DenselySampledSpectrum GetLEmit() {
+        DenselySampledSpectrum spectrum = *Lemit;
+        spectrum.Scale(scale);
+        return spectrum;
+    }
+
   private:
     // DistantLight Private Members
     const DenselySampledSpectrum *Lemit;

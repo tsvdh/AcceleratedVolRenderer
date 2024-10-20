@@ -23,9 +23,6 @@ LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::Med
 UniformGraph LightingCalculator::GetFinalLightGrid(int initialLightingIterations, int lightRaysPerVoxelDist, int transmittanceIterations) {
     SparseVec light = GetLightVector(initialLightingIterations, lightRaysPerVoxelDist);
 
-    // SparseVec light(numVertices);
-    // light.coeffRef(transmittanceGrid.GetVertexConst(Point3f(1, 1, -1))->get().id) = SampledSpectrum(0.1);
-
     if (transmittanceIterations > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
         SparseVec curLight = light;
@@ -72,10 +69,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
     if (lightRaysPerVoxelDist <= 0)
         ErrorExit("Must have at least one ray per voxel");
 
-    // lambda only relevant parameter for distant light
-    SampledSpectrum L = light->SampleLi(LightSampleContext{Interaction()},
-                                        Point2f(), mediumData.lambda, false).value().L;
-
+    float L = 1;
     L /= static_cast<float>(initialLightingIterations)
        * static_cast<float>(std::pow(lightRaysPerVoxelDist, 2))
        * transmittanceGrid.GetSpacing();
@@ -92,7 +86,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
 
     int numSteps = std::ceil(mediumData.maxDistToCenter / distBetweenRays);
 
-    std::unordered_map<int, SampledSpectrum> lightMap;
+    std::unordered_map<int, float> lightMap;
     lightMap.reserve(numVertices); // rarely need this amount, but better to have enough capacity
 
     int raysHitting = 0;
@@ -144,7 +138,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
 
                 // Sample new point on ray
                 SampleT_maj(
-                    (Ray&)gridRay, tMax, sampler.Get1D(), rng, mediumData.lambda,
+                    (Ray&)gridRay, tMax, sampler.Get1D(), rng, mediumData.defaultLambda,
                     [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                         // Handle medium scattering event for ray
 
@@ -184,7 +178,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
 
                     int id = optVertex->get().id;
                     if (lightMap.find(id) == lightMap.end())
-                        lightMap[id] = SampledSpectrum(0);
+                        lightMap[id] = 0;
 
                     lightMap[id] += L;
                 }
@@ -198,7 +192,7 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
 
     std::cout << numRaysScatteredOutsideGrid << " / " << workNeeded << " rays scattered outsided grid" << std::endl;
 
-    std::vector<std::pair<int, SampledSpectrum>> lightPairs(lightMap.begin(), lightMap.end());
+    std::vector<std::pair<int, float>> lightPairs(lightMap.begin(), lightMap.end());
     std::sort(lightPairs.begin(), lightPairs.end(),
         [](const auto& a, const auto& b) { return a.first < b.first; });
 
@@ -211,11 +205,11 @@ SparseVec LightingCalculator::GetLightVector(int initialLightingIterations, int 
 }
 
 SparseMat LightingCalculator::GetPhaseMatrix() const {
-    std::vector<Eigen::Triplet<SampledSpectrum>> phaseEntries;
+    std::vector<Eigen::Triplet<float>> phaseEntries;
     phaseEntries.reserve(numVertices);
 
     for (int i = 0; i < numVertices; ++i)
-        phaseEntries.emplace_back(i, i, SampledSpectrum(Inv4Pi));
+        phaseEntries.emplace_back(i, i, Inv4Pi);
 
     SparseMat phaseMatrix(numVertices, numVertices);
     phaseMatrix.setFromTriplets(phaseEntries.begin(), phaseEntries.end());
@@ -226,14 +220,14 @@ SparseMat LightingCalculator::GetGMatrix() const {
     auto& vertices = transmittanceGrid.GetVerticesConst();
     auto& edges = transmittanceGrid.GetEdgesConst();
 
-    std::vector<Eigen::Triplet<SampledSpectrum>> gEntries;
+    std::vector<Eigen::Triplet<float>> gEntries;
     gEntries.reserve(transmittanceGrid.GetEdgesConst().size());
 
     for (auto& edge : edges) {
         const Vertex& from = vertices.at(edge.second.from);
         const Vertex& to = vertices.at(edge.second.to);
 
-        SampledSpectrum T = edge.second.data.throughput;
+        float T = edge.second.data.throughput;
         double voxelSize = std::pow(transmittanceGrid.GetSpacing(), 3);
         double edgeLength = std::pow(Length(from.point - to.point), 2);
         auto G = static_cast<float>(voxelSize / edgeLength);

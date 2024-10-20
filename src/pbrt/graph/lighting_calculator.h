@@ -7,8 +7,8 @@
 
 namespace graph {
 
-using SparseMat = Eigen::SparseMatrix<SampledSpectrum>;
-using SparseVec = Eigen::SparseVector<SampledSpectrum>;
+using SparseMat = Eigen::SparseMatrix<float>;
+using SparseVec = Eigen::SparseVector<float>;
 
 class LightingCalculator {
 public:

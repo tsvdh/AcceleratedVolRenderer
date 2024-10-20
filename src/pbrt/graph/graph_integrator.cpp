@@ -61,7 +61,7 @@ void GraphIntegrator::Render() {
         Vector3f voxelHalfDiagonal = Vector3f(1, 1, 1) * sceneGrid.GetSpacing() / 2;
 
         for (auto& pair : sceneGrid.GetVertices()) {
-            if (pair.second.data.lighting->operator[](0) == 0)
+            if (pair.second.data.lightScalar == 0)
                 continue;
 
             Point3f voxelMiddle = pair.second.point;
@@ -69,18 +69,18 @@ void GraphIntegrator::Render() {
         }
     }
     else {
-        ProgressReporter progress(static_cast<int>(sceneGrid.GetVerticesConst().size()), "Preprocessing spectral data", false);
-
-        SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0);
-        pstd::span<const float> lambdaSpan(&lambda[0], NSpectrumSamples);
-
-        for (auto& pair : sceneGrid.GetVertices()) {
-            Vertex& vertex = pair.second;
-            vertex.data.continuousLighting = PiecewiseLinearSpectrum(lambdaSpan, vertex.data.lighting->GetValues());
-            vertex.data.lighting = std::nullopt;
-            progress.Update();
-        }
-        progress.Done();
+        // ProgressReporter progress(static_cast<int>(sceneGrid.GetVerticesConst().size()), "Preprocessing spectral data", false);
+        //
+        // SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0);
+        // pstd::span<const float> lambdaSpan(&lambda[0], NSpectrumSamples);
+        //
+        // for (auto& pair : sceneGrid.GetVertices()) {
+        //     Vertex& vertex = pair.second;
+        //     vertex.data.continuousLighting = PiecewiseLinearSpectrum(lambdaSpan, vertex.data.lighting->GetValues());
+        //     vertex.data.lighting = std::nullopt;
+        //     progress.Update();
+        // }
+        // progress.Done();
     }
 
     // Declare common variables for rendering image in tiles
@@ -89,9 +89,8 @@ void GraphIntegrator::Render() {
     ThreadLocal<Sampler> samplers([this]() { return samplerPrototype.Clone(); });
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
-    int spp = Options->graphDebug ? 8 : 64;
-    ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering",
-                              Options->quiet);
+    int spp = Options->graphDebug ? 8 : 256;
+    ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering", Options->quiet);
 
     int waveStart = 0, waveEnd = 1, nextWaveSize = 1;
 
@@ -234,8 +233,6 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
                                         ScratchBuffer &scratchBuffer) {
     // Sample wavelengths for the ray
     Float lu = sampler.Get1D();
-    if (Options->graphDebug)
-        lu = 0;
     SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(lu);
 
     // Initialize _CameraSample_ for current sample
@@ -313,10 +310,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
     float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
 
     if (Options->graphDebug) {
-        float A = -1;
-        float B = -1;
-        float* hit0 = &A;
-        float* hit1 = &B;
+        auto hit0 = std::make_unique<float>(-1);
+        auto hit1 = std::make_unique<float>(-1);
 
         float minHit0 = Infinity;
         float minHit1 = Infinity;
@@ -324,7 +319,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
         RayDifferential worldRay = worldFromRender(ray);
 
         for (const Bounds3f& voxelBounds : voxelBounds) {
-            if (voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0, hit1)) {
+            if (voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0.get(), hit1.get())) {
                 if (*hit0 < minHit0) {
                     minHit0 = *hit0;
                     minHit1 = *hit1;
@@ -334,8 +329,10 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
 
         if (minHit0 != Infinity) {
             Point3f middle = worldRay((minHit0 + minHit1) / 2);
-            if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(middle))
-                return optVertex.value().get().data.lighting.value();
+            if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(middle)) {
+                float scalar = optVertex.value().get().data.lightScalar;
+                return lightSpectrum.Sample(lambda) * scalar;
+            }
         }
 
         return SampledSpectrum(0);
@@ -380,8 +377,10 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             }
         });
 
-    if (optVertex)
-        return optVertex.value().get().data.continuousLighting->Sample(lambda) * Inv4Pi;
+    if (optVertex) {
+        float scalar = optVertex.value().get().data.lightScalar;
+        return lightSpectrum.Sample(lambda) * scalar * Inv4Pi;
+    }
 
     return SampledSpectrum(0);
 }

@@ -28,14 +28,12 @@
 #include <string>
 #include <vector>
 
-#include "pbrt/graph/spectrum_helper.h"
-
 namespace pbrt {
 
 // Spectrum Constants
 constexpr Float Lambda_min = 360, Lambda_max = 830;
 
-static constexpr int NSpectrumSamples = util::NSpectrumSamples;
+static constexpr int NSpectrumSamples = 4;
 
 static constexpr Float CIE_Y_integral = 106.856895;
 

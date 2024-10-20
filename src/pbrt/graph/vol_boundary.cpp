@@ -11,7 +11,7 @@
 
 namespace graph {
 
-FreeGraph VolBoundary::CaptureBoundary(int equatorStepSize) const {
+FreeGraph VolBoundary::CaptureBoundary(float equatorStepSize) const {
     std::vector<Point3f> spherePoints = util::GetSpherePoints(mediumData.boundsCenter, mediumData.maxDistToCenter * 2, equatorStepSize);
 
     ProgressReporter captureProgress(static_cast<int>(spherePoints.size()), "Capturing volume boundary", false);
@@ -42,7 +42,7 @@ FreeGraph VolBoundary::CaptureBoundary(int equatorStepSize) const {
 
                 shapeIsect->intr.SkipIntersection(&gridRay, shapeIsect->tHit);
 
-                auto iter = mediumData.medium.SampleRay((Ray&)gridRay, Infinity, mediumData.lambda, buffer);
+                auto iter = mediumData.medium.SampleRay((Ray&)gridRay, Infinity, mediumData.defaultLambda, buffer);
                 while (true) {
                     pstd::optional<RayMajorantSegment> segment = iter.Next();
                     if (!segment)
@@ -61,7 +61,7 @@ FreeGraph VolBoundary::CaptureBoundary(int equatorStepSize) const {
     return graph;
 }
 
-UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int equatorStepSize) {
+UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, float equatorStepSize) {
     FreeGraph graph = CaptureBoundary(equatorStepSize);
 
     float multRange = 1000;
@@ -94,7 +94,7 @@ UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, int equatorStepSiz
     return curGraph;
 }
 
-UniformGraph VolBoundary::CaptureBoundary(float spacing, int equatorStepSize) {
+UniformGraph VolBoundary::CaptureBoundary(float spacing, float equatorStepSize) {
     FreeGraph graph = CaptureBoundary(equatorStepSize);
 
     UniformGraph spacedGraph = graph.ToUniform(spacing);
@@ -119,14 +119,8 @@ inline std::vector<Point3i> GetNeighbours(Point3i coors, const std::optional<Bou
     return neighbours;
 }
 
-Bounds3i VolBoundary::GetBounds(const UniformGraph& boundary) {
-    using std::get;
-    return Bounds3i(get<0>(boundary.FitToGraph(mediumData.bounds.pMin)) - Vector3i(1, 1, 1),
-                    get<0>(boundary.FitToGraph(mediumData.bounds.pMax)) + Vector3i(1, 1, 1));
-}
-
 void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
-    Bounds3i coorBounds = GetBounds(boundary);
+    Bounds3i coorBounds = util::FitBounds(mediumData.bounds, boundary.GetSpacing());
 
     int numVisited = 0;
     auto start = std::chrono::system_clock::now();
@@ -191,7 +185,7 @@ UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
     if (result == castCache.end())
         ToSingleLayerAndSaveCast(boundary);
 
-    Bounds3i coorBounds = GetBounds(boundary);
+    Bounds3i coorBounds = util::FitBounds(mediumData.bounds, boundary.GetSpacing());
 
     auto start = std::chrono::system_clock::now();
     std::cout << "starting filling... ";

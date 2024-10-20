@@ -27,6 +27,7 @@ public:
         sceneGridName = std::regex_replace(sceneGridName, std::regex("\\.pbrt"), ".txt");
         sceneGrid = UniformGraph::ReadFromDisk(sceneGridName);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
+        lightSpectrum = util::GetLight(lights)->GetLEmit();
     }
 
     void Render() override;
@@ -57,6 +58,7 @@ private:
     UniformGraph sceneGrid;
     Transform worldFromRender;
     std::vector<Bounds3f> voxelBounds;
+    DenselySampledSpectrum lightSpectrum;
 };
 
 }

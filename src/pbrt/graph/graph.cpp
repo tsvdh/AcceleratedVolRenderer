@@ -211,19 +211,12 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
     return newEdge;
 }
 
-inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFlags flags) {
+inline void WriteVertexData(std::ostream& out, VertexData data, StreamFlags flags) {
     if (flags.useRayVertexTypes)
         out << (data.type.has_value() ? data.type.value() : -1) << SEP;
 
     if (flags.useLighting) {
-        if (data.lighting.has_value()) {
-            for (int i = 0; i < NSpectrumSamples; ++i)
-                out << data.lighting.value()[i] << SEP;
-        }
-        else {
-            for (int i = 0; i < NSpectrumSamples; ++i)
-                out << -1 << SEP;
-        }
+        out << data.lightScalar << SEP;
     }
 }
 
@@ -232,34 +225,29 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
     if (flags.useRayVertexTypes)
         in >> rayVertexType;
 
-    SampledSpectrum lighting(-1);
+    float lighting = -1;
     if (flags.useLighting) {
-        for (int i = 0; i < NSpectrumSamples; ++i)
-            in >> lighting[i];
+        in >> lighting;
     }
 
-    // std::optional<SampledSpectrum> optLighting = ;
-    // std::optional<RayVertexType> optRayVertexType = ;
     return VertexData{rayVertexType == -1 ? std::nullopt : std::optional(static_cast<RayVertexType>(rayVertexType)),
-                      lighting[0] == -1 ? std::nullopt : std::optional(lighting)};
+                      lighting};
 }
 
-inline void WriteEdgeData(std::ostream& out, const EdgeData& data) {
-    for (int i = 0; i < NSpectrumSamples; ++i) {
-        out << data.throughput[i] << SEP;
-    }
-    out << data.weightedThroughput << SEP << data.numSamples << SEP;
+inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
+    if (flags.useThroughput)
+        out << data.throughput << SEP << data.weightedThroughput << SEP << data.numSamples << SEP;
 }
 
-inline EdgeData ReadEdgeData(std::istream& in) {
-    std::vector<float> throughputs(NSpectrumSamples);
-    for (int i = 0; i < NSpectrumSamples; ++i)
-        in >> throughputs[i];
+inline EdgeData ReadEdgeData(std::istream& in, StreamFlags flags) {
+    float throughput = - 1;
+    float weightedThroughput = -1;
+    float numSamples = -1;
 
-    float weightedThroughput, numSamples;
-    in >> weightedThroughput >> numSamples;
+    if (flags.useThroughput)
+        in >> throughput >> weightedThroughput >> numSamples;
 
-    return EdgeData{SampledSpectrum(throughputs), weightedThroughput, numSamples};
+    return EdgeData{throughput, weightedThroughput, numSamples};
 }
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
@@ -286,8 +274,7 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
 
     for (auto& [id, edge] : edges) {
         out << edge.id << SEP << edge.from << SEP << edge.to << SEP;
-        if (flags.useThroughput)
-            WriteEdgeData(out, edge.data);
+        WriteEdgeData(out, edge.data, flags);
         out << NEW;
     }
 
@@ -338,7 +325,7 @@ void Graph::ReadFromStream(std::istream& in) {
     for (int i = 0; i < edgesCap; ++i) {
         int id, fromId, toId;
         in >> id >> fromId >> toId;
-        EdgeData data = flags.useThroughput ? ReadEdgeData(in) : EdgeData{};
+        EdgeData data = ReadEdgeData(in, flags);
 
         AddEdge(id, fromId, toId, data);
     }
@@ -447,14 +434,7 @@ bool UniformGraph::RemoveVertex(int id) {
 }
 
 inline std::pair<Point3i, Point3f> UniformGraph::FitToGraph(Point3f p) const {
-    Point3i coors;
-    for (int i = 0; i < 3; ++i) {
-        coors[i] = static_cast<int>(std::round(p[i] / spacing));
-    }
-
-    Point3f fittedPoint = coors * spacing;
-
-    return {coors, fittedPoint};
+    return util::FitToGraph(p, spacing);
 }
 
 Vertex& UniformGraph::AddVertex(int id, Point3f p, const VertexData& data, bool incrId) {

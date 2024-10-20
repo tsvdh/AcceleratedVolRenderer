@@ -37,8 +37,7 @@ enum RayVertexType {
 
 struct VertexData {
     std::optional<RayVertexType> type;
-    std::optional<SampledSpectrum> lighting;
-    std::optional<PiecewiseLinearSpectrum> continuousLighting; // only filled and used by renderer
+    float lightScalar;
 };
 
 struct Vertex {
@@ -54,8 +53,8 @@ struct Vertex {
 };
 
 struct EdgeData {
-    SampledSpectrum throughput;    // average of samples
-    float weightedThroughput = -1; // average of samples
+    float throughput = -1;          // average of samples
+    float weightedThroughput = -1;  // average of samples
     float numSamples = 1;
 
     void AddSample(const EdgeData& sample);

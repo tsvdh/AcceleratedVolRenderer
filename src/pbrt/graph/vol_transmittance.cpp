@@ -7,16 +7,8 @@
 
 namespace graph {
 
-VolTransmittance::VolTransmittance(const UniformGraph& boundary, const util::MediumData& mediumData,
-                                   DistantLight* light, Sampler sampler)
-                                       : boundary(boundary), mediumData(mediumData), light(light),
-                                         sampler(std::move(sampler)) {
-    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
-}
-
-void VolTransmittance::TraceTransmittancePath(const Vertex& gridPoint, UniformGraph& grid) {
-    Point3f startPoint = gridPoint.point - lightDir * mediumData.maxDistToCenter * 2;
-    RayDifferential ray(startPoint, lightDir);
+void VolTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f direction, UniformGraph& grid) {
+    RayDifferential ray(startPoint, direction);
     auto optShapeIsect = mediumData.aggregate->Intersect(ray, Infinity);
     if (!optShapeIsect)
         return;
@@ -42,7 +34,7 @@ void VolTransmittance::TraceTransmittancePath(const Vertex& gridPoint, UniformGr
 
         // Sample new point on ray
         SampleT_maj(
-            (Ray&)ray, tMax, sampler.Get1D(), rng, mediumData.lambda,
+            (Ray&)ray, tMax, sampler.Get1D(), rng, mediumData.defaultLambda,
             [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                 // Handle medium scattering event for ray
 
@@ -110,57 +102,73 @@ void VolTransmittance::TraceTransmittancePath(const Vertex& gridPoint, UniformGr
     }
 }
 
-SampledSpectrum VolTransmittance::Transmittance(const MediumInteraction& p0, const MediumInteraction& p1) const {
+float VolTransmittance::Transmittance(const MediumInteraction& p0, const MediumInteraction& p1) {
     RNG rng(Hash(p0.p()), Hash(p1.p()));
 
     Ray ray = p0.SpawnRayTo(p1);
-    SampledSpectrum Tr(1.f), inv_w(1.f);
+    float Tr = 1;
     if (LengthSquared(ray.d) == 0)
         return Tr;
 
-    SampledSpectrum T_majRemain = SampleT_maj(ray, 1.f, rng.Uniform<Float>(), rng, mediumData.lambda,
+    SampleT_maj(ray, 1.f, rng.Uniform<Float>(), rng, mediumData.defaultLambda,
         [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
 
             SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
 
             // ratio-tracking: only evaluate null scattering
-            Float pdf = T_maj[0] * sigma_maj[0];
-            Tr *= T_maj * sigma_n / pdf;
-            inv_w *= T_maj * sigma_maj / pdf;
+            Tr *= sigma_n[0] / sigma_maj[0];
 
-            if (!Tr || !inv_w)
+            if (Tr == 0)
                 return false;
 
             return true;
         });
 
-    Tr *= T_majRemain / T_majRemain[0];
-    inv_w *= T_majRemain / T_majRemain[0];
-
-    return Tr / inv_w.Average();
+    return Tr;
 }
 
-void VolTransmittance::CaptureTransmittance(UniformGraph& grid, int multiplier) {
+void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereStepDegrees, int spheresPerDimension) {
     if (grid.GetSpacing() != boundary.GetSpacing())
         ErrorExit("Spacing of grid and boundary must be equal");
 
-    if (multiplier < 1)
-        ErrorExit("Multiplier must be greater or equal than 1");
+    if (sphereStepDegrees > 90)
+        ErrorExit("Sphere step degrees must be less or equal to 90");
 
-    int workNeeded = static_cast<int>(grid.GetVerticesConst().size()) * multiplier;
+    int workNeeded = static_cast<int>(util::GetSpherePoints(Point3f(), 1, sphereStepDegrees).size())
+                     * static_cast<int>(std::pow(spheresPerDimension, 3));
     auto progress = ProgressReporter(workNeeded, "Tracing lit surface", false);
+
+    std::array<float, 3> dimensionStepSize{};
+    for (int i = 0; i < 3; ++i) {
+        dimensionStepSize[i] = mediumData.bounds.Diagonal()[i] / static_cast<float>(spheresPerDimension + 1);
+    }
 
     numPathsScatteredOutsideGrid = 0;
 
-    for (auto& pair : grid.GetVerticesConst()) {
-        for (int j = 0; j < multiplier; ++j) {
-            sampler.StartPixelSample(Point2i(pair.first, pair.first), j);
-            TraceTransmittancePath(pair.second, grid);
-            progress.Update();
+    int curSphere = 0;
+    for (int x = 1; x <= spheresPerDimension; ++x) {
+        for (int y = 1; y <= spheresPerDimension; ++y) {
+            for (int z = 1; z <= spheresPerDimension; ++z) {
+                Point3f center = mediumData.bounds.pMin + Vector3f(static_cast<float>(x) * dimensionStepSize[0],
+                                                                   static_cast<float>(y) * dimensionStepSize[1],
+                                                                   static_cast<float>(z) * dimensionStepSize[2]);
+
+                std::vector<Point3f> spherePoints = util::GetSpherePoints(center, mediumData.maxDistToCenter * 2, sphereStepDegrees);
+
+                for (int i = 0; i < spherePoints.size(); ++i) {
+                    Vector3f dir = Normalize(center - spherePoints[i]);
+                    sampler.StartPixelSample(Point2i(i, curSphere), 0);
+                    TraceTransmittancePath(spherePoints[i], dir, grid);
+                    progress.Update();
+
+                }
+
+                ++curSphere;
+            }
         }
     }
-    progress.Done();
 
+    progress.Done();
     std::cout << numPathsScatteredOutsideGrid << " / " << workNeeded << " paths died scattering outside grid" << std::endl;
 }
 
