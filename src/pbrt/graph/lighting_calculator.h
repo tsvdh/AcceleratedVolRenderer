@@ -12,7 +12,7 @@ using SparseVec = Eigen::SparseVector<float>;
 
 class LightingCalculator {
 public:
-    LightingCalculator(const UniformGraph& grid, const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
+    LightingCalculator(const UniformGraph& transmittanceGrid, const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
     [[nodiscard]] UniformGraph GetFinalLightGrid(int initialLightingIterations, int lightRaysPerVoxelDist, int transmittanceIterations);
 
 private:

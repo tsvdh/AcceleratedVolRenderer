@@ -8,14 +8,14 @@
 
 namespace graph {
 
-LightingCalculator::LightingCalculator(const UniformGraph& grid, const util::MediumData& mediumData,
+LightingCalculator::LightingCalculator(const UniformGraph& transmittanceGrid, const util::MediumData& mediumData,
                                        DistantLight* light, Sampler sampler)
-    : transmittanceGrid(grid), mediumData(mediumData), light(light), sampler(std::move(sampler)) {
+    : transmittanceGrid(transmittanceGrid), mediumData(mediumData), light(light), sampler(std::move(sampler)) {
 
     if (!HasSequentialIds())
         ErrorExit("Grid must have sequential ids for mapping to matrices");
 
-    numVertices = static_cast<int>(grid.GetVerticesConst().size());
+    numVertices = static_cast<int>(transmittanceGrid.GetVerticesConst().size());
 
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }

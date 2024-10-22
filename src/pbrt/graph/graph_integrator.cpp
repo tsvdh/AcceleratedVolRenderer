@@ -89,7 +89,7 @@ void GraphIntegrator::Render() {
     ThreadLocal<Sampler> samplers([this]() { return samplerPrototype.Clone(); });
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
-    int spp = Options->graphDebug ? 8 : 256;
+    int spp = Options->graphDebug ? 8 : 64;
     ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering", Options->quiet);
 
     int waveStart = 0, waveEnd = 1, nextWaveSize = 1;

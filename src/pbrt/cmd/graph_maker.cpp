@@ -64,15 +64,15 @@ void main(int argc, char* argv[]) {
     if (wantedVertices != -1)
         boundaryGraph = boundary.CaptureBoundary(wantedVertices, 45);
     else if (spacing != -1)
-        boundaryGraph = boundary.CaptureBoundary(spacing, 45);
+        boundaryGraph = boundary.CaptureBoundary(spacing, 10);
 
     graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
 
     graph::VolTransmittance transmittance(boundaryGraph, mediumData, sampler);
-    transmittance.CaptureTransmittance(transmittanceGrid, 1, 5);
+    transmittance.CaptureTransmittance(transmittanceGrid, 5, 10);
 
     graph::LightingCalculator lighting(transmittanceGrid, mediumData, light, sampler);
-    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1000, 4, 7);
+    graph::UniformGraph finalLighting = lighting.GetFinalLightGrid(1000, 4, 100);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
     finalLighting.WriteToDisk(fileName, graph::grid_lighting,
