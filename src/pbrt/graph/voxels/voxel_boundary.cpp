@@ -1,4 +1,4 @@
-#include "vol_boundary.h"
+#include "voxel_boundary.h"
 
 #include <pbrt/media.h>
 #include <pbrt/cpu/aggregates.h>
@@ -11,7 +11,7 @@
 
 namespace graph {
 
-FreeGraph VolBoundary::CaptureBoundary(float equatorStepSize) const {
+FreeGraph VoxelBoundary::CaptureBoundary(float equatorStepSize) const {
     std::vector<Point3f> spherePoints = util::GetSpherePoints(mediumData.boundsCenter, mediumData.maxDistToCenter * 2, equatorStepSize);
 
     ProgressReporter captureProgress(static_cast<int>(spherePoints.size()), "Capturing volume boundary", false);
@@ -61,7 +61,7 @@ FreeGraph VolBoundary::CaptureBoundary(float equatorStepSize) const {
     return graph;
 }
 
-UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, float equatorStepSize) {
+UniformGraph VoxelBoundary::CaptureBoundary(int wantedVertices, float equatorStepSize) {
     FreeGraph graph = CaptureBoundary(equatorStepSize);
 
     float multRange = 1000;
@@ -94,7 +94,7 @@ UniformGraph VolBoundary::CaptureBoundary(int wantedVertices, float equatorStepS
     return curGraph;
 }
 
-UniformGraph VolBoundary::CaptureBoundary(float spacing, float equatorStepSize) {
+UniformGraph VoxelBoundary::CaptureBoundary(float spacing, float equatorStepSize) {
     FreeGraph graph = CaptureBoundary(equatorStepSize);
 
     UniformGraph spacedGraph = graph.ToUniform(spacing);
@@ -119,7 +119,7 @@ inline std::vector<Point3i> GetNeighbours(Point3i coors, const std::optional<Bou
     return neighbours;
 }
 
-void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
+void VoxelBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
     Bounds3i coorBounds = util::FitBounds(mediumData.bounds, boundary.GetSpacing());
 
     int numVisited = 0;
@@ -180,7 +180,7 @@ void VolBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
     std::cout << "done (" << numVisited << " vertices in " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s)" << std::endl;
 }
 
-UniformGraph VolBoundary::FillInside(UniformGraph& boundary) {
+UniformGraph VoxelBoundary::FillInside(UniformGraph& boundary) {
     auto result = castCache.find(boundary.GetGraphId());
     if (result == castCache.end())
         ToSingleLayerAndSaveCast(boundary);

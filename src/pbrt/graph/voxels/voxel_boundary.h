@@ -4,15 +4,15 @@
 
 #include <unordered_set>
 
-#include "graph.h"
+#include "../graph.h"
 
 namespace graph {
 
 using namespace pbrt;
 
-class VolBoundary {
+class VoxelBoundary {
 public:
-    explicit VolBoundary(const util::MediumData& mediumData) : mediumData(mediumData) {}
+    explicit VoxelBoundary(const util::MediumData& mediumData) : mediumData(mediumData) {}
 
     [[nodiscard]] UniformGraph CaptureBoundary(int wantedVertices, float equatorStepSize);
     [[nodiscard]] UniformGraph CaptureBoundary(float spacing, float equatorStepSize);

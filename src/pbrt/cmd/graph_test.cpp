@@ -4,10 +4,10 @@
 
 #include <pbrt/graph/graph.h>
 #include <pbrt/scene.h>
-#include <pbrt/graph/vol_transmittance.h>
+#include <pbrt/graph/voxels/voxel_transmittance.h>
 #include <pbrt/util/args.h>
 
-#include "pbrt/graph/vol_boundary.h"
+#include "pbrt/graph/voxels/voxel_boundary.h"
 
 #include <pbrt/graph/deps/nanoflann.hpp>
 #include <pbrt/graph/deps/Eigen/Dense>

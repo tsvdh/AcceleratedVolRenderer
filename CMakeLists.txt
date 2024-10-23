@@ -825,17 +825,25 @@ set(GRAPH
         src/pbrt/graph/graph.cpp
         src/pbrt/graph/volpath_custom.h
         src/pbrt/graph/volpath_custom.cpp
-        src/pbrt/graph/vol_boundary.h
-        src/pbrt/graph/vol_boundary.cpp
         src/pbrt/graph/T_sampler_custom.h
         src/pbrt/graph/util.h
-        src/pbrt/graph/vol_transmittance.h
-        src/pbrt/graph/vol_transmittance.cpp
+
         src/pbrt/graph/graph_integrator.h
         src/pbrt/graph/graph_integrator.cpp
         src/pbrt/graph/lighting_calculator.h
         src/pbrt/graph/lighting_calculator.cpp
-        src/pbrt/graph/spectrum_helper.h
+
+        src/pbrt/graph/voxels/voxel_boundary.h
+        src/pbrt/graph/voxels/voxel_boundary.cpp
+        src/pbrt/graph/voxels/voxel_transmittance.h
+        src/pbrt/graph/voxels/voxel_transmittance.cpp
+        src/pbrt/graph/voxels/voxel_lighting_calculator.h
+        src/pbrt/graph/voxels/voxel_lighting_calculator.cpp
+
+        src/pbrt/graph/free/free_graph_builder.h
+        src/pbrt/graph/free/free_graph_builder.cpp
+        src/pbrt/graph/free/free_lighting_calculator.h
+        src/pbrt/graph/free/free_lighting_calculator.cpp
 
         src/pbrt/graph/deps/nanoflann.hpp
 )

@@ -1,4 +1,4 @@
-#include "vol_transmittance.h"
+#include "voxel_transmittance.h"
 
 #include <iostream>
 
@@ -7,7 +7,7 @@
 
 namespace graph {
 
-void VolTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f direction, UniformGraph& grid) {
+void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f direction, UniformGraph& grid) {
     RayDifferential ray(startPoint, direction);
     auto optShapeIsect = mediumData.aggregate->Intersect(ray, Infinity);
     if (!optShapeIsect)
@@ -88,8 +88,10 @@ void VolTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f direc
         if (newVertexId == curVertexId)
             continue;
 
-        if (curVertexId != -1)
-            grid.AddEdge(curVertexId, newVertexId, EdgeData{Transmittance(curIntr, newIntr)});
+        if (curVertexId != -1) {
+            float Tr = Transmittance(curIntr, newIntr, mediumData.defaultLambda);
+            grid.AddEdge(curVertexId, newVertexId, EdgeData{Tr, -1, 1});
+        }
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
@@ -102,32 +104,7 @@ void VolTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f direc
     }
 }
 
-float VolTransmittance::Transmittance(const MediumInteraction& p0, const MediumInteraction& p1) {
-    RNG rng(Hash(p0.p()), Hash(p1.p()));
-
-    Ray ray = p0.SpawnRayTo(p1);
-    float Tr = 1;
-    if (LengthSquared(ray.d) == 0)
-        return Tr;
-
-    SampleT_maj(ray, 1.f, rng.Uniform<Float>(), rng, mediumData.defaultLambda,
-        [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-
-            SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
-
-            // ratio-tracking: only evaluate null scattering
-            Tr *= sigma_n[0] / sigma_maj[0];
-
-            if (Tr == 0)
-                return false;
-
-            return true;
-        });
-
-    return Tr;
-}
-
-void VolTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereStepDegrees, int spheresPerDimension) {
+void VoxelTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereStepDegrees, int spheresPerDimension) {
     if (grid.GetSpacing() != boundary.GetSpacing())
         ErrorExit("Spacing of grid and boundary must be equal");
 

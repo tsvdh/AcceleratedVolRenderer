@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "pbrt/media.h"
 #include "pbrt/util/error.h"
 
 namespace util {
@@ -200,6 +201,32 @@ const std::vector<std::string> descriptionNames{
 
 inline std::string GetDescriptionName(Description desc) {
     return descriptionNames[desc];
+}
+
+using namespace pbrt;
+inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda) {
+    RNG rng(Hash(p0.p()), Hash(p1.p()));
+
+    Ray ray = p0.SpawnRayTo(p1);
+    float Tr = 1;
+    if (LengthSquared(ray.d) == 0)
+        return Tr;
+
+    SampleT_maj(ray, 1.f, rng.Uniform<Float>(), rng, lambda,
+        [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+
+            SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
+
+            // ratio-tracking: only evaluate null scattering
+            Tr *= sigma_n[0] / sigma_maj[0];
+
+            if (Tr == 0)
+                return false;
+
+            return true;
+        });
+
+    return Tr;
 }
 
 }
