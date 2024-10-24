@@ -1,6 +1,7 @@
 #include "graph_integrator.h"
 
 #include <iostream>
+#include <fstream>
 
 #include <pbrt/materials.h>
 #include <pbrt/graph/T_sampler_custom.h>
@@ -55,32 +56,39 @@ void GraphIntegrator::Render() {
                             threadPixel.x, threadPixel.y, threadSampleIndex);
     });
 
-    if (Options->graphDebug) {
-        ProgressReporter progress(static_cast<int>(sceneGrid.GetVertices().size()), "Preprocessing voxels", false);
+    std::string graphName = Options->sceneFileName;
+    graphName = std::regex_replace(graphName, std::regex("\\.pbrt"), ".txt");
+    std::ifstream file(util::FileNameToPath(graphName));
+    std::string description, name;
+    file >> description >> name;
 
-        Vector3f voxelHalfDiagonal = Vector3f(1, 1, 1) * sceneGrid.GetSpacing() / 2;
+    std::cout << "Building graph... ";
+    if (name == "uniform")
+        uniformGraph = UniformGraph::ReadFromDisk(graphName);
+    if (name == "free")
+        freeGraph = FreeGraph::ReadFromDisk(graphName);
+    std::cout << "done" << std::endl;
 
-        for (auto& pair : sceneGrid.GetVertices()) {
-            if (pair.second.data.lightScalar == 0)
-                continue;
+    if (uniformGraph) {
+        if (Options->graphDebug) {
+            ProgressReporter progress(static_cast<int>(uniformGraph->GetVertices().size()), "Preprocessing voxels", false);
 
-            Point3f voxelMiddle = pair.second.point;
-            voxelBounds.emplace_back(voxelMiddle - voxelHalfDiagonal, voxelMiddle + voxelHalfDiagonal);
+            Vector3f voxelHalfDiagonal = Vector3f(1, 1, 1) * uniformGraph->GetSpacing() / 2;
+
+            for (auto& pair : uniformGraph->GetVertices()) {
+                if (pair.second.data.lightScalar == 0)
+                    continue;
+
+                Point3f voxelMiddle = pair.second.point;
+                voxelBounds.emplace_back(voxelMiddle - voxelHalfDiagonal, voxelMiddle + voxelHalfDiagonal);
+            }
         }
     }
-    else {
-        // ProgressReporter progress(static_cast<int>(sceneGrid.GetVerticesConst().size()), "Preprocessing spectral data", false);
-        //
-        // SampledWavelengths lambda = camera.GetFilm().SampleWavelengths(0);
-        // pstd::span<const float> lambdaSpan(&lambda[0], NSpectrumSamples);
-        //
-        // for (auto& pair : sceneGrid.GetVertices()) {
-        //     Vertex& vertex = pair.second;
-        //     vertex.data.continuousLighting = PiecewiseLinearSpectrum(lambdaSpan, vertex.data.lighting->GetValues());
-        //     vertex.data.lighting = std::nullopt;
-        //     progress.Update();
-        // }
-        // progress.Done();
+    if (freeGraph) {
+        std::cout << "Building kd-tree... ";
+        vHolder = freeGraph->GetVerticesList();
+        searchTree = std::make_unique<TreeType>(3, vHolder);
+        std::cout << "done" << std::endl;
     }
 
     // Declare common variables for rendering image in tiles
@@ -148,49 +156,52 @@ void GraphIntegrator::Render() {
     // Render image in waves
     while (waveStart < spp) {
 
-        // // Render current wave's image pixels in series
-        // for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
-        //     for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
-        //         Point2i pPixel(x, y);
-        //         ScratchBuffer& scratchBuffer = scratchBuffers.Get();
-        //         Sampler& sampler = samplers.Get();
-        //
-        //         StatsReportPixelStart(pPixel);
-        //         threadPixel = pPixel;
-        //         // Render samples in pixel _pPixel_
-        //         for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
-        //             threadSampleIndex = sampleIndex;
-        //             sampler.StartPixelSample(pPixel, sampleIndex);
-        //             EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
-        //             scratchBuffer.Reset();
-        //             progress.Update(1);
-        //         }
-        //
-        //         StatsReportPixelEnd(pPixel);
-        //     }
-        // }
+        if (Options->graphDisableMT) {
+            // Render current wave's image pixels in series
+            for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
+                for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
+                    Point2i pPixel(x, y);
+                    ScratchBuffer& scratchBuffer = scratchBuffers.Get();
+                    Sampler& sampler = samplers.Get();
 
-        // Render current wave's image tiles in parallel
-        ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
-            // Render image tile given by _tileBounds_
-            ScratchBuffer &scratchBuffer = scratchBuffers.Get();
-            Sampler &sampler = samplers.Get();
+                    StatsReportPixelStart(pPixel);
+                    threadPixel = pPixel;
+                    // Render samples in pixel _pPixel_
+                    for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
+                        threadSampleIndex = sampleIndex;
+                        sampler.StartPixelSample(pPixel, sampleIndex);
+                        EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
+                        scratchBuffer.Reset();
+                        progress.Update(1);
+                    }
 
-            for (Point2i pPixel : tileBounds) {
-                StatsReportPixelStart(pPixel);
-                threadPixel = pPixel;
-                // Render samples in pixel _pPixel_
-                for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
-                    threadSampleIndex = sampleIndex;
-                    sampler.StartPixelSample(pPixel, sampleIndex);
-                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
-                    scratchBuffer.Reset();
+                    StatsReportPixelEnd(pPixel);
                 }
-
-                StatsReportPixelEnd(pPixel);
             }
-            progress.Update((waveEnd - waveStart) * tileBounds.Area());
-        });
+        }
+        else {
+            // Render current wave's image tiles in parallel
+            ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
+                // Render image tile given by _tileBounds_
+                ScratchBuffer &scratchBuffer = scratchBuffers.Get();
+                Sampler &sampler = samplers.Get();
+
+                for (Point2i pPixel : tileBounds) {
+                    StatsReportPixelStart(pPixel);
+                    threadPixel = pPixel;
+                    // Render samples in pixel _pPixel_
+                    for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
+                        threadSampleIndex = sampleIndex;
+                        sampler.StartPixelSample(pPixel, sampleIndex);
+                        EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
+                        scratchBuffer.Reset();
+                    }
+
+                    StatsReportPixelEnd(pPixel);
+                }
+                progress.Update((waveEnd - waveStart) * tileBounds.Area());
+            });
+        }
 
         // Update start and end wave
         waveStart = waveEnd;
@@ -309,80 +320,143 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
 
     float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
 
-    if (Options->graphDebug) {
-        auto hit0 = std::make_unique<float>(-1);
-        auto hit1 = std::make_unique<float>(-1);
+    if (uniformGraph) {
+        if (Options->graphDebug) {
+            auto hit0 = std::make_unique<float>(-1);
+            auto hit1 = std::make_unique<float>(-1);
 
-        float minHit0 = Infinity;
-        float minHit1 = Infinity;
+            float minHit0 = Infinity;
+            float minHit1 = Infinity;
 
-        RayDifferential worldRay = worldFromRender(ray);
+            RayDifferential worldRay = worldFromRender(ray);
 
-        for (const Bounds3f& voxelBounds : voxelBounds) {
-            if (voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0.get(), hit1.get())) {
-                if (*hit0 < minHit0) {
-                    minHit0 = *hit0;
-                    minHit1 = *hit1;
+            for (const Bounds3f& voxelBounds : voxelBounds) {
+                if (voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0.get(), hit1.get())) {
+                    if (*hit0 < minHit0) {
+                        minHit0 = *hit0;
+                        minHit1 = *hit1;
+                    }
                 }
             }
+
+            if (minHit0 != Infinity) {
+                Point3f middle = worldRay((minHit0 + minHit1) / 2);
+                if (OptRefConst<Vertex> optVertex = uniformGraph->GetVertexConst(middle)) {
+                    float scalar = optVertex.value().get().data.lightScalar;
+                    return lightSpectrum.Sample(lambda) * scalar;
+                }
+            }
+
+            return SampledSpectrum(0);
         }
 
-        if (minHit0 != Infinity) {
-            Point3f middle = worldRay((minHit0 + minHit1) / 2);
-            if (OptRefConst<Vertex> optVertex = sceneGrid.GetVertexConst(middle)) {
-                float scalar = optVertex.value().get().data.lightScalar;
-                return lightSpectrum.Sample(lambda) * scalar;
-            }
+        // Initialize _RNG_ for sampling the majorant transmittance
+        uint64_t hash0 = Hash(sampler.Get1D());
+        uint64_t hash1 = Hash(sampler.Get1D());
+        RNG rng(hash0, hash1);
+
+        OptRefConst<Vertex> optVertex;
+
+        // Sample new point on ray
+        SampleT_maj(
+            static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
+            [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                // Handle medium scattering event for ray
+
+                // Compute medium event probabilities for interaction
+                Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+                Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+                Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+
+                CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+                // Sample medium scattering event type and update path
+                Float um = rng.Uniform<Float>();
+                int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+
+                if (mode == 0) {
+                    // Handle absorption along ray path
+                    return false;
+                }
+                if (mode == 1) {
+                    // Handle scattering along ray path
+                    p = worldFromRender(p);
+                    optVertex = uniformGraph->GetVertexConst(p);
+                    return false;
+                }
+                else {
+                    // Handle null scattering along ray path
+                    return true;
+                }
+            });
+
+        if (optVertex) {
+            float scalar = optVertex.value().get().data.lightScalar;
+            return lightSpectrum.Sample(lambda) * scalar * Inv4Pi;
         }
 
         return SampledSpectrum(0);
     }
+    if (freeGraph) {
+        // Initialize _RNG_ for sampling the majorant transmittance
+        uint64_t hash0 = Hash(sampler.Get1D());
+        uint64_t hash1 = Hash(sampler.Get1D());
+        RNG rng(hash0, hash1);
 
-    // Initialize _RNG_ for sampling the majorant transmittance
-    uint64_t hash0 = Hash(sampler.Get1D());
-    uint64_t hash1 = Hash(sampler.Get1D());
-    RNG rng(hash0, hash1);
+        std::optional<Point3f> optPoint;
 
-    OptRefConst<Vertex> optVertex;
+        // Sample new point on ray
+        SampleT_maj(
+            static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
+            [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                // Handle medium scattering event for ray
 
-    // Sample new point on ray
-    SampleT_maj(
-        static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
-        [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-            // Handle medium scattering event for ray
+                // Compute medium event probabilities for interaction
+                Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+                Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+                Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
 
-            // Compute medium event probabilities for interaction
-            Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
-            Float pScatter = mp.sigma_s[0] / sigma_maj[0];
-            Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+                CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+                // Sample medium scattering event type and update path
+                Float um = rng.Uniform<Float>();
+                int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
 
-            CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
-            // Sample medium scattering event type and update path
-            Float um = rng.Uniform<Float>();
-            int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+                if (mode == 0) {
+                    // Handle absorption along ray path
+                    return false;
+                }
+                if (mode == 1) {
+                    // Handle scattering along ray path
+                    optPoint = worldFromRender(p);
+                    return false;
+                }
+                else {
+                    // Handle null scattering along ray path
+                    return true;
+                }
+            });
 
-            if (mode == 0) {
-                // Handle absorption along ray path
-                return false;
-            }
-            if (mode == 1) {
-                // Handle scattering along ray path
-                p = worldFromRender(p);
-                optVertex = sceneGrid.GetVertexConst(p);
-                return false;
-            }
-            else {
-                // Handle null scattering along ray path
-                return true;
-            }
-        });
+        if (!optPoint)
+            return SampledSpectrum(0);
 
-    if (optVertex) {
-        float scalar = optVertex.value().get().data.lightScalar;
+        Point3f p = optPoint.value();
+        Float searchPoint[3] = {p.x, p.y, p.z};
+
+        std::vector<ResultItem<int, Float>> searchRes;
+        searchTree->radiusSearch(searchPoint, 0.01, searchRes);
+
+        if (Options->graphDebug)
+            return SampledSpectrum(searchRes.empty() ? 0 : 1);
+
+        if (searchRes.empty())
+            return SampledSpectrum(0);
+
+        auto index = static_cast<int>(sampler.Get1D() * static_cast<float>(searchRes.size()));
+
+        float scalar = freeGraph->GetVertexConst(searchRes[index].first)->get().data.lightScalar;
         return lightSpectrum.Sample(lambda) * scalar * Inv4Pi;
     }
 
-    return SampledSpectrum(0);
+    ErrorExit("Not possible");
 }
 
 SampledSpectrum GraphIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,

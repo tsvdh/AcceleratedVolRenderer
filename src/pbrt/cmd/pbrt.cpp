@@ -205,7 +205,8 @@ int main(int argc, char *argv[]) {
             ParseArg(&iter, args.end(), "write-partial-images",
                      &options.writePartialImages, onError) ||
             ParseArg(&iter, args.end(), "upgrade", &options.upgrade, onError) ||
-            ParseArg(&iter, args.end(), "graph-debug", &options.graphDebug, onError)) {
+            ParseArg(&iter, args.end(), "graph-debug", &options.graphDebug, onError) ||
+            ParseArg(&iter, args.end(), "graph-disable-MT", &options.graphDisableMT, onError)) {
             // success
         } else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
             usage();

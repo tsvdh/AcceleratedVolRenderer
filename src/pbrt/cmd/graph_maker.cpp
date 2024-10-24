@@ -6,6 +6,8 @@
 #include <regex>
 
 #include "pbrt/graph/lighting_calculator.h"
+#include "pbrt/graph/free/free_graph_builder.h"
+#include "pbrt/graph/free/free_lighting_calculator.h"
 #include "pbrt/graph/voxels/voxel_boundary.h"
 #include "pbrt/graph/voxels/voxel_lighting_calculator.h"
 
@@ -41,21 +43,31 @@ void main(int argc, char* argv[]) {
 
     Sampler sampler = scene.GetSampler();
 
-    graph::VoxelBoundary boundary(mediumData);
+    // graph::VoxelBoundary boundary(mediumData);
+    //
+    // graph::UniformGraph boundaryGraph;
+    // // boundaryGraph = boundary.CaptureBoundary(100, 45);
+    // boundaryGraph = boundary.CaptureBoundary(0.5f, 45);
+    //
+    // graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
+    //
+    // graph::VoxelTransmittance transmittance(boundaryGraph, mediumData, sampler);
+    // transmittance.CaptureTransmittance(transmittanceGrid, 2, 2);
+    //
+    // graph::VoxelLightingCalculator lighting(transmittanceGrid, mediumData, light, sampler, 1000);
+    // lighting.GetFinalLightGrid(100);
+    //
+    // std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
+    // transmittanceGrid.WriteToDisk(fileName, graph::grid_lighting,
+    //     graph::StreamFlags{false, false, false, true});
 
-    graph::UniformGraph boundaryGraph;
-    // boundaryGraph = boundary.CaptureBoundary(100, 45);
-    boundaryGraph = boundary.CaptureBoundary(0.5f, 45);
+    graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
+    graph::FreeGraph graph = graphBuilder.TracePaths(1000, 1);
 
-    graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
-
-    graph::VoxelTransmittance transmittance(boundaryGraph, mediumData, sampler);
-    transmittance.CaptureTransmittance(transmittanceGrid, 2, 2);
-
-    graph::VoxelLightingCalculator lighting(transmittanceGrid, mediumData, light, sampler, 1000);
-    lighting.GetFinalLightGrid(100);
+    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler);
+    lighting.ComputeFinalLight(0);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
-    transmittanceGrid.WriteToDisk(fileName, graph::grid_lighting,
+    graph.WriteToDisk(fileName, graph::basic,
         graph::StreamFlags{false, false, false, true});
 }

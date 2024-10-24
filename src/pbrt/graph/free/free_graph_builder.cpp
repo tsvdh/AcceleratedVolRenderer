@@ -6,8 +6,8 @@
 
 namespace graph {
 
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light)
-        : mediumData(mediumData), light(light) {
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler)
+        : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
 
@@ -17,8 +17,8 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
         return;
     optShapeIsect->intr.SkipIntersection(&ray, optShapeIsect->tHit);
 
-    Path& path = graph.AddPath();
     int curId = -1;
+    int depth = 0;
 
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
@@ -56,10 +56,6 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
                 }
                 if (mode == 1) {
                     // Handle scattering along ray path
-                    // Stop path sampling if maximum depth has been reached
-                    if (path.edges.size() >= maxDepth) {
-                        return false;
-                    }
 
                     optNewIntr = MediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
                     return false;
@@ -78,9 +74,11 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
 
         Vertex& newVertex = graph.AddVertex(optNewIntr->p(), VertexData{});
 
-        if (curId != -1) {
-            int newEdgeId = graph.AddEdge(curId, newVertex.id, EdgeData{})->get().id;
-            graph.AddEdgeToPath(newEdgeId, curId);
+        if (curId == -1) {
+            newVertex.data.type = entry;
+        }
+        else {
+            graph.AddEdge(curId, newVertex.id, EdgeData{});
         }
 
         // Sample new direction at real-scattering event
@@ -90,26 +88,32 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
         ray.o = newVertex.point;
         ray.d = ps->wi;
         curId = newVertex.id;
+
+        // Stop path sampling if maximum depth has been reached
+        if (++depth == maxDepth)
+            return;
     }
 }
 
-FreeGraph FreeGraphBuilder::TracePaths(int numSteps, int maxDepth) {
-    Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
-
+FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
     Vector3f xVector;
     Vector3f yVector;
     CoordinateSystem(lightDir, &xVector, &yVector);
 
-    xVector *= mediumData.maxDistToCenter / static_cast<float>(numSteps);
-    yVector *= mediumData.maxDistToCenter / static_cast<float>(numSteps);
+    Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
+    origin -= Vector3f((xVector + yVector) * mediumData.maxDistToCenter);
+
+    float stepSize = mediumData.maxDistToCenter * 2 / static_cast<float>(numStepsInDimension + 1);
+    xVector *= stepSize;
+    yVector *= stepSize;
 
     FreeGraph graph;
 
-    int workNeeded = static_cast<int>(std::pow(numSteps + 1, 2));
+    int workNeeded = static_cast<int>(std::pow(numStepsInDimension, 2));
     ProgressReporter progress(workNeeded, "Tracing light paths", false);
 
-    for (int x = -numSteps; x <= numSteps; ++x) {
-        for (int y = -numSteps; y <= numSteps; ++y) {
+    for (int x = 1; x <= numStepsInDimension; ++x) {
+        for (int y = 1; y <= numStepsInDimension; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
             RayDifferential ray(newOrigin, lightDir);
 

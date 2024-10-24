@@ -58,6 +58,7 @@ struct PBRTOptions : BasicPBRTOptions {
     std::string sceneFileName;
 
     bool graphDebug = false;
+    bool graphDisableMT = false;
 
     std::string ToString() const;
 };

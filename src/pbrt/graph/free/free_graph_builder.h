@@ -9,9 +9,9 @@ using namespace pbrt;
 
 class FreeGraphBuilder {
 public:
-    explicit FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light);
+    FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
 
-    FreeGraph TracePaths(int numSteps, int maxDepth);
+    FreeGraph TracePaths(int numStepsInDimension, int maxDepth);
     void ConnectVertices(FreeGraph& graph);
     void ComputeTransmittance(FreeGraph& graph, int edgeIterations);
 

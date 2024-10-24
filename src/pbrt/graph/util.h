@@ -76,6 +76,7 @@ struct MediumData {
 
 class VerticesHolder {
 public:
+    VerticesHolder() = default;
     explicit VerticesHolder(std::vector<std::pair<int, Point3f>> list) : verticesList(std::move(list)) {}
 
     std::vector<std::pair<int, Point3f>> GetList() { return verticesList; }

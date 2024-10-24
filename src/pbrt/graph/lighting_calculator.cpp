@@ -13,7 +13,7 @@ LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& med
     numVertices = static_cast<int>(graph.GetVerticesConst().size());
 }
 
-void LightingCalculator::GetFinalLightGrid(int transmittanceIterations) {
+void LightingCalculator::ComputeFinalLight(int transmittanceIterations) {
     SparseVec light = GetLightVector();
 
     if (transmittanceIterations > 0) {

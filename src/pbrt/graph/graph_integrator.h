@@ -5,11 +5,17 @@
 #include <regex>
 
 #include "graph.h"
+#include "deps/nanoflann.hpp"
 #include "pbrt/cpu/integrators.h"
 
 namespace graph {
 
 using namespace pbrt;
+
+using namespace nanoflann;
+using TreeType = KDTreeSingleIndexAdaptor<
+    L2_Simple_Adaptor<Float, util::VerticesHolder>,
+    util::VerticesHolder, 3, int>;
 
 class GraphIntegrator final : public RayIntegrator {
 public:
@@ -23,9 +29,6 @@ public:
             lightSampler(LightSampler::Create(lightSampleStrategy, lights, Allocator())),
             regularize(regularize) {
 
-        std::string sceneGridName = Options->sceneFileName;
-        sceneGridName = std::regex_replace(sceneGridName, std::regex("\\.pbrt"), ".txt");
-        sceneGrid = UniformGraph::ReadFromDisk(sceneGridName);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         lightSpectrum = util::GetLight(lights)->GetLEmit();
     }
@@ -55,10 +58,15 @@ private:
     int maxDepth;
     LightSampler lightSampler;
     bool regularize;
-    UniformGraph sceneGrid;
     Transform worldFromRender;
-    std::vector<Bounds3f> voxelBounds;
     DenselySampledSpectrum lightSpectrum;
+
+    std::optional<UniformGraph> uniformGraph;
+    std::vector<Bounds3f> voxelBounds;
+
+    std::optional<FreeGraph> freeGraph;
+    std::unique_ptr<TreeType> searchTree;
+    util::VerticesHolder vHolder;
 };
 
 }

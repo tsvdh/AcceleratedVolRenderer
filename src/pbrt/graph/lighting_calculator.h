@@ -15,7 +15,7 @@ public:
     virtual ~LightingCalculator() = default;
 
     LightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
-    void GetFinalLightGrid(int transmittanceIterations);
+    void ComputeFinalLight(int transmittanceIterations);
 
 protected:
     [[nodiscard]] virtual SparseVec GetLightVector() = 0;

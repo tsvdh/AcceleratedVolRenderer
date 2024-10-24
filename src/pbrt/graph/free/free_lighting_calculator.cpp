@@ -11,14 +11,12 @@ FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumD
 }
 
 SparseVec FreeLightingCalculator::GetLightVector() {
-    if (graph.GetPaths().empty())
-        std::cerr << "No vertices to add light to" << std::endl;
-
     std::unordered_map<int, float> lightMap;
     lightMap.reserve(graph.GetPaths().size());
 
-    for (auto& pair : graph.GetPaths()) {
-        lightMap[pair.second.edges[0]] = 1;
+    for (auto& pair : graph.GetVertices()) {
+        if (pair.second.data.type && pair.second.data.type == entry)
+        lightMap[pair.first] = 1;
     }
 
     return LightMapToVector(lightMap);
