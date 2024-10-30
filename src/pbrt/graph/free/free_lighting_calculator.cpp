@@ -1,7 +1,5 @@
 #include "free_lighting_calculator.h"
 
-#include <iostream>
-
 namespace graph {
 
 FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler)

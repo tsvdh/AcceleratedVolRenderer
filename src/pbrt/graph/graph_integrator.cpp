@@ -442,7 +442,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
         Float searchPoint[3] = {p.x, p.y, p.z};
 
         std::vector<ResultItem<int, Float>> searchRes;
-        searchTree->radiusSearch(searchPoint, 0.01, searchRes);
+        searchTree->radiusSearch(searchPoint, 0.005, searchRes);
 
         if (Options->graphDebug)
             return SampledSpectrum(searchRes.empty() ? 0 : 1);
