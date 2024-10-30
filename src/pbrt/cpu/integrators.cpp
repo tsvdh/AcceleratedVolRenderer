@@ -2872,6 +2872,8 @@ void SPPMIntegrator::Render() {
             Options->disableWavelengthJitter ? Float(0.5) : RadicalInverse(1, iter);
         const SampledWavelengths passLambda = film.SampleWavelengths(uLambda);
 
+        Float timeSample = RadicalInverse(2, iter);
+
         ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
             // Follow camera paths for _tileBounds_ in image for SPPM
             ScratchBuffer &scratchBuffer = threadScratchBuffers.Get();
@@ -2881,6 +2883,7 @@ void SPPMIntegrator::Render() {
                 // Generate camera ray for pixel for SPPM
                 SampledWavelengths lambda = passLambda;
                 CameraSample cs = GetCameraSample(sampler, pPixel, film.GetFilter());
+                cs.time = timeSample;
                 pstd::optional<CameraRayDifferential> crd =
                     camera.GenerateRayDifferential(cs, lambda);
                 if (!crd || !crd->weight)
@@ -3099,7 +3102,7 @@ void SPPMIntegrator::Render() {
                 // Compute sample values for photon ray leaving light source
                 Point2f uLight0 = Sample2D();
                 Point2f uLight1 = Sample2D();
-                Float uLightTime = camera.SampleTime(Sample1D());
+                Float uLightTime = camera.SampleTime(timeSample);
 
                 // Generate _photonRay_ from light source and initialize _beta_
                 SampledWavelengths lambda = passLambda;
