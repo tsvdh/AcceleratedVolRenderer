@@ -20,17 +20,13 @@ using TreeType = KDTreeSingleIndexAdaptor<
 class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
-    GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate,
-                    std::vector<Light> lights,
-                    const std::string &lightSampleStrategy = "bvh",
-                    bool regularize = false)
+    GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
             : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
-            maxDepth(maxDepth),
-            lightSampler(LightSampler::Create(lightSampleStrategy, lights, Allocator())),
-            regularize(regularize) {
+            maxDepth(maxDepth) {
 
+        light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
-        lightSpectrum = util::GetLight(lights)->GetLEmit();
+        lightSpectrum = light->GetLEmit();
     }
 
     void Render() override;
@@ -40,24 +36,22 @@ public:
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
-                       VisibleSurface *visibleSurface) const;
+                       VisibleSurface *visibleSurface) const override;
 
     static std::unique_ptr<GraphIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
             Primitive aggregate, std::vector<Light> lights);
 
-    [[nodiscard]] std::string ToString() const override;
+    [[nodiscard]] float SampleDirectLight(const MediumInteraction &interaction,
+                                          const SampledWavelengths& lambda, Sampler sampler) const;
+
+    [[nodiscard]] float ConnectToGraph(Point3f point, Sampler sampler) const;
+
+    [[nodiscard]] std::string ToString() const override { return "Graph Integrator"; }
 
 private:
-    // VolPathCustomIntegrator Private Methods
-    SampledSpectrum SampleLd(const Interaction &intr, const BSDF *bsdf,
-                             SampledWavelengths &lambda, Sampler sampler,
-                             SampledSpectrum beta, SampledSpectrum r_p) const;
-
-    // VolPathCustomIntegrator Private Members
     int maxDepth;
-    LightSampler lightSampler;
-    bool regularize;
+    DistantLight* light;
     Transform worldFromRender;
     DenselySampledSpectrum lightSpectrum;
 

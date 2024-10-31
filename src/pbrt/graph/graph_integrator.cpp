@@ -97,7 +97,7 @@ void GraphIntegrator::Render() {
     ThreadLocal<Sampler> samplers([this]() { return samplerPrototype.Clone(); });
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
-    int spp = Options->graphDebug ? 8 : 64;
+    int spp = Options->graphDebug ? 8 : samplerPrototype.SamplesPerPixel();
     ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering", Options->quiet);
 
     int waveStart = 0, waveEnd = 1, nextWaveSize = 1;
@@ -306,21 +306,23 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
 SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
                                            Sampler sampler, ScratchBuffer& scratchBuffer,
                                            VisibleSurface* visibleSurface) const {
-    pstd::optional<ShapeIntersection> shapeIsect = Intersect(ray);
-    if (!shapeIsect)
-        return SampledSpectrum(0);
-
-    if (!ray.medium) {
-        shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
-        shapeIsect = Intersect(ray);
-    }
-
-    if (!ray.medium)
-        return SampledSpectrum(0);
-
-    float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
+    SampledSpectrum spectrum = lightSpectrum.Sample(lambda);
 
     if (uniformGraph) {
+        pstd::optional<ShapeIntersection> shapeIsect = Intersect(ray);
+        if (!shapeIsect)
+            return SampledSpectrum(0);
+
+        if (!ray.medium) {
+            shapeIsect->intr.SkipIntersection(&ray, shapeIsect->tHit);
+            shapeIsect = Intersect(ray);
+        }
+
+        if (!ray.medium)
+            return SampledSpectrum(0);
+
+        float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
+
         if (Options->graphDebug) {
             auto hit0 = std::make_unique<float>(-1);
             auto hit1 = std::make_unique<float>(-1);
@@ -391,85 +393,111 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
 
         if (optVertex) {
             float scalar = optVertex.value().get().data.lightScalar;
-            return lightSpectrum.Sample(lambda) * scalar * Inv4Pi;
+            return spectrum * scalar * Inv4Pi;
         }
 
         return SampledSpectrum(0);
     }
+
     if (freeGraph) {
-        // Initialize _RNG_ for sampling the majorant transmittance
-        uint64_t hash0 = Hash(sampler.Get1D());
-        uint64_t hash1 = Hash(sampler.Get1D());
-        RNG rng(hash0, hash1);
+        float L = 0;
+        int depth = 0;
 
-        std::optional<Point3f> optPoint;
+        while (true) {
+            pstd::optional<ShapeIntersection> shapeIntersection = Intersect(ray);
+            if (ray.medium) {
+                // Sample the participating medium
+                bool scattered = false, terminated = false;
+                Float tMax = shapeIntersection ? shapeIntersection->tHit : Infinity;
 
-        // Sample new point on ray
-        SampleT_maj(
-            static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
-            [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-                // Handle medium scattering event for ray
+                // Initialize _RNG_ for sampling the majorant transmittance
+                uint64_t hash0 = Hash(sampler.Get1D());
+                uint64_t hash1 = Hash(sampler.Get1D());
+                RNG rng(hash0, hash1);
 
-                // Compute medium event probabilities for interaction
-                Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
-                Float pScatter = mp.sigma_s[0] / sigma_maj[0];
-                Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+                // Sample new point on ray
+                SampleT_maj(static_cast<Ray&>(ray), tMax, sampler.Get1D(), rng, lambda,
+                    [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                        // Handle medium scattering event for ray
 
-                CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
-                // Sample medium scattering event type and update path
-                Float um = rng.Uniform<Float>();
-                int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+                        // Compute medium event probabilities for interaction
+                        Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+                        Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+                        Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
 
-                if (mode == 0) {
-                    // Handle absorption along ray path
-                    return false;
-                }
-                if (mode == 1) {
-                    // Handle scattering along ray path
-                    optPoint = worldFromRender(p);
-                    return false;
-                }
-                else {
-                    // Handle null scattering along ray path
-                    return true;
-                }
-            });
+                        CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+                        // Sample medium scattering event type and update path
+                        Float um = rng.Uniform<Float>();
+                        int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
 
-        if (!optPoint)
-            return SampledSpectrum(0);
+                        if (mode == 0) {
+                            // Handle absorption along ray path
+                            terminated = true;
+                            return false;
+                        }
+                        if (mode == 1) {
+                            // Handle scattering along ray path
+                            if (++depth > maxDepth) {
+                                terminated = true;
+                                return false;
+                            }
 
-        Point3f p = optPoint.value();
-        Float searchPoint[3] = {p.x, p.y, p.z};
+                            MediumInteraction interaction(p, -ray.d, ray.time, ray.medium, mp.phase);
+                            if (depth == 1)
+                                L += SampleDirectLight(interaction, lambda, sampler);
 
-        std::vector<ResultItem<int, Float>> searchRes;
-        searchTree->radiusSearch(searchPoint, 0.005, searchRes);
+                            // L += ConnectToGraph(worldFromRender(p), sampler);
 
-        if (Options->graphDebug)
-            return SampledSpectrum(searchRes.empty() ? 0 : 1);
+                            // Sample new direction at real-scattering event
+                            Point2f u = sampler.Get2D();
+                            PhaseFunctionSample ps = mp.phase.Sample_p(-ray.d, u).value();
 
-        if (searchRes.empty())
-            return SampledSpectrum(0);
+                            ray.o = p;
+                            ray.d = ps.wi;
 
-        auto index = static_cast<int>(sampler.Get1D() * static_cast<float>(searchRes.size()));
+                            scattered = true;
+                            return false;
+                        }
+                        else {
+                            // Handle null scattering along ray path
+                            return true;
+                        }
+                    });
 
-        float scalar = freeGraph->GetVertexConst(searchRes[index].first)->get().data.lightScalar;
-        return lightSpectrum.Sample(lambda) * scalar * Inv4Pi;
+                if (terminated)
+                    return spectrum * L;
+                if (scattered)
+                    continue;
+            }
+
+            if (!shapeIntersection)
+                break;
+
+            shapeIntersection->intr.SkipIntersection(&ray, shapeIntersection->tHit);
+        }
+
+        return spectrum * L;
     }
 
-    ErrorExit("Not possible");
+    ErrorExit("free graph or uniform graph should be non null");
 }
 
-SampledSpectrum GraphIntegrator::SampleLd(const Interaction& intr, const BSDF* bsdf,
-                                            SampledWavelengths& lambda, Sampler sampler,
-                                            SampledSpectrum beta,
-                                            SampledSpectrum r_p) const {
-    return SampledSpectrum(0);
-}
+float GraphIntegrator::ConnectToGraph(Point3f point, Sampler sampler) const {
+    Float searchPoint[3] = {point.x, point.y, point.z};
 
-std::string GraphIntegrator::ToString() const {
-    return StringPrintf(
-            "[ GraphIntegrator maxDepth: %d lightSampler: %s regularize: %s ]", maxDepth,
-            lightSampler, regularize);
+    std::vector<ResultItem<int, Float>> searchRes;
+    searchTree->radiusSearch(searchPoint, 0.005, searchRes);
+
+    if (Options->graphDebug)
+        return searchRes.empty() ? 0 : 1;
+
+    if (searchRes.empty())
+        return 0;
+
+    auto index = static_cast<int>(sampler.Get1D() * static_cast<float>(searchRes.size()));
+
+    float scalar = freeGraph->GetVertexConst(searchRes[index].first)->get().data.lightScalar;
+    return scalar * Inv4Pi;
 }
 
 std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
@@ -477,12 +505,69 @@ std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
         Primitive aggregate, std::vector<Light> lights)
 {
     int maxDepth = parameters.GetOneInt("maxdepth", 5);
-    std::string lightStrategy = parameters.GetOneString("lightsampler", "bvh");
-    bool regularize = parameters.GetOneBool("regularize", false);
 
     return std::make_unique<GraphIntegrator>(
-            maxDepth, std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights),
-            lightStrategy, regularize);
+        maxDepth, std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));
+}
+
+float GraphIntegrator::SampleDirectLight(const MediumInteraction &interaction, const SampledWavelengths& lambda, Sampler sampler) const {
+    // Estimate light-sampled direct illumination at _interaction_
+
+    // Sample a point on the light source
+    LightSampleContext ctx(interaction);
+    LightLiSample ls = light->SampleLi(ctx, sampler.Get2D(), lambda, true).value();
+
+    // Evaluate phase function for light sample direction
+    Vector3f wo = interaction.wo, wi = ls.wi;
+    PhaseFunction phase = interaction.phase;
+    float f_hat = phase.p(wo, wi);
+
+    // Declare path state variables for ray to light source
+    Ray lightRay = interaction.SpawnRayTo(ls.pLight);
+    float T_ray(1.f), r_u(1.f);
+    RNG rng(Hash(lightRay.o), Hash(lightRay.d));
+
+    while (lightRay.d != Vector3f(0, 0, 0)) {
+        // Trace ray through media to estimate transmittance
+        pstd::optional<ShapeIntersection> si = Intersect(lightRay, 1 - ShadowEpsilon);
+
+        // Update transmittance for current ray segment
+        if (lightRay.medium) {
+            Float tMax = si ? si->tHit : (1 - ShadowEpsilon);
+            Float u = rng.Uniform<Float>();
+            SampleT_maj(lightRay, tMax, u, rng, lambda,
+                [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+                    // Update ray transmittance estimate at sampled point
+                    // Update _T_ray_ and PDFs using ratio-tracking estimator
+                    SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
+                    T_ray *= T_maj[0] * sigma_n[0];
+                    r_u *= T_maj[0] * sigma_n[0];
+
+                    // Possibly terminate transmittance computation using Russian roulette
+                    float Tr = T_ray / ((1 + r_u) / 2);
+                    if (Tr < 0.05f) {
+                        Float q = 0.75f;
+                        if (rng.Uniform<Float>() < q)
+                            T_ray = 0;
+                        else
+                            T_ray /= 1 - q;
+                    }
+
+                    if (T_ray == 0)
+                        return false;
+                    return true;
+                });
+        }
+
+        // Generate next ray segment or return final transmittance
+        if (T_ray == 0)
+            return 0;
+        if (!si)
+            break;
+        lightRay = si->intr.SpawnRayTo(ls.pLight);
+    }
+    // Return path contribution function estimate for direct lighting
+    return f_hat * T_ray;
 }
 
 }
