@@ -109,7 +109,7 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
 
     FreeGraph graph;
 
-    int workNeeded = static_cast<int>(std::pow(numStepsInDimension, 2));
+    int workNeeded = Sqr(numStepsInDimension);
     ProgressReporter progress(workNeeded, "Tracing light paths", false);
 
     for (int x = 1; x <= numStepsInDimension; ++x) {
@@ -139,11 +139,10 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
         int toId = pair.second.to;
         Point3f fromPoint = graph.GetVertex(fromId)->get().point;
         Point3f toPoint = graph.GetVertex(toId)->get().point;
-        MediumInteraction p0(fromPoint, Vector3f(), 0, mediumData.medium, nullptr);
-        MediumInteraction p1(toPoint, Vector3f(), 0, mediumData.medium, nullptr);
+        MediumInteraction fromInteraction(fromPoint, Vector3f(), 0, mediumData.medium, nullptr);
 
         for (int i = 0; i < edgeIterations; ++i) {
-            float Tr = Transmittance(p0, p1, mediumData.defaultLambda);
+            float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda);
             graph.AddEdge(fromId, toId, EdgeData{Tr, -1, 1});
             progress.Update();
         }

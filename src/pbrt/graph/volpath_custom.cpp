@@ -18,8 +18,6 @@ STAT_COUNTER("Integrator/Surface interactions", surfaceInteractions)
 STAT_PERCENT("Integrator/Regularized BSDFs", regularizedBSDFs, totalBSDFs)
 STAT_COUNTER("Integrator/Camera rays traced", nCameraRays)
 
-int counter = 0;
-
 // FreeGraph pathGraph;
 // FreeGraph surfaceGraph;
 //
@@ -59,8 +57,7 @@ void VolPathCustomIntegrator::Render() {
         Sampler tileSampler = samplerPrototype.Clone(Allocator());
         tileSampler.StartPixelSample(pPixel, sampleIndex);
 
-        FreeGraph tempGraph;
-        EvaluatePixelSample(pPixel, sampleIndex, tileSampler, scratchBuffer, tempGraph);
+        EvaluatePixelSample(pPixel, sampleIndex, tileSampler, scratchBuffer);
 
         return;
     }
@@ -142,59 +139,62 @@ void VolPathCustomIntegrator::Render() {
 
     // Render image in waves
     while (waveStart < spp) {
-        // Render current wave's image in series
-        for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
-            for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
-                Point2i pPixel(x, y);
-                ScratchBuffer& scratchBuffer = scratchBuffers.Get();
-                Sampler& sampler = samplers.Get();
+        if (Options->graphDisableMT) {
+            // Render current wave's image in series
+            for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
+                for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
+                    Point2i pPixel(x, y);
+                    ScratchBuffer& scratchBuffer = scratchBuffers.Get();
+                    Sampler& sampler = samplers.Get();
+                    PBRT_DBG("Starting image tile (%d,%d)-(%d,%d) waveStart %d, waveEnd %d\n",
+                             tileBounds.pMin.x, tileBounds.pMin.y, tileBounds.pMax.x,
+                             tileBounds.pMax.y, waveStart, waveEnd);
+
+                    StatsReportPixelStart(pPixel);
+                    threadPixel = pPixel;
+                    // Render samples in pixel _pPixel_
+                    for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
+                        threadSampleIndex = sampleIndex;
+                        sampler.StartPixelSample(pPixel, sampleIndex);
+                        EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
+                        scratchBuffer.Reset();
+                        progress.Update(1);
+                    }
+
+                    StatsReportPixelEnd(pPixel);
+
+                    PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
+                             tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
+                }
+            }
+        }
+        else {
+            // Render current wave's image tiles in parallel
+            ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
+                // Render image tile given by _tileBounds_
+                ScratchBuffer &scratchBuffer = scratchBuffers.Get();
+                Sampler &sampler = samplers.Get();
                 PBRT_DBG("Starting image tile (%d,%d)-(%d,%d) waveStart %d, waveEnd %d\n",
                          tileBounds.pMin.x, tileBounds.pMin.y, tileBounds.pMax.x,
                          tileBounds.pMax.y, waveStart, waveEnd);
+                for (Point2i pPixel : tileBounds) {
+                    StatsReportPixelStart(pPixel);
+                    threadPixel = pPixel;
+                    // Render samples in pixel _pPixel_
+                    for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
+                        threadSampleIndex = sampleIndex;
+                        sampler.StartPixelSample(pPixel, sampleIndex);
+                        EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
+                        scratchBuffer.Reset();
+                    }
 
-                StatsReportPixelStart(pPixel);
-                threadPixel = pPixel;
-                // Render samples in pixel _pPixel_
-                for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
-                    threadSampleIndex = sampleIndex;
-                    sampler.StartPixelSample(pPixel, sampleIndex);
-                    EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer, surfaceGraph);
-                    scratchBuffer.Reset();
-                    progress.Update(1);
+                    StatsReportPixelEnd(pPixel);
                 }
-
-                StatsReportPixelEnd(pPixel);
-
                 PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
                          tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
-            }
+                progress.Update((waveEnd - waveStart) * tileBounds.Area());
+            });
         }
-
-        // // Render current wave's image tiles in parallel
-        // ParallelFor2D(pixelBounds, [&](Bounds2i tileBounds) {
-        //     // Render image tile given by _tileBounds_
-        //     ScratchBuffer &scratchBuffer = scratchBuffers.Get();
-        //     Sampler &sampler = samplers.Get();
-        //     PBRT_DBG("Starting image tile (%d,%d)-(%d,%d) waveStart %d, waveEnd %d\n",
-        //              tileBounds.pMin.x, tileBounds.pMin.y, tileBounds.pMax.x,
-        //              tileBounds.pMax.y, waveStart, waveEnd);
-        //     for (Point2i pPixel : tileBounds) {
-        //         StatsReportPixelStart(pPixel);
-        //         threadPixel = pPixel;
-        //         // Render samples in pixel _pPixel_
-        //         for (int sampleIndex = waveStart; sampleIndex < waveEnd; ++sampleIndex) {
-        //             threadSampleIndex = sampleIndex;
-        //             sampler.StartPixelSample(pPixel, sampleIndex);
-        //             EvaluatePixelSample(pPixel, sampleIndex, sampler, scratchBuffer);
-        //             scratchBuffer.Reset();
-        //         }
-        //
-        //         StatsReportPixelEnd(pPixel);
-        //     }
-        //     PBRT_DBG("Finished image tile (%d,%d)-(%d,%d)\n", tileBounds.pMin.x,
-        //              tileBounds.pMin.y, tileBounds.pMax.x, tileBounds.pMax.y);
-        //     progress.Update((waveEnd - waveStart) * tileBounds.Area());
-        // });
 
         // Update start and end wave
         waveStart = waveEnd;
@@ -227,8 +227,6 @@ void VolPathCustomIntegrator::Render() {
         }
     }
 
-    std::cout << counter << std::endl;
-
     // surfaceGraph.WriteToDisk("camera_surface", "surface");
 
     // Set the first edge of each path to length 1-
@@ -251,7 +249,7 @@ void VolPathCustomIntegrator::Render() {
 }
 
 void VolPathCustomIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
-                                        ScratchBuffer &scratchBuffer, Graph& graph) {
+                                        ScratchBuffer &scratchBuffer) {
     // Sample wavelengths for the ray
     Float lu = sampler.Get1D();
     if (Options->disableWavelengthJitter)
@@ -284,8 +282,7 @@ void VolPathCustomIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleInde
         bool initializeVisibleSurface = camera.GetFilm().UsesVisibleSurface();
 
         L = cameraRay->weight * Li(cameraRay->ray, lambda, sampler, scratchBuffer,
-                                   initializeVisibleSurface ? &visibleSurface : nullptr,
-                                   graph);
+                                   initializeVisibleSurface ? &visibleSurface : nullptr);
 
         // Issue warning if unexpected radiance value is returned
         if (L.HasNaNs()) {
@@ -318,7 +315,7 @@ void VolPathCustomIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleInde
 
 SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWavelengths& lambda,
                                            Sampler sampler, ScratchBuffer& scratchBuffer,
-                                           VisibleSurface* visibleSurface, Graph& graph) const {
+                                           VisibleSurface* visibleSurface) const {
     // Declare state variables for volumetric path sampling
     SampledSpectrum L(0.f), beta(1.f), r_u(1.f), r_l(1.f);
     bool specularBounce = false, anyNonSpecularBounces = false;
@@ -426,7 +423,8 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
                             MediumInteraction intr(p, -ray.d, ray.time, ray.medium,
                                                    mp.phase);
 
-                            L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
+                            if (depth == 2)
+                                L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
 
                             // Sample new direction at real-scattering event
                             Point2f u = sampler.Get2D();
@@ -457,8 +455,6 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
                             beta = SampledSpectrum(0.f);
                         r_u *= T_maj * sigma_n / pdf;
                         r_l *= T_maj * sigma_maj / pdf;
-                        if (!(beta && r_u))
-                            counter++;
                         return beta && r_u;
                     }
                 });

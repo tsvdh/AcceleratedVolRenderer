@@ -62,7 +62,7 @@ void main(int argc, char* argv[]) {
     //     graph::StreamFlags{false, false, false, true});
 
     graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
-    graph::FreeGraph graph = graphBuilder.TracePaths(100, 1);
+    graph::FreeGraph graph = graphBuilder.TracePaths(1000, 1);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler);
     lighting.ComputeFinalLight(0);

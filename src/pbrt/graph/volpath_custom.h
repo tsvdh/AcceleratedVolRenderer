@@ -24,18 +24,11 @@ public:
     void Render() override;
 
     void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
-                             ScratchBuffer &scratchBuffer, Graph& graph);
+                             ScratchBuffer &scratchBuffer);
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
-                       VisibleSurface *visibleSurface, Graph& graph) const;
-
-    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
-                       ScratchBuffer &scratchBuffer,
-                       VisibleSurface *visibleSurface) const override {
-        FreeGraph graph;
-        return Li(ray, lambda, sampler, scratchBuffer, visibleSurface, graph);
-    }
+                       VisibleSurface *visibleSurface) const;
 
     static std::unique_ptr<VolPathCustomIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,

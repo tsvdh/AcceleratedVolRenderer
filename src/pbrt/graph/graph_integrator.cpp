@@ -344,8 +344,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             if (minHit0 != Infinity) {
                 Point3f middle = worldRay((minHit0 + minHit1) / 2);
                 if (OptRefConst<Vertex> optVertex = uniformGraph->GetVertexConst(middle)) {
-                    float scalar = optVertex.value().get().data.lightScalar;
-                    return lightSpectrum.Sample(lambda) * scalar;
+                    float lightScalar = optVertex.value().get().data.lightScalar;
+                    return lightSpectrum.Sample(lambda) * lightScalar;
                 }
             }
 
@@ -392,8 +392,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             });
 
         if (optVertex) {
-            float scalar = optVertex.value().get().data.lightScalar;
-            return spectrum * scalar * Inv4Pi;
+            float lightScalar = optVertex.value().get().data.lightScalar;
+            return spectrum * lightScalar * Inv4Pi;
         }
 
         return SampledSpectrum(0);
@@ -402,6 +402,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
     if (freeGraph) {
         float L = 0;
         int depth = 0;
+        std::vector throughput{1.f};
+        std::vector<MediumInteraction> points;
 
         while (true) {
             pstd::optional<ShapeIntersection> shapeIntersection = Intersect(ray);
@@ -442,19 +444,28 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
                                 return false;
                             }
 
+                            // add new point i
                             MediumInteraction interaction(p, -ray.d, ray.time, ray.medium, mp.phase);
-                            if (depth == 1)
-                                L += SampleDirectLight(interaction, lambda, sampler);
+                            points.push_back(interaction);
 
-                            // L += ConnectToGraph(worldFromRender(p), sampler);
+                            // do calculations
+                            if (depth == 1) {
+                                L += 0; // SampleDirectLight(interaction, sampler);
+                            }
+                            if (depth > 1) {
+                                int lastPoint = static_cast<int>(points.size()) - 1;
+                                int lastThroughput = static_cast<int>(throughput.size()) - 1;
+                                L += throughput[lastThroughput - 1] * ConnectToGraph(points[lastPoint - 1], points[lastPoint]);
+                            }
 
-                            // Sample new direction at real-scattering event
+                            // add phase of segment i to i+1
                             Point2f u = sampler.Get2D();
                             PhaseFunctionSample ps = mp.phase.Sample_p(-ray.d, u).value();
+                            throughput.push_back(throughput.back() * ps.p);
 
+                            // set next segment
                             ray.o = p;
                             ray.d = ps.wi;
-
                             scattered = true;
                             return false;
                         }
@@ -464,8 +475,10 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
                         }
                     });
 
-                if (terminated)
+                if (terminated) {
+                    // std::cout << L << std::endl;
                     return spectrum * L;
+                }
                 if (scattered)
                     continue;
             }
@@ -476,28 +489,31 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             shapeIntersection->intr.SkipIntersection(&ray, shapeIntersection->tHit);
         }
 
+        // std::cout << L << std::endl;
         return spectrum * L;
     }
 
     ErrorExit("free graph or uniform graph should be non null");
 }
 
-float GraphIntegrator::ConnectToGraph(Point3f point, Sampler sampler) const {
-    Float searchPoint[3] = {point.x, point.y, point.z};
+float GraphIntegrator::ConnectToGraph(const MediumInteraction& connectInteraction, const MediumInteraction& searchInteraction) const {
+    Point3f searchPoint = searchInteraction.p();
+    searchPoint = worldFromRender(searchPoint);
+    Float searchPointArray[3] = {searchPoint.x, searchPoint.y, searchPoint.z};
 
-    std::vector<ResultItem<int, Float>> searchRes;
-    searchTree->radiusSearch(searchPoint, 0.005, searchRes);
+    int indexRes[1];
+    float distanceRes[1];
 
-    if (Options->graphDebug)
-        return searchRes.empty() ? 0 : 1;
+    searchTree->knnSearch(searchPointArray, 1, indexRes, distanceRes);
 
-    if (searchRes.empty())
-        return 0;
+    Vertex graphVertex = freeGraph->GetVertexConst(indexRes[0])->get();
+    Point3f closestPoint = renderFromWorld(graphVertex.point);
 
-    auto index = static_cast<int>(sampler.Get1D() * static_cast<float>(searchRes.size()));
+    float lightScalar = graphVertex.data.lightScalar;
 
-    float scalar = freeGraph->GetVertexConst(searchRes[index].first)->get().data.lightScalar;
-    return scalar * Inv4Pi;
+    float Tr = Transmittance(connectInteraction, closestPoint, defaultLambda);
+    float G = 1 / Sqr(Length(connectInteraction.p() - closestPoint));
+    return Inv4Pi * Tr * G * Inv4Pi * lightScalar;
 }
 
 std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
@@ -510,12 +526,12 @@ std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
         maxDepth, std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));
 }
 
-float GraphIntegrator::SampleDirectLight(const MediumInteraction &interaction, const SampledWavelengths& lambda, Sampler sampler) const {
+float GraphIntegrator::SampleDirectLight(const MediumInteraction &interaction, Sampler sampler) const {
     // Estimate light-sampled direct illumination at _interaction_
 
     // Sample a point on the light source
     LightSampleContext ctx(interaction);
-    LightLiSample ls = light->SampleLi(ctx, sampler.Get2D(), lambda, true).value();
+    LightLiSample ls = light->SampleLi(ctx, sampler.Get2D(), defaultLambda, true).value();
 
     // Evaluate phase function for light sample direction
     Vector3f wo = interaction.wo, wi = ls.wi;
@@ -535,7 +551,7 @@ float GraphIntegrator::SampleDirectLight(const MediumInteraction &interaction, c
         if (lightRay.medium) {
             Float tMax = si ? si->tHit : (1 - ShadowEpsilon);
             Float u = rng.Uniform<Float>();
-            SampleT_maj(lightRay, tMax, u, rng, lambda,
+            SampleT_maj(lightRay, tMax, u, rng, defaultLambda,
                 [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                     // Update ray transmittance estimate at sampled point
                     // Update _T_ray_ and PDFs using ratio-tracking estimator

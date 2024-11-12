@@ -43,6 +43,7 @@
 #include <pbrt/graph/volpath_custom.h>
 
 #include <algorithm>
+#include <iostream>
 
 #include "pbrt/graph/graph_integrator.h"
 
@@ -2134,6 +2135,9 @@ SampledSpectrum G(const Integrator &integrator, Sampler sampler, const Vertex &v
 Float MISWeight(const Integrator &integrator, Camera camera, Vertex *lightVertices,
                 Vertex *cameraVertices, Vertex &sampled, int s, int t,
                 LightSampler lightSampler) {
+    if (s == 2 && t == 2)
+        int bla = 1;
+
     if (s + t == 2)
         return 1;
     Float sumRi = 0;
@@ -2323,6 +2327,7 @@ SampledSpectrum BDPTIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
         }
     }
 
+    std::cout << L << std::endl;
     return L;
 }
 
@@ -2429,6 +2434,8 @@ SampledSpectrum ConnectBDPT(const Integrator &integrator, SampledWavelengths &la
                          .c_str());
             if (L)
                 L *= G(integrator, sampler, qs, pt, lambda);
+
+            // std::cout << L[0] << " ";
         }
     }
 

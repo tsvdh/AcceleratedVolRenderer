@@ -179,6 +179,8 @@ inline Bounds3i FitBounds(const Bounds3f& bounds, float spacing) {
 
 namespace graph {
 
+using namespace pbrt;
+
 enum Description {
     basic,
     surface,
@@ -204,9 +206,8 @@ inline std::string GetDescriptionName(Description desc) {
     return descriptionNames[desc];
 }
 
-using namespace pbrt;
-inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda) {
-    RNG rng(Hash(p0.p()), Hash(p1.p()));
+inline float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda) {
+    RNG rng(Hash(p0.p()), Hash(p1));
 
     Ray ray = p0.SpawnRayTo(p1);
     float Tr = 1;
@@ -228,6 +229,10 @@ inline float Transmittance(const MediumInteraction& p0, const MediumInteraction&
         });
 
     return Tr;
+}
+
+inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda) {
+    return Transmittance(p0, p1.p(), lambda);
 }
 
 }

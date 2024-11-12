@@ -26,7 +26,9 @@ public:
 
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
+        renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
+        defaultLambda = camera.GetFilm().SampleWavelengths(0);
     }
 
     void Render() override;
@@ -42,10 +44,9 @@ public:
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
             Primitive aggregate, std::vector<Light> lights);
 
-    [[nodiscard]] float SampleDirectLight(const MediumInteraction &interaction,
-                                          const SampledWavelengths& lambda, Sampler sampler) const;
+    [[nodiscard]] float SampleDirectLight(const MediumInteraction &interaction, Sampler sampler) const;
 
-    [[nodiscard]] float ConnectToGraph(Point3f point, Sampler sampler) const;
+    [[nodiscard]] float ConnectToGraph(const MediumInteraction& connectInteraction, const MediumInteraction& searchInteraction) const;
 
     [[nodiscard]] std::string ToString() const override { return "Graph Integrator"; }
 
@@ -53,7 +54,9 @@ private:
     int maxDepth;
     DistantLight* light;
     Transform worldFromRender;
+    Transform renderFromWorld;
     DenselySampledSpectrum lightSpectrum;
+    SampledWavelengths defaultLambda;
 
     std::optional<UniformGraph> uniformGraph;
     std::vector<Bounds3f> voxelBounds;

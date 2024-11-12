@@ -44,7 +44,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
 
     float L = 1;
     L /= static_cast<float>(initialLightingIterations)
-       * static_cast<float>(std::pow(lightRaysPerVoxelDist, 2))
+       * static_cast<float>(Sqr(lightRaysPerVoxelDist))
        * uniformGraph->GetSpacing();
 
     Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
