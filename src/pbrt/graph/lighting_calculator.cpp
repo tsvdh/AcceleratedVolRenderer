@@ -60,7 +60,7 @@ SparseMat LightingCalculator::GetGMatrix() const {
         const Vertex& to = vertices.at(edge.second.to);
 
         float T = edge.second.data.throughput;
-        double edgeLength = Sqr(Length(from.point - to.point));
+        double edgeLength = LengthSquared(from.point - to.point);
         auto G = static_cast<float>(1 / edgeLength);
 
         gEntries.emplace_back(to.id, from.id, T * G);
