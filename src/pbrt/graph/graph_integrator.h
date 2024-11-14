@@ -46,7 +46,7 @@ public:
 
     [[nodiscard]] float SampleDirectLight(const MediumInteraction &interaction, Sampler sampler) const;
 
-    [[nodiscard]] float ConnectToGraph(const MediumInteraction& connectInteraction, const MediumInteraction& searchInteraction) const;
+    [[nodiscard]] float ConnectToGraph(Point3f searchPoint) const;
 
     [[nodiscard]] std::string ToString() const override { return "Graph Integrator"; }
 

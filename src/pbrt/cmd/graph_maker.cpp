@@ -64,7 +64,7 @@ void main(int argc, char* argv[]) {
     graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
     graph::FreeGraph graph = graphBuilder.TracePaths(1000, 1);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler);
+    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, 300);
     lighting.ComputeFinalLight(0);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");

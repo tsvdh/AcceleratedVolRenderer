@@ -4,6 +4,7 @@
 #include <pbrt/cpu/primitive.h>
 #include <pbrt/util/vecmath.h>
 
+#include <iostream>
 #include <utility>
 
 #include "pbrt/media.h"
@@ -79,7 +80,7 @@ public:
     VerticesHolder() = default;
     explicit VerticesHolder(std::vector<std::pair<int, Point3f>> list) : verticesList(std::move(list)) {}
 
-    std::vector<std::pair<int, Point3f>> GetList() { return verticesList; }
+    [[nodiscard]] const std::vector<std::pair<int, Point3f>>& GetList() const { return verticesList; }
 
     [[nodiscard]] size_t kdtree_get_point_count() const { return verticesList.size(); }
 
@@ -206,8 +207,8 @@ inline std::string GetDescriptionName(Description desc) {
     return descriptionNames[desc];
 }
 
-inline float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda) {
-    RNG rng(Hash(p0.p()), Hash(p1));
+inline float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda, Sampler sampler) {
+    RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
 
     Ray ray = p0.SpawnRayTo(p1);
     float Tr = 1;
@@ -231,8 +232,8 @@ inline float Transmittance(const MediumInteraction& p0, Point3f p1, const Sample
     return Tr;
 }
 
-inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda) {
-    return Transmittance(p0, p1.p(), lambda);
+inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda, const Sampler& sampler) {
+    return Transmittance(p0, p1.p(), lambda, sampler);
 }
 
 }

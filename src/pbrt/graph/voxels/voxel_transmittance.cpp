@@ -89,7 +89,7 @@ void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f dir
             continue;
 
         if (curVertexId != -1) {
-            float Tr = Transmittance(curIntr, newIntr, mediumData.defaultLambda);
+            float Tr = Transmittance(curIntr, newIntr, mediumData.defaultLambda, sampler);
             grid.AddEdge(curVertexId, newVertexId, EdgeData{Tr, -1, 1});
         }
 
@@ -133,11 +133,11 @@ void VoxelTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereSt
                 std::vector<Point3f> spherePoints = util::GetSpherePoints(center, mediumData.maxDistToCenter * 2, sphereStepDegrees);
 
                 for (int i = 0; i < spherePoints.size(); ++i) {
-                    Vector3f dir = Normalize(center - spherePoints[i]);
                     sampler.StartPixelSample(Point2i(i, curSphere), 0);
+
+                    Vector3f dir = Normalize(center - spherePoints[i]);
                     TraceTransmittancePath(spherePoints[i], dir, grid);
                     progress.Update();
-
                 }
 
                 ++curSphere;

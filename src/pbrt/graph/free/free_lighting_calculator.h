@@ -5,13 +5,15 @@ namespace graph {
 
 class FreeLightingCalculator final : public LightingCalculator {
 public:
-    FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
+    FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
+        int initialLightingIterations);
     
 private:
     [[nodiscard]] SparseVec GetLightVector() override;
 
     FreeGraph* freeGraph;
     Vector3f lightDir;
+    int initialLightingIterations;
 };
 
 }

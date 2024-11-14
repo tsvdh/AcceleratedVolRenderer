@@ -142,7 +142,9 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
         MediumInteraction fromInteraction(fromPoint, Vector3f(), 0, mediumData.medium, nullptr);
 
         for (int i = 0; i < edgeIterations; ++i) {
-            float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda);
+            sampler.StartPixelSample(Point2i(pair.first, pair.first), i);
+
+            float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, sampler);
             graph.AddEdge(fromId, toId, EdgeData{Tr, -1, 1});
             progress.Update();
         }
