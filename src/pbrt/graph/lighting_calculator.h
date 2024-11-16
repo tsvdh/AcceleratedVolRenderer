@@ -14,10 +14,12 @@ class LightingCalculator {
 public:
     virtual ~LightingCalculator() = default;
 
-    LightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
+    LightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
+        int initialLightingIterations);
     void ComputeFinalLight(int transmittanceIterations);
 
 protected:
+    void CheckSequentialIds() const;
     [[nodiscard]] virtual SparseVec GetLightVector() = 0;
     [[nodiscard]] SparseMat GetTransmittanceMatrix() const;
     [[nodiscard]] virtual SparseMat GetGMatrix() const;
@@ -27,8 +29,10 @@ protected:
     Graph& graph;
     const util::MediumData& mediumData;
     DistantLight* light;
+    Vector3f lightDir;
     Sampler sampler;
     int numVertices;
+    int initialLightingIterations;
 };
 
 }

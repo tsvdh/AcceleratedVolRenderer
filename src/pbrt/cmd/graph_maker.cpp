@@ -62,9 +62,9 @@ void main(int argc, char* argv[]) {
     //     graph::StreamFlags{false, false, false, true});
 
     graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
-    graph::FreeGraph graph = graphBuilder.TracePaths(1000, 1);
+    graph::FreeGraph graph = graphBuilder.TracePaths(100, 2);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, 300);
+    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, 50);
     lighting.ComputeFinalLight(0);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");

@@ -11,32 +11,9 @@ namespace graph {
 
 VoxelLightingCalculator::VoxelLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
     int initialLightingIterations)
-        : LightingCalculator(graph, mediumData, light, std::move(sampler)), initialLightingIterations(initialLightingIterations) {
+        : LightingCalculator(graph, mediumData, light, std::move(sampler), initialLightingIterations) {
 
-    if (!HasSequentialIds())
-        ErrorExit("Grid must have sequential ids for mapping to matrices");
-
-    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
     uniformGraph = dynamic_cast<UniformGraph*>(&graph);
-
-    if (initialLightingIterations <= 0)
-        ErrorExit("Must have at least one initial lighting iteration");
-}
-
-
-bool VoxelLightingCalculator::HasSequentialIds() const {
-    int total = 0;
-    int max = 0;
-
-    for (auto& pair : graph.GetVerticesConst()) {
-        total += pair.first;
-        max = std::max(max, pair.first);
-    }
-
-    int oddInMiddle = max % 2 == 1 ? (max / 2 + 1) : 0;
-    int totalExpected = (max + 1) * (max / 2) + oddInMiddle;
-
-    return total == totalExpected;
 }
 
 SparseVec VoxelLightingCalculator::GetLightVector() {

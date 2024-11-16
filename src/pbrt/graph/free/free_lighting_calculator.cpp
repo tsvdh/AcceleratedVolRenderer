@@ -7,17 +7,22 @@ namespace graph {
 
 FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
         int initialLightingIterations)
-    : LightingCalculator(graph, mediumData, light, std::move(sampler)), initialLightingIterations(initialLightingIterations) {
+    : LightingCalculator(graph, mediumData, light, std::move(sampler), initialLightingIterations) {
 
-    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
     freeGraph = dynamic_cast<FreeGraph*>(&graph);
 }
 
 SparseVec FreeLightingCalculator::GetLightVector() {
-    std::unordered_map<int, float> lightMap;
-    lightMap.reserve(graph.GetPaths().size());
+    int numEntryVertices = 0;
+    for (auto& pair : graph.GetVertices()) {
+        if (pair.second.data.type && pair.second.data.type == entry)
+            ++numEntryVertices;
+    }
 
-    int workNeeded = static_cast<int>(graph.GetVertices().size()) * initialLightingIterations;
+    std::unordered_map<int, float> lightMap;
+    lightMap.reserve(numEntryVertices);
+
+    int workNeeded = numEntryVertices * initialLightingIterations;
     ProgressReporter progress(workNeeded, "Computing initial lighting", false);
 
     for (auto& pair : graph.GetVertices()) {

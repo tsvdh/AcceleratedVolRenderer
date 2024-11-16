@@ -12,8 +12,6 @@ private:
     [[nodiscard]] SparseVec GetLightVector() override;
 
     FreeGraph* freeGraph;
-    Vector3f lightDir;
-    int initialLightingIterations;
 };
 
 }

@@ -7,10 +7,33 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler)
-    : graph(graph), mediumData(mediumData), light(light), sampler(std::move(sampler)) {
+LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
+        int initialLightingIterations)
+    : graph(graph), mediumData(mediumData), light(light), sampler(std::move(sampler)), initialLightingIterations(initialLightingIterations) {
+
+    if (initialLightingIterations <= 0)
+        ErrorExit("Must have at least one initial lighting iteration");
+
+    CheckSequentialIds();
 
     numVertices = static_cast<int>(graph.GetVerticesConst().size());
+    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
+}
+
+void LightingCalculator::CheckSequentialIds() const {
+    int total = 0;
+    int max = 0;
+
+    for (auto& pair : graph.GetVerticesConst()) {
+        total += pair.first;
+        max = std::max(max, pair.first);
+    }
+
+    int oddInMiddle = max % 2 == 1 ? (max / 2 + 1) : 0;
+    int totalExpected = (max + 1) * (max / 2) + oddInMiddle;
+
+    if (total != totalExpected)
+        ErrorExit("Graph must have sequential vertex ids for mapping to matrices");
 }
 
 void LightingCalculator::ComputeFinalLight(int transmittanceIterations) {
@@ -60,8 +83,7 @@ SparseMat LightingCalculator::GetGMatrix() const {
         const Vertex& to = vertices.at(edge.second.to);
 
         float T = edge.second.data.throughput;
-        double edgeLength = LengthSquared(from.point - to.point);
-        auto G = static_cast<float>(1 / edgeLength);
+        float G = 1 / LengthSquared(from.point - to.point);
 
         gEntries.emplace_back(to.id, from.id, T * G);
     }

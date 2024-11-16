@@ -9,13 +9,10 @@ public:
         int initialLightingIterations);
 
 private:
-    [[nodiscard]] bool HasSequentialIds() const;
     [[nodiscard]] SparseVec GetLightVector() override;
     [[nodiscard]] SparseMat GetGMatrix() const override;
 
     UniformGraph* uniformGraph;
-    Vector3f lightDir;
-    int initialLightingIterations;
 };
 
 }

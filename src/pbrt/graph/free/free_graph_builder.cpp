@@ -12,11 +12,6 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLi
 }
 
 void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
-    auto optShapeIsect = mediumData.aggregate->Intersect(ray, Infinity);
-    if (!optShapeIsect)
-        return;
-    optShapeIsect->intr.SkipIntersection(&ray, optShapeIsect->tHit);
-
     int curId = -1;
     int depth = 0;
 
@@ -26,13 +21,13 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
         uint64_t hash1 = Hash(sampler.Get1D());
         RNG rng(hash0, hash1);
 
-        std::optional<MediumInteraction> optNewIntr;
+        std::optional<MediumInteraction> optNewInteraction;
 
-        pstd::optional<ShapeIntersection> optIsect = mediumData.aggregate->Intersect(ray, Infinity);
-        if (!optIsect)
+        pstd::optional<ShapeIntersection> optIntersection = mediumData.aggregate->Intersect(ray, Infinity);
+        if (!optIntersection)
             return;
 
-        float tMax = optIsect.value().tHit;
+        float tMax = optIntersection.value().tHit;
 
         // Sample new point on ray
         SampleT_maj(
@@ -57,7 +52,7 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
                 if (mode == 1) {
                     // Handle scattering along ray path
 
-                    optNewIntr = MediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
+                    optNewInteraction = MediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
                     return false;
                 }
                 else {
@@ -68,11 +63,11 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
 
         // Handle terminated, scattered, and unscattered medium rays
         // if no new interaction then path is done
-        if (!optNewIntr) {
+        if (!optNewInteraction) {
             return;
         }
 
-        Vertex& newVertex = graph.AddVertex(optNewIntr->p(), VertexData{});
+        Vertex& newVertex = graph.AddVertex(optNewInteraction->p(), VertexData{});
 
         if (curId == -1) {
             newVertex.data.type = entry;
@@ -83,7 +78,7 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
-        pstd::optional<PhaseFunctionSample> ps = optNewIntr->phase.Sample_p(-ray.d, u);
+        pstd::optional<PhaseFunctionSample> ps = optNewInteraction->phase.Sample_p(-ray.d, u);
 
         ray.o = newVertex.point;
         ray.d = ps->wi;
@@ -109,13 +104,28 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
 
     FreeGraph graph;
 
-    int workNeeded = Sqr(numStepsInDimension);
+    int workNeeded = 0;
+    for (int x = 1; x <= numStepsInDimension; ++x) {
+        for (int y = 1; y <= numStepsInDimension; ++y) {
+            Point3f newOrigin = origin + xVector * x + yVector * y;
+            RayDifferential ray(newOrigin, lightDir);
+
+            if (mediumData.aggregate->Intersect(ray, Infinity))
+                ++workNeeded;
+        }
+    }
+
     ProgressReporter progress(workNeeded, "Tracing light paths", false);
 
     for (int x = 1; x <= numStepsInDimension; ++x) {
         for (int y = 1; y <= numStepsInDimension; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
             RayDifferential ray(newOrigin, lightDir);
+
+            auto optShapeIntersection = mediumData.aggregate->Intersect(ray, Infinity);
+            if (!optShapeIntersection)
+                continue;
+            optShapeIntersection->intr.SkipIntersection(&ray, optShapeIntersection->tHit);
 
             sampler.StartPixelSample(Point2i(x, y), 0);
             TracePath(ray, graph, maxDepth);
