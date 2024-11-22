@@ -21,19 +21,18 @@ LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& med
 }
 
 void LightingCalculator::CheckSequentialIds() const {
-    int total = 0;
-    int max = 0;
+    std::vector<int> ids;
+    ids.reserve(graph.GetVertices().size());
 
-    for (auto& pair : graph.GetVerticesConst()) {
-        total += pair.first;
-        max = std::max(max, pair.first);
+    for (auto& [id, _] : graph.GetVerticesConst())
+        ids.push_back(id);
+
+    std::sort(ids.begin(), ids.end(), [](int a, int b) { return a < b; });
+
+    for (int i = 0; i < ids.size(); ++i) {
+        if (ids[i] != i)
+            ErrorExit("Graph must have sequential vertex ids for mapping to matrices");
     }
-
-    int oddInMiddle = max % 2 == 1 ? (max / 2 + 1) : 0;
-    int totalExpected = (max + 1) * (max / 2) + oddInMiddle;
-
-    if (total != totalExpected)
-        ErrorExit("Graph must have sequential vertex ids for mapping to matrices");
 }
 
 void LightingCalculator::ComputeFinalLight(int transmittanceIterations) {

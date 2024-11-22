@@ -61,7 +61,7 @@
 #include <vector>
 
 /** Library version: 0xMmP (M=Major,m=minor,P=patch) */
-#define NANOFLANN_VERSION 0x155
+#define NANOFLANN_VERSION 0x162
 
 // Avoid conflicting declaration of min/max macros in Windows headers
 #if !defined(NOMINMAX) && \
@@ -156,7 +156,6 @@ inline typename std::enable_if<!has_assign<Container>::value, void>::type
 {
     for (size_t i = 0; i < nElements; i++) c[i] = value;
 }
-
 
 /** operator "<" for std::sort() */
 struct IndexDist_Sorter
@@ -1136,6 +1135,8 @@ class KDTreeBaseClass
     NodePtr divideTree(
         Derived& obj, const Offset left, const Offset right, BoundingBox& bbox)
     {
+        assert(left < obj.dataset_.kdtree_get_point_count());
+
         NodePtr node = obj.pool_.template allocate<Node>();  // allocate memory
         const auto dims = (DIM > 0 ? DIM : obj.dim_);
 
@@ -1307,7 +1308,7 @@ class KDTreeBaseClass
         for (Dimension i = 0; i < dims; ++i)
         {
             ElementType span = bbox[i].high - bbox[i].low;
-            if (span > (1 - EPS) * max_span)
+            if (span >= (1 - EPS) * max_span)
             {
                 ElementType min_elem_, max_elem_;
                 computeMinMax(obj, ind, count, i, min_elem_, max_elem_);
@@ -1807,7 +1808,8 @@ class KDTreeSingleIndexAdaptor
         // Create a permutable array of indices to the input vectors.
         Base::size_ = dataset_.kdtree_get_point_count();
         if (Base::vAcc_.size() != Base::size_) Base::vAcc_.resize(Base::size_);
-        for (Size i = 0; i < Base::size_; i++) Base::vAcc_[i] = i;
+        for (IndexType i = 0; i < static_cast<IndexType>(Base::size_); i++)
+            Base::vAcc_[i] = i;
     }
 
     void computeBoundingBox(BoundingBox& bbox)
@@ -2620,7 +2622,7 @@ struct KDTreeEigenMatrixAdaptor
     explicit KDTreeEigenMatrixAdaptor(
         const Dimension                                 dimensionality,
         const std::reference_wrapper<const MatrixType>& mat,
-        const int                                       leaf_max_size = 10)
+        const int leaf_max_size = 10, const unsigned int n_thread_build = 1)
         : m_data_matrix(mat)
     {
         const auto dims = row_major ? mat.get().cols() : mat.get().rows();
@@ -2634,7 +2636,9 @@ struct KDTreeEigenMatrixAdaptor
                 "argument");
         index_ = new index_t(
             dims, *this /* adaptor */,
-            nanoflann::KDTreeSingleIndexAdaptorParams(leaf_max_size));
+            nanoflann::KDTreeSingleIndexAdaptorParams(
+                leaf_max_size, nanoflann::KDTreeSingleIndexAdaptorFlags::None,
+                n_thread_build));
     }
 
    public:
