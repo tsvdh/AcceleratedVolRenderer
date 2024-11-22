@@ -87,7 +87,7 @@ void GraphIntegrator::Render() {
     if (freeGraph) {
         std::cout << "Building kd-tree... ";
         vHolder = freeGraph->GetVerticesList();
-        searchTree = std::make_unique<TreeType>(3, vHolder);
+        searchTree = std::make_unique<StaticTreeType>(3, vHolder);
         std::cout << "done" << std::endl;
     }
 
@@ -470,13 +470,13 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
     searchPoint = worldFromRender(searchPoint);
     Float searchPointArray[3] = {searchPoint.x, searchPoint.y, searchPoint.z};
 
-    std::vector<ResultItem<int, float>> resultItems;
+    std::vector<nanoflann::ResultItem<int, float>> resultItems;
 
-    searchTree->radiusSearch(searchPointArray, 0.01, resultItems);
+    searchTree->radiusSearch(searchPointArray, searchRadius, resultItems);
 
     float resultScalar = 0;
     for (auto resultItem : resultItems) {
-        Vertex v = freeGraph->GetVertexConst(vHolder.GetList()[resultItem.first].first)->get();
+        const Vertex& v = freeGraph->GetVertexConst(vHolder.GetListConst()[resultItem.first].first)->get();
         resultScalar += v.data.lightScalar;
     }
     auto numItems = static_cast<float>(resultItems.size());
@@ -500,7 +500,7 @@ float GraphIntegrator::SampleDirectLight(const MediumInteraction &interaction, S
 
     // Sample a point on the light source
     LightSampleContext ctx(interaction);
-    LightLiSample ls = light->SampleLi(ctx, sampler.Get2D(), defaultLambda, true).value();
+    LightLiSample ls = light->SampleLi(ctx, sampler.Get2D(), mediumData.defaultLambda, true).value();
 
     // Evaluate phase function for light sample direction
     Vector3f wo = interaction.wo, wi = ls.wi;
@@ -520,7 +520,7 @@ float GraphIntegrator::SampleDirectLight(const MediumInteraction &interaction, S
         if (lightRay.medium) {
             Float tMax = si ? si->tHit : (1 - ShadowEpsilon);
             Float u = rng.Uniform<Float>();
-            SampleT_maj(lightRay, tMax, u, rng, defaultLambda,
+            SampleT_maj(lightRay, tMax, u, rng, mediumData.defaultLambda,
                 [&](Point3f p, const MediumProperties& mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
                     // Update ray transmittance estimate at sampled point
                     // Update _T_ray_ and PDFs using ratio-tracking estimator

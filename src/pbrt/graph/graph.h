@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "util.h"
+#include "deps/nanoflann.hpp"
 
 namespace graph {
 
@@ -21,6 +22,14 @@ using RefConst = std::reference_wrapper<const T>;
 template <typename T>
 using OptRefConst = std::optional<RefConst<T>>;
 
+using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
+    nanoflann::L2_Simple_Adaptor<Float, util::VerticesHolder>,
+    util::VerticesHolder, 3, int>;
+
+using DynamicTreeType = nanoflann::KDTreeSingleIndexDynamicAdaptor<
+    nanoflann::L2_Simple_Adaptor<Float, util::VerticesHolder>,
+    util::VerticesHolder, 3, int>;
+
 struct Vertex;
 struct VertexData;
 struct Edge;
@@ -28,7 +37,7 @@ struct EdgeData;
 struct Path;
 
 enum RayVertexType {
-    absorp,
+    absorb,
     scatter,
     null,
     entry,
@@ -46,6 +55,7 @@ struct Vertex {
     VertexData data;
     std::optional<Point3i> coors;
     std::unordered_map<int, int> inEdges, outEdges; // other vertex ID, edge id
+    std::unordered_map<int, int> paths; // path ID, index in path
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
@@ -65,7 +75,6 @@ struct Edge {
     int from;       // vertex id
     int to;         // vertex id
     EdgeData data;
-    std::unordered_map<int, int> paths; // path ID, index in path
 
     bool operator==(const Edge& other) const {
         return id == other.id;
@@ -74,10 +83,14 @@ struct Edge {
 
 struct Path {
     int id = -1;
-    std::vector<int> edges; // edge id
+    std::vector<int> vertices; // vertex id
 
     bool operator==(const Path& other) const {
         return id == other.id;
+    }
+
+    [[nodiscard]] int Length() const {
+        return static_cast<int>(vertices.size());
     }
 };
 
@@ -122,7 +135,7 @@ public:
     Path& AddPath(int id);
     bool RemovePath(int id);
 
-    bool AddEdgeToPath(int edgeId, int pathId);
+    bool AddVertexToPath(int vertexId, int pathId);
 
     void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags);
     void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
@@ -130,6 +143,9 @@ public:
     [[nodiscard]] util::VerticesHolder GetVerticesList() const;
     [[nodiscard]] util::VerticesHolder GetPathEndsList() const;
 
+    [[nodiscard]] int GetCurVertexId() const { return curVertexId; }
+    [[nodiscard]] int GetCurEdgeId() const { return curEdgeId; }
+    [[nodiscard]] int GetCurPathId() const { return curPathId; }
     [[nodiscard]] int GetGraphId() const { return graphId; }
 
 protected:
@@ -142,7 +158,9 @@ protected:
     std::unordered_map<int, Vertex> vertices; // ID, object
     std::unordered_map<int, Edge> edges;      // ID, object
     std::unordered_map<int, Path> paths;      // ID, object
-    int curId = 0;
+    int curVertexId = 0;
+    int curEdgeId = 0;
+    int curPathId = 0;
     int graphId = ++curGraphId;
 };
 

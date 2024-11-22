@@ -1,5 +1,7 @@
 #include "free_graph_builder.h"
 
+#include <iostream>
+
 #include "pbrt/lights.h"
 #include "pbrt/media.h"
 #include "pbrt/util/progressreporter.h"
@@ -9,11 +11,13 @@ namespace graph {
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler)
         : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
+    searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
+    // searchRadius = GetSameSpotRadius(mediumData) / 10;
+    searchRadius = 0.000000001;
 }
 
-void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
-    int curId = -1;
-    int depth = 0;
+int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
+    Path& path = graph.AddPath();
 
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
@@ -25,7 +29,7 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
 
         pstd::optional<ShapeIntersection> optIntersection = mediumData.aggregate->Intersect(ray, Infinity);
         if (!optIntersection)
-            return;
+            return path.Length();
 
         float tMax = optIntersection.value().tHit;
 
@@ -64,17 +68,17 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
         // Handle terminated, scattered, and unscattered medium rays
         // if no new interaction then path is done
         if (!optNewInteraction) {
-            return;
+            return path.Length();
         }
 
         Vertex& newVertex = graph.AddVertex(optNewInteraction->p(), VertexData{});
+        graph.AddVertexToPath(newVertex.id, path.id);
+        vHolder.GetList().emplace_back(newVertex.id, newVertex.point);
 
-        if (curId == -1) {
-            newVertex.data.type = entry;
-        }
-        else {
-            graph.AddEdge(curId, newVertex.id, EdgeData{});
-        }
+        // terminate if max depth reached
+        int pathLength = path.Length();
+        if (pathLength == maxDepth)
+            return pathLength;
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
@@ -82,11 +86,6 @@ void FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int max
 
         ray.o = newVertex.point;
         ray.d = ps->wi;
-        curId = newVertex.id;
-
-        // Stop path sampling if maximum depth has been reached
-        if (++depth == maxDepth)
-            return;
     }
 }
 
@@ -102,7 +101,7 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
     xVector *= stepSize;
     yVector *= stepSize;
 
-    FreeGraph graph;
+    ProgressReporter workEstimateProgress(Sqr(numStepsInDimension), "Estimating work needed", false);
 
     int workNeeded = 0;
     for (int x = 1; x <= numStepsInDimension; ++x) {
@@ -112,10 +111,18 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
 
             if (mediumData.aggregate->Intersect(ray, Infinity))
                 ++workNeeded;
+
+            workEstimateProgress.Update();
         }
     }
+    workEstimateProgress.Done();
 
-    ProgressReporter progress(workNeeded, "Tracing light paths", false);
+    ProgressReporter tracingProgress(workNeeded, "Tracing light paths", false);
+
+    FreeGraph graph;
+    int batchSize = 100;
+    int startingId = 0;
+    int currentBatch = 0;
 
     for (int x = 1; x <= numStepsInDimension; ++x) {
         for (int y = 1; y <= numStepsInDimension; ++y) {
@@ -128,17 +135,133 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
             optShapeIntersection->intr.SkipIntersection(&ray, optShapeIntersection->tHit);
 
             sampler.StartPixelSample(Point2i(x, y), 0);
-            TracePath(ray, graph, maxDepth);
+            int newVertices = TracePath(ray, graph, maxDepth);
 
-            progress.Update();
+            currentBatch += newVertices;
+
+            if (currentBatch >= batchSize) {
+                AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+
+                startingId += currentBatch;
+                currentBatch = 0;
+            }
+
+            tracingProgress.Update();
         }
     }
-    progress.Done();
+    tracingProgress.Done();
+
+    OrderVertexIds(graph);
+    ProcessPaths(graph);
 
     return graph;
 }
 
-void FreeGraphBuilder::ConnectVertices(FreeGraph& graph) {}
+std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(Graph& graph, int vertexId) {
+    std::vector<nanoflann::ResultItem<int, float>> resultItems;
+    nanoflann::RadiusResultSet resultSet(searchRadius, resultItems);
+    Point3f& pointRef = graph.GetVertex(vertexId)->get().point;
+    float point[3] = { pointRef.x, pointRef.y, pointRef.z };
+
+    searchTree->findNeighbors(resultSet, point);
+    resultSet.sort();
+
+    return resultItems.size() <= 1 ? std::nullopt : std::make_optional(resultItems[1]);
+}
+
+void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
+    searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
+
+    for (int curId = startId; curId < endId; ++curId) {
+        std::optional<nanoflann::ResultItem<int, float>> resultItem = GetClosestInRadius(graph, curId);
+
+        if (resultItem.has_value()) {
+            Vertex& otherVertex = graph.GetVertex(resultItem->first)->get();
+            Vertex& curVertex = graph.GetVertex(curId)->get();
+
+            for (auto& [pathId, pathIndex] : curVertex.paths) {
+                otherVertex.paths[pathId] = pathIndex;
+                graph.GetPath(pathId)->get().vertices[pathIndex] = otherVertex.id;
+            }
+
+            curVertex.paths.clear();
+
+            graph.RemoveVertex(curId);
+            searchTree->removePoint(curId);
+        }
+    }
+}
+
+void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
+    auto GetLargestTakenId = [&](int currentLargestId) {
+        for (int i = currentLargestId; i >= 0; --i)
+            if (graph.GetVertex(i).has_value())
+                return i;
+
+        return -1;
+    };
+
+    std::cout << "Rearranging vertex ids... ";
+
+    int currentLargestId = GetLargestTakenId(graph.GetCurVertexId());
+
+    for (int curId = 0; curId < graph.GetCurVertexId(); ++curId) {
+        if (currentLargestId <= curId)
+            break;
+
+        OptRef<Vertex> optVertex = graph.GetVertex(curId);
+
+        if (!optVertex.has_value()) {
+            Vertex& vertexToMove = graph.GetVertex(currentLargestId)->get();
+            Vertex& newVertex = graph.AddVertex(curId, vertexToMove.point, VertexData{});
+
+            for (auto& [pathId, pathIndex] : vertexToMove.paths) {
+                newVertex.paths[pathId] = pathIndex;
+                graph.GetPath(pathId)->get().vertices[pathIndex] = curId;
+            }
+
+            vertexToMove.paths.clear();
+            graph.RemoveVertex(vertexToMove.id);
+
+            currentLargestId = GetLargestTakenId(currentLargestId);
+        }
+    }
+    std::cout << "done" << std::endl;
+}
+
+void FreeGraphBuilder::ProcessPaths(Graph& graph) {
+    // std::vector<int> ids;
+    // for (auto& pair : graph.GetVertices()) {
+    //     ids.push_back(pair.first);
+    // }
+    // std::sort(ids.begin(), ids.end(), [](int a, int b) { return a < b; });
+    // for (int i = 0; i < ids.size(); ++i) {
+    //     std::cout << i << " - " << ids[i];
+    //     if (ids[i] != i) {
+    //         std::cout << " is the culprit";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // ErrorExit("");
+
+    std::cout << "Adding edges... ";
+
+    for (auto& [_, path] : graph.GetPaths()) {
+        if (path.Length() > 0)
+            graph.GetVertex(path.vertices[0])->get().data.type = entry;
+
+        for (int i = 0; i < path.Length() - 1; ++i) {
+            auto outEdges = graph.GetVertex(path.vertices[i])->get().outEdges;
+
+            auto edgeResult = outEdges.find(path.vertices[i + 1]);
+            if (edgeResult == outEdges.end())
+                graph.AddEdge(path.vertices[i], path.vertices[i + 1], EdgeData{});
+        }
+    }
+    graph.GetPaths().clear();
+
+    std::cout << "done" << std::endl;
+}
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations) {
     int workNeeded = static_cast<int>(graph.GetEdges().size() * edgeIterations);

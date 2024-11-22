@@ -3,7 +3,7 @@ extra meta	string-name (float-spacing)
 
 flags 		string-useCoors string-useThroughput string-useRayVertexTypes               base class
                 string-useLighting
-base meta	int-curId,vertices,edges,paths
+base meta	int-curVertexId,curEdgeId,curPathId,vertices,edges,paths
 vertices	int-id float-x,y,z (int-x,y,z) (int type) (float-lighting)
 ...
 edges		int-id,from,to (float-throughput float-weightedThroughput int-numSamples)

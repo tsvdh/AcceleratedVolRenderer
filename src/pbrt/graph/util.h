@@ -4,7 +4,6 @@
 #include <pbrt/cpu/primitive.h>
 #include <pbrt/util/vecmath.h>
 
-#include <iostream>
 #include <utility>
 
 #include "pbrt/media.h"
@@ -43,7 +42,12 @@ struct MediumData {
     Point3f boundsCenter;
     float maxDistToCenter;
 
-    explicit MediumData(Primitive accel, const SampledWavelengths& defaultLambda) : defaultLambda(defaultLambda) {
+    MediumData() {
+        aggregate = nullptr;
+        maxDistToCenter = -1;
+    }
+
+    MediumData(Primitive accel, const SampledWavelengths& defaultLambda) : defaultLambda(defaultLambda) {
         if (!accel.Is<BVHAggregate>())
             ErrorExit("Accelerator primitive must be a 'BVHAggregate' type");
 
@@ -80,7 +84,8 @@ public:
     VerticesHolder() = default;
     explicit VerticesHolder(std::vector<std::pair<int, Point3f>> list) : verticesList(std::move(list)) {}
 
-    [[nodiscard]] const std::vector<std::pair<int, Point3f>>& GetList() const { return verticesList; }
+    [[nodiscard]] std::vector<std::pair<int, Point3f>>& GetList() { return verticesList; }
+    [[nodiscard]] const std::vector<std::pair<int, Point3f>>& GetListConst() const { return verticesList; }
 
     [[nodiscard]] size_t kdtree_get_point_count() const { return verticesList.size(); }
 
@@ -102,7 +107,7 @@ public:
     template <class BBOX> bool kdtree_get_bbox(BBOX& bb) const { return false; }
 
 private:
-    std::vector<std::pair<int, Point3f>> verticesList;
+    std::vector<std::pair<int, Point3f>> verticesList; // vertex id, point
 };
 
 inline DistantLight* GetLight(std::vector<Light>& lights) {
@@ -234,6 +239,10 @@ inline float Transmittance(const MediumInteraction& p0, Point3f p1, const Sample
 
 inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda, const Sampler& sampler) {
     return Transmittance(p0, p1.p(), lambda, sampler);
+}
+
+inline float GetSameSpotRadius(const util::MediumData& mediumData) {
+    return mediumData.maxDistToCenter * 2 / 700;
 }
 
 }

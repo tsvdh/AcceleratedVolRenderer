@@ -12,23 +12,24 @@ namespace graph {
 
 using namespace pbrt;
 
-using namespace nanoflann;
-using TreeType = KDTreeSingleIndexAdaptor<
-    L2_Simple_Adaptor<Float, util::VerticesHolder>,
+using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
+    nanoflann::L2_Simple_Adaptor<Float, util::VerticesHolder>,
     util::VerticesHolder, 3, int>;
 
 class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
     GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
-            : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
+        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
             maxDepth(maxDepth) {
 
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
-        defaultLambda = camera.GetFilm().SampleWavelengths(0);
+        mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
+        // searchRadius = Sqr(GetSameSpotRadius(mediumData)) * 10;
+        searchRadius = 0.01;
     }
 
     void Render() override;
@@ -56,14 +57,15 @@ private:
     Transform worldFromRender;
     Transform renderFromWorld;
     DenselySampledSpectrum lightSpectrum;
-    SampledWavelengths defaultLambda;
+    util::MediumData mediumData;
 
     std::optional<UniformGraph> uniformGraph;
     std::vector<Bounds3f> voxelBounds;
 
     std::optional<FreeGraph> freeGraph;
-    std::unique_ptr<TreeType> searchTree;
+    std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
+    float searchRadius;
 };
 
 }
