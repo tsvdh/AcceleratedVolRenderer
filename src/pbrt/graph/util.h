@@ -242,7 +242,7 @@ inline float Transmittance(const MediumInteraction& p0, const MediumInteraction&
 }
 
 inline float GetSameSpotRadius(const util::MediumData& mediumData) {
-    return mediumData.maxDistToCenter * 2 / 700;
+    return mediumData.maxDistToCenter * 2 / 1000;
 }
 
 }

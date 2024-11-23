@@ -846,6 +846,7 @@ set(GRAPH
         src/pbrt/graph/free/free_lighting_calculator.cpp
 
         src/pbrt/graph/deps/nanoflann.hpp
+        src/pbrt/graph/deps/json.hpp
 )
 
 source_group ("Graph files" FILES ${GRAPH})

@@ -12,8 +12,7 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLi
         : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
-    // searchRadius = GetSameSpotRadius(mediumData) / 10;
-    searchRadius = 0.000000001;
+    searchRadius = GetSameSpotRadius(mediumData) / 2;
 }
 
 int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {

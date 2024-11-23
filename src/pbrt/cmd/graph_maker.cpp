@@ -3,9 +3,11 @@
 #include <pbrt/graph/voxels/voxel_transmittance.h>
 #include <pbrt/util/args.h>
 
+#include <fstream>
 #include <regex>
 
 #include "pbrt/graph/lighting_calculator.h"
+#include "pbrt/graph/deps/json.hpp"
 #include "pbrt/graph/free/free_graph_builder.h"
 #include "pbrt/graph/free/free_lighting_calculator.h"
 #include "pbrt/graph/voxels/voxel_boundary.h"
@@ -43,6 +45,12 @@ void main(int argc, char* argv[]) {
 
     Sampler sampler = scene.GetSampler();
 
+    using json = nlohmann::json;
+
+    std::string configName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".json");
+    std::ifstream configStream(configName);
+    json config = json::parse(configStream);
+
     // graph::VoxelBoundary boundary(mediumData);
     //
     // graph::UniformGraph boundaryGraph;
@@ -62,10 +70,11 @@ void main(int argc, char* argv[]) {
     //     graph::StreamFlags{false, false, false, true});
 
     graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
-    graph::FreeGraph graph = graphBuilder.TracePaths(1000, 1);
+    graph::FreeGraph graph = graphBuilder.TracePaths(config["graphBuilder"]["dimensionSteps"],
+                                                     config["graphBuilder"]["maxDepth"]);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, 20);
-    lighting.ComputeFinalLight(0);
+    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, config["lightingCalculator"]["lightIterations"]);
+    lighting.ComputeFinalLight(config["lightingCalculator"]["transmittanceIterations"]);
 
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
     graph.WriteToDisk(fileName, graph::basic,
