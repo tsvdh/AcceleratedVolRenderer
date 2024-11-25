@@ -229,20 +229,6 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
 }
 
 void FreeGraphBuilder::ProcessPaths(Graph& graph) {
-    // std::vector<int> ids;
-    // for (auto& pair : graph.GetVertices()) {
-    //     ids.push_back(pair.first);
-    // }
-    // std::sort(ids.begin(), ids.end(), [](int a, int b) { return a < b; });
-    // for (int i = 0; i < ids.size(); ++i) {
-    //     std::cout << i << " - " << ids[i];
-    //     if (ids[i] != i) {
-    //         std::cout << " is the culprit";
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // ErrorExit("");
-
     std::cout << "Adding edges... ";
 
     for (auto& [_, path] : graph.GetPaths()) {
@@ -250,9 +236,15 @@ void FreeGraphBuilder::ProcessPaths(Graph& graph) {
             graph.GetVertex(path.vertices[0])->get().data.type = entry;
 
         for (int i = 0; i < path.Length() - 1; ++i) {
-            auto outEdges = graph.GetVertex(path.vertices[i])->get().outEdges;
+            int fromId = path.vertices[i];
+            int toId = path.vertices[i + 1];
 
-            auto edgeResult = outEdges.find(path.vertices[i + 1]);
+            if (fromId == toId)
+                continue;
+
+            auto outEdges = graph.GetVertex(fromId)->get().outEdges;
+            auto edgeResult = outEdges.find(toId);
+
             if (edgeResult == outEdges.end())
                 graph.AddEdge(path.vertices[i], path.vertices[i + 1], EdgeData{});
         }

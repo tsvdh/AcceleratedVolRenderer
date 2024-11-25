@@ -70,8 +70,8 @@ void main(int argc, char* argv[]) {
     //     graph::StreamFlags{false, false, false, true});
 
     graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
-    graph::FreeGraph graph = graphBuilder.TracePaths(config["graphBuilder"]["dimensionSteps"],
-                                                     config["graphBuilder"]["maxDepth"]);
+    graph::FreeGraph graph = graphBuilder.TracePaths(config["graphBuilder"]["dimensionSteps"], config["graphBuilder"]["maxDepth"]);
+    graphBuilder.ComputeTransmittance(graph, config["graphBuilder"]["edgeIterations"]);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, config["lightingCalculator"]["lightIterations"]);
     lighting.ComputeFinalLight(config["lightingCalculator"]["transmittanceIterations"]);

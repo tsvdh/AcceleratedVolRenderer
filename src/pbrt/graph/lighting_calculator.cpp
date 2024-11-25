@@ -70,28 +70,6 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
     return phaseMatrix;
 }
 
-SparseMat LightingCalculator::GetGMatrix() const {
-    auto& vertices = graph.GetVerticesConst();
-    auto& edges = graph.GetEdgesConst();
-
-    std::vector<Eigen::Triplet<float>> gEntries;
-    gEntries.reserve(edges.size());
-
-    for (auto& edge : edges) {
-        const Vertex& from = vertices.at(edge.second.from);
-        const Vertex& to = vertices.at(edge.second.to);
-
-        float T = edge.second.data.throughput;
-        float G = 1 / LengthSquared(from.point - to.point);
-
-        gEntries.emplace_back(to.id, from.id, T * G);
-    }
-
-    SparseMat gMatrix(numVertices, numVertices);
-    gMatrix.setFromTriplets(gEntries.begin(), gEntries.end());
-    return gMatrix;
-}
-
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
     return GetPhaseMatrix() * GetGMatrix();
 }

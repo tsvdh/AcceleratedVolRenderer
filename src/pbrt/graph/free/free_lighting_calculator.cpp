@@ -48,4 +48,37 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     return LightMapToVector(lightMap);
 }
 
+SparseMat FreeLightingCalculator::GetGMatrix() const {
+    auto& vertices = graph.GetVerticesConst();
+    auto& edges = graph.GetEdgesConst();
+
+    std::vector<Eigen::Triplet<float>> gEntries;
+    gEntries.reserve(edges.size());
+
+    // std::vector<float> gTerms;
+    // gTerms.reserve(edges.size());
+
+    for (auto& edge : edges) {
+        const Vertex& from = vertices.at(edge.second.from);
+        const Vertex& to = vertices.at(edge.second.to);
+
+        float T = edge.second.data.throughput;
+        // float G = std::min(1 / LengthSquared(from.point - to.point), 1.f);
+
+        // gTerms.push_back(G);
+
+        gEntries.emplace_back(to.id, from.id, T * 1);
+    }
+
+    // std::sort(gTerms.begin(), gTerms.end(), [](float a, float b) { return a < b; });
+    // for (float g : gTerms) {
+    //     std::cout << g << std::endl;
+    // }
+
+    SparseMat gMatrix(numVertices, numVertices);
+    gMatrix.setFromTriplets(gEntries.begin(), gEntries.end());
+    return gMatrix;
+}
+
+
 }
