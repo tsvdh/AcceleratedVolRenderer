@@ -23,6 +23,21 @@ std::istream& operator>>(std::istream& in, Point3<T>& p) {
     return in;
 }
 
+void Vertex::AddPathIndex(int pathId, int index) {
+    if (paths.find(pathId) == paths.end())
+        paths[pathId] = {};
+
+    paths[pathId].push_back(index);
+}
+
+void Vertex::AddPathIndices(int pathId, const std::vector<int>& indices) {
+    if (paths.find(pathId) == paths.end())
+        paths[pathId] = {};
+
+    for (int index : indices)
+        paths[pathId].push_back(index);
+}
+
 void EdgeData::AddSample(const EdgeData& sample) {
     throughput *= numSamples;
     weightedThroughput *= numSamples;
@@ -151,7 +166,7 @@ bool Graph::AddVertexToPath(int vertexId, int pathId) {
     path.vertices.push_back(vertex.id);
 
     int index = static_cast<int>(path.vertices.size() - 1);
-    vertex.paths.insert({path.id, index});
+    vertex.AddPathIndex(path.id, index);
 
     return true;
 }

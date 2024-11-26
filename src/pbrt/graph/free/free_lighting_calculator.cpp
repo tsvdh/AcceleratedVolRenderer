@@ -25,23 +25,30 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     int workNeeded = numEntryVertices * initialLightingIterations;
     ProgressReporter progress(workNeeded, "Computing initial lighting", false);
 
-    for (auto& pair : graph.GetVertices()) {
-        if (!pair.second.data.type || pair.second.data.type != entry)
+    for (auto& [id, vertex] : graph.GetVertices()) {
+        if (!vertex.data.type || vertex.data.type != entry)
             continue;
 
-        Point3f graphPoint = pair.second.point;
+        Point3f graphPoint = vertex.point;
         MediumInteraction interaction(graphPoint, Vector3f(), 0, mediumData.medium, nullptr);
 
         Ray rayToLight(graphPoint, -lightDir);
-        Point3f boundaryPoint = mediumData.aggregate->Intersect(rayToLight, Infinity).value().intr.p();
+        pstd::optional<ShapeIntersection> shapeIntersect = mediumData.aggregate->Intersect(rayToLight, Infinity);
+        if (!shapeIntersect) {
+            lightMap[id] = 1;
+            progress.Update(initialLightingIterations);
+            continue;
+        }
 
-        lightMap[pair.first] = 0;
+        Point3f boundaryPoint = shapeIntersect->intr.p();
+
+        lightMap[id] = 0;
         for (int i = 0; i < initialLightingIterations; ++i) {
-            sampler.StartPixelSample(Point2i(pair.first, pair.first), i);
-            lightMap[pair.first] += Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, sampler);
+            sampler.StartPixelSample(Point2i(id, id), i);
+            lightMap[id] += Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, sampler);
             progress.Update();
         }
-        lightMap[pair.first] /= static_cast<float>(initialLightingIterations);
+        lightMap[id] /= static_cast<float>(initialLightingIterations);
     }
     progress.Done();
 
@@ -55,30 +62,37 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
     std::vector<Eigen::Triplet<float>> gEntries;
     gEntries.reserve(edges.size());
 
-    // std::vector<float> gTerms;
-    // gTerms.reserve(edges.size());
-
     for (auto& edge : edges) {
         const Vertex& from = vertices.at(edge.second.from);
         const Vertex& to = vertices.at(edge.second.to);
 
         float T = edge.second.data.throughput;
-        // float G = std::min(1 / LengthSquared(from.point - to.point), 1.f);
+        float G = std::min(1 / LengthSquared(from.point - to.point), 1.f);
 
-        // gTerms.push_back(G);
-
-        gEntries.emplace_back(to.id, from.id, T * 1);
+        gEntries.emplace_back(to.id, from.id, T * G);
     }
-
-    // std::sort(gTerms.begin(), gTerms.end(), [](float a, float b) { return a < b; });
-    // for (float g : gTerms) {
-    //     std::cout << g << std::endl;
-    // }
 
     SparseMat gMatrix(numVertices, numVertices);
     gMatrix.setFromTriplets(gEntries.begin(), gEntries.end());
     return gMatrix;
 }
 
+SparseMat FreeLightingCalculator::GetTransmittanceMatrix() const {
+    std::vector<Eigen::Triplet<float>> weightEntries;
+    weightEntries.reserve(numVertices);
+
+    for (int i = 0; i < numVertices; ++i) {
+        int numEdges = static_cast<int>(graph.GetVertex(i)->get().inEdges.size());
+        float weight = 1 / static_cast<float>(numEdges);
+
+        if (numEdges > 0)
+            weightEntries.emplace_back(i, i, weight);
+    }
+
+    SparseMat weightMatrix(numVertices, numVertices);
+    weightMatrix.setFromTriplets(weightEntries.begin(), weightEntries.end());
+
+    return weightMatrix * LightingCalculator::GetTransmittanceMatrix();
+}
 
 }

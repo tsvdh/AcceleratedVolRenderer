@@ -76,6 +76,9 @@ void main(int argc, char* argv[]) {
     graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, config["lightingCalculator"]["lightIterations"]);
     lighting.ComputeFinalLight(config["lightingCalculator"]["transmittanceIterations"]);
 
+    // graph is in incorrect state after this
+    graph.GetEdges().clear();
+
     std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
     graph.WriteToDisk(fileName, graph::basic,
         graph::StreamFlags{false, false, false, true});

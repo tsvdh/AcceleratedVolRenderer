@@ -71,7 +71,7 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
 }
 
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
-    return GetPhaseMatrix() * GetGMatrix();
+    return GetGMatrix();
 }
 
 SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, float>& lightMap) const {

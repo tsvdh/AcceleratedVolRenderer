@@ -168,6 +168,18 @@ std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInR
     return resultItems.size() <= 1 ? std::nullopt : std::make_optional(resultItems[1]);
 }
 
+inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
+    for (auto& [pathId, pathIndices] : toMoveVertex.paths) {
+        targetVertex.AddPathIndices(pathId, pathIndices);
+
+        Path& path = graph.GetPath(pathId)->get();
+        for (auto pathIndex : pathIndices)
+            path.vertices[pathIndex] = targetVertex.id;
+    }
+
+    toMoveVertex.paths.clear();
+}
+
 void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
 
@@ -175,15 +187,10 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
         std::optional<nanoflann::ResultItem<int, float>> resultItem = GetClosestInRadius(graph, curId);
 
         if (resultItem.has_value()) {
-            Vertex& otherVertex = graph.GetVertex(resultItem->first)->get();
-            Vertex& curVertex = graph.GetVertex(curId)->get();
+            Vertex& vertexToMove = graph.GetVertex(curId)->get();
+            Vertex& targetVertex = graph.GetVertex(resultItem->first)->get();
 
-            for (auto& [pathId, pathIndex] : curVertex.paths) {
-                otherVertex.paths[pathId] = pathIndex;
-                graph.GetPath(pathId)->get().vertices[pathIndex] = otherVertex.id;
-            }
-
-            curVertex.paths.clear();
+            MovePathReferences(vertexToMove, targetVertex, graph);
 
             graph.RemoveVertex(curId);
             searchTree->removePoint(curId);
@@ -214,14 +221,9 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
             Vertex& vertexToMove = graph.GetVertex(currentLargestId)->get();
             Vertex& newVertex = graph.AddVertex(curId, vertexToMove.point, VertexData{});
 
-            for (auto& [pathId, pathIndex] : vertexToMove.paths) {
-                newVertex.paths[pathId] = pathIndex;
-                graph.GetPath(pathId)->get().vertices[pathIndex] = curId;
-            }
+            MovePathReferences(vertexToMove, newVertex, graph);
 
-            vertexToMove.paths.clear();
             graph.RemoveVertex(vertexToMove.id);
-
             currentLargestId = GetLargestTakenId(currentLargestId);
         }
     }

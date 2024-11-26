@@ -55,11 +55,14 @@ struct Vertex {
     VertexData data;
     std::optional<Point3i> coors;
     std::unordered_map<int, int> inEdges, outEdges; // other vertex ID, edge id
-    std::unordered_map<int, int> paths; // path ID, index in path
+    std::unordered_map<int, std::vector<int>> paths; // path ID, indices in path
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
     }
+
+    void AddPathIndex(int pathId, int index);
+    void AddPathIndices(int pathId, const std::vector<int>& indices);
 };
 
 struct EdgeData {

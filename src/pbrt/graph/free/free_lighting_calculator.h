@@ -9,8 +9,9 @@ public:
         int initialLightingIterations);
     
 private:
-    SparseMat GetGMatrix() const override;
+    [[nodiscard]] SparseMat GetGMatrix() const override;
     [[nodiscard]] SparseVec GetLightVector() override;
+    [[nodiscard]] SparseMat GetTransmittanceMatrix() const override;
 
     FreeGraph* freeGraph;
 };

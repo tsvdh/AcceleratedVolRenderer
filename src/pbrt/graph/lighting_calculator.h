@@ -21,7 +21,7 @@ public:
 protected:
     void CheckSequentialIds() const;
     [[nodiscard]] virtual SparseVec GetLightVector() = 0;
-    [[nodiscard]] SparseMat GetTransmittanceMatrix() const;
+    [[nodiscard]] virtual SparseMat GetTransmittanceMatrix() const;
     [[nodiscard]] virtual SparseMat GetGMatrix() const = 0;
     [[nodiscard]] SparseMat GetPhaseMatrix() const;
     [[nodiscard]] SparseVec LightMapToVector(const std::unordered_map<int, float>& lightMap) const;
