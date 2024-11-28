@@ -12,10 +12,11 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLi
         : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
-    searchRadius = GetSameSpotRadius(mediumData) / 2;
+    searchRadius = GetSameSpotRadius(mediumData) / 10;
 }
 
 int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
+    int numNewVertices = 0;
     Path& path = graph.AddPath();
 
     while (true) {
@@ -28,7 +29,7 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
 
         pstd::optional<ShapeIntersection> optIntersection = mediumData.aggregate->Intersect(ray, Infinity);
         if (!optIntersection)
-            return path.Length();
+            return numNewVertices;
 
         float tMax = optIntersection.value().tHit;
 
@@ -67,23 +68,34 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
         // Handle terminated, scattered, and unscattered medium rays
         // if no new interaction then path is done
         if (!optNewInteraction) {
-            return path.Length();
+            return numNewVertices;
         }
 
-        Vertex& newVertex = graph.AddVertex(optNewInteraction->p(), VertexData{});
-        graph.AddVertexToPath(newVertex.id, path.id);
-        vHolder.GetList().emplace_back(newVertex.id, newVertex.point);
+        Point3f newPoint = optNewInteraction->p();
+        // ReSharper disable once CppTooWideScope
+        std::optional<nanoflann::ResultItem<int, float>> optResult = GetClosestInRadius(newPoint);
+
+        if (optResult) {
+            Vertex& newVertex = graph.GetVertex(vHolder.GetList()[optResult->first].first)->get();
+            graph.AddVertexToPath(newVertex.id, path.id);
+        }
+        else {
+            Vertex& newVertex = graph.AddVertex(newPoint, VertexData{});
+            graph.AddVertexToPath(newVertex.id, path.id);
+
+            vHolder.GetList().emplace_back(newVertex.id, newVertex.point);
+            ++numNewVertices;
+        }
 
         // terminate if max depth reached
-        int pathLength = path.Length();
-        if (pathLength == maxDepth)
-            return pathLength;
+        if (path.Length() == maxDepth)
+            return numNewVertices;
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
         pstd::optional<PhaseFunctionSample> ps = optNewInteraction->phase.Sample_p(-ray.d, u);
 
-        ray.o = newVertex.point;
+        ray.o = newPoint;
         ray.d = ps->wi;
     }
 }
@@ -156,10 +168,9 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
     return graph;
 }
 
-std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(Graph& graph, int vertexId) {
+std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
     nanoflann::RadiusResultSet resultSet(searchRadius, resultItems);
-    Point3f& pointRef = graph.GetVertex(vertexId)->get().point;
     float point[3] = { pointRef.x, pointRef.y, pointRef.z };
 
     searchTree->findNeighbors(resultSet, point);
@@ -184,7 +195,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
 
     for (int curId = startId; curId < endId; ++curId) {
-        std::optional<nanoflann::ResultItem<int, float>> resultItem = GetClosestInRadius(graph, curId);
+        std::optional<nanoflann::ResultItem<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point);
 
         if (resultItem.has_value()) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();

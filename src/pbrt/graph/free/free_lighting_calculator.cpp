@@ -67,9 +67,9 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
         const Vertex& to = vertices.at(edge.second.to);
 
         float T = edge.second.data.throughput;
-        float G = std::min(1 / LengthSquared(from.point - to.point), 1.f);
+        // float G = std::max(std::min(1 / LengthSquared(from.point - to.point), 100.f), 1.f);
 
-        gEntries.emplace_back(to.id, from.id, T * G);
+        gEntries.emplace_back(to.id, from.id, T);
     }
 
     SparseMat gMatrix(numVertices, numVertices);

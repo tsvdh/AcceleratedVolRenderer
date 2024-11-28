@@ -16,7 +16,7 @@ public:
 
 private:
     int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth);
-    std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(Graph& graph, int vertexId);
+    std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef);
     void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId);
     static void OrderVertexIds(Graph& graph);
     static void ProcessPaths(Graph& graph);
