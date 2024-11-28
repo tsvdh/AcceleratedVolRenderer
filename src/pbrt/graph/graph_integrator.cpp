@@ -438,8 +438,35 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
                             return false;
                         }
                         if (mode == 1) {
-                            L += ConnectToGraph(p);
-                            terminated = true;
+                            // Handle scattering along ray path
+                            if (++depth > maxDepth) {
+                                terminated = true;
+                                return false;
+                            }
+
+                            // add new point i
+                            MediumInteraction interaction(p, -ray.d, ray.time, ray.medium, mp.phase);
+                            points.push_back(interaction);
+
+                            // do calculations
+                            if (depth == 1) {
+                                L += 0; // SampleDirectLight(interaction, sampler);
+                            }
+                            if (depth > 1) {
+                                int lastPoint = static_cast<int>(points.size()) - 1;
+                                int lastThroughput = static_cast<int>(throughput.size()) - 1;
+                                L += throughput[lastThroughput - 1] * ConnectToGraph(points[lastPoint - 1], points[lastPoint], sampler);
+                            }
+
+                            // add phase of segment i to i+1
+                            Point2f u = sampler.Get2D();
+                            PhaseFunctionSample ps = mp.phase.Sample_p(-ray.d, u).value();
+                            throughput.push_back(throughput.back() * ps.p);
+
+                            // set next segment
+                            ray.o = p;
+                            ray.d = ps.wi;
+                            scattered = true;
                             return false;
                         }
                         else {
@@ -452,6 +479,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
                     // std::cout << L << std::endl;
                     return spectrum * L;
                 }
+                if (scattered)
+                    continue;
             }
 
             if (!shapeIntersection)
@@ -460,29 +489,31 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
             shapeIntersection->intr.SkipIntersection(&ray, shapeIntersection->tHit);
         }
 
+        // std::cout << L << std::endl;
         return spectrum * L;
     }
 
     ErrorExit("free graph or uniform graph should be non null");
 }
 
-float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
+float GraphIntegrator::ConnectToGraph(const MediumInteraction& connectInteraction, const MediumInteraction& searchInteraction, Sampler sampler) const {
+    Point3f searchPoint = searchInteraction.p();
     searchPoint = worldFromRender(searchPoint);
     Float searchPointArray[3] = {searchPoint.x, searchPoint.y, searchPoint.z};
 
-    std::vector<ResultItem<int, float>> resultItems;
+    int indexRes[1];
+    float distanceRes[1];
 
-    searchTree->radiusSearch(searchPointArray, 0.01, resultItems);
+    searchTree->knnSearch(searchPointArray, 1, indexRes, distanceRes);
 
-    float resultScalar = 0;
-    for (auto resultItem : resultItems) {
-        Vertex v = freeGraph->GetVertexConst(vHolder.GetList()[resultItem.first].first)->get();
-        resultScalar += v.data.lightScalar;
-    }
-    auto numItems = static_cast<float>(resultItems.size());
-    resultScalar /= numItems > 0 ? numItems : 1;
+    Vertex graphVertex = freeGraph->GetVertexConst(indexRes[0])->get();
+    Point3f closestPoint = renderFromWorld(graphVertex.point);
 
-    return Inv4Pi * resultScalar;
+    float lightScalar = graphVertex.data.lightScalar;
+
+    float Tr = Transmittance(connectInteraction, closestPoint, defaultLambda, sampler);
+    float G = 1 / Sqr(Length(connectInteraction.p() - closestPoint));
+    return 1 * 1 * 1 * Inv4Pi * lightScalar;
 }
 
 std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
