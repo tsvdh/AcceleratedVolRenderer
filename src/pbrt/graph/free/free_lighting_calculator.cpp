@@ -1,5 +1,7 @@
 #include "free_lighting_calculator.h"
 
+#include <iostream>
+
 #include "pbrt/lights.h"
 #include "pbrt/util/progressreporter.h"
 
@@ -22,12 +24,23 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     std::unordered_map<int, float> lightMap;
     lightMap.reserve(numEntryVertices);
 
+    // allocate space for concurrent access
+    for (auto& pair : graph.GetVertices()) {
+        if (pair.second.data.type && pair.second.data.type == entry)
+            lightMap[pair.first] = 0;
+    }
+
+    ThreadLocal<Sampler> samplers([this]() { return sampler.Clone(); });
+
     int workNeeded = numEntryVertices * initialLightingIterations;
     ProgressReporter progress(workNeeded, "Computing initial lighting", false);
 
-    for (auto& [id, vertex] : graph.GetVertices()) {
+    int numVertices = static_cast<int>(graph.GetVertices().size());
+    ParallelFor(0, numVertices, [&](int vertexId) {
+        Vertex& vertex = graph.GetVertex(vertexId)->get();
+
         if (!vertex.data.type || vertex.data.type != entry)
-            continue;
+            return;
 
         Point3f graphPoint = vertex.point;
         MediumInteraction interaction(graphPoint, Vector3f(), 0, mediumData.medium, nullptr);
@@ -35,21 +48,22 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         Ray rayToLight(graphPoint, -lightDir);
         pstd::optional<ShapeIntersection> shapeIntersect = mediumData.aggregate->Intersect(rayToLight, Infinity);
         if (!shapeIntersect) {
-            lightMap[id] = 1;
+            lightMap[vertexId] = 1;
             progress.Update(initialLightingIterations);
-            continue;
+            return;
         }
 
+        Sampler& samplerClone = samplers.Get();
         Point3f boundaryPoint = shapeIntersect->intr.p();
 
-        lightMap[id] = 0;
+        lightMap[vertexId] = 0;
         for (int i = 0; i < initialLightingIterations; ++i) {
-            sampler.StartPixelSample(Point2i(id, id), i);
-            lightMap[id] += Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, sampler);
+            samplerClone.StartPixelSample(Point2i(vertexId, vertexId), i);
+            lightMap[vertexId] += Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, samplerClone);
             progress.Update();
         }
-        lightMap[id] /= static_cast<float>(initialLightingIterations);
-    }
+        lightMap[vertexId] /= static_cast<float>(initialLightingIterations);
+    });
     progress.Done();
 
     return LightMapToVector(lightMap);
@@ -69,7 +83,7 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
         float T = edge.second.data.throughput;
         // float G = std::max(std::min(1 / LengthSquared(from.point - to.point), 100.f), 1.f);
 
-        gEntries.emplace_back(to.id, from.id, T);
+        gEntries.emplace_back(to.id, from.id, 1);
     }
 
     SparseMat gMatrix(numVertices, numVertices);

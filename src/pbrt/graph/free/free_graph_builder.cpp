@@ -12,7 +12,7 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLi
         : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
-    searchRadius = GetSameSpotRadius(mediumData) / 10;
+    searchRadius = GetSameSpotRadius(mediumData) / 4;
 }
 
 int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
@@ -268,24 +268,29 @@ void FreeGraphBuilder::ProcessPaths(Graph& graph) {
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations) {
-    int workNeeded = static_cast<int>(graph.GetEdges().size() * edgeIterations);
+    ThreadLocal<Sampler> samplers([this]() { return sampler.Clone(); });
+
+    int numEdges = static_cast<int>(graph.GetEdges().size());
+    int workNeeded = numEdges * edgeIterations;
     ProgressReporter progress(workNeeded, "Computing edge transmittance", false);
 
-    for (auto& pair : graph.GetEdges()) {
-        int fromId = pair.second.from;
-        int toId = pair.second.to;
-        Point3f fromPoint = graph.GetVertex(fromId)->get().point;
-        Point3f toPoint = graph.GetVertex(toId)->get().point;
+    ParallelFor(0, numEdges, [&](int edgeId) {
+        Edge& edge = graph.GetEdge(edgeId)->get();
+
+        Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
+        Point3f toPoint = graph.GetVertex(edge.to)->get().point;
         MediumInteraction fromInteraction(fromPoint, Vector3f(), 0, mediumData.medium, nullptr);
 
-        for (int i = 0; i < edgeIterations; ++i) {
-            sampler.StartPixelSample(Point2i(pair.first, pair.first), i);
+        Sampler& samplerClone = samplers.Get();
 
-            float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, sampler);
-            graph.AddEdge(fromId, toId, EdgeData{Tr, -1, 1});
+        for (int i = 0; i < edgeIterations; ++i) {
+            samplerClone.StartPixelSample(Point2i(edgeId, edgeId), i);
+
+            float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, samplerClone);
+            graph.AddEdge(edge.from, edge.to, EdgeData{Tr, -1, 1});
             progress.Update();
         }
-    }
+    });
     progress.Done();
 }
 
