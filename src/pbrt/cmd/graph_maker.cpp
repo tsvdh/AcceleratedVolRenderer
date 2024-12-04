@@ -11,17 +11,34 @@
 #include "pbrt/graph/free/free_graph_builder.h"
 #include "pbrt/graph/free/free_lighting_calculator.h"
 #include "pbrt/graph/voxels/voxel_boundary.h"
-#include "pbrt/graph/voxels/voxel_lighting_calculator.h"
 
 using namespace pbrt;
 
 void main(int argc, char* argv[]) {
     std::vector<std::string> args = GetCommandLineArguments(argv);
 
+    std::string configName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".json");
+    std::ifstream configStream(configName);
+    nlohmann::json config = nlohmann::json::parse(configStream);
+
+    auto graphBuilderConfig = config["graphBuilder"];
+    auto lightingCalculatorConfig = config["lightingCalculator"];
+
+    int dimensionSteps = graphBuilderConfig["dimensionSteps"];
+    int maxDepth = graphBuilderConfig["maxDepth"];
+    int edgeIterations = graphBuilderConfig["edgeIterations"];
+    int lightIterations = lightingCalculatorConfig["lightIterations"];
+    int transmittanceIterations = lightingCalculatorConfig["transmittanceIterations"];
+
+    int maxSampleDimensionSize = std::sqrt(Sqr(dimensionSteps) * maxDepth);
+    int pixelSamples = RoundUpPow2(std::max(edgeIterations, lightIterations));
+
     PBRTOptions options;
     options.disablePixelJitter = true;
     options.disableWavelengthJitter = true;
     options.renderingSpace = RenderingCoordinateSystem::World;
+    options.pixelSamples = pixelSamples;
+    options.graphSamplingResolution = Point2i(maxSampleDimensionSize, maxSampleDimensionSize);
     InitPBRT(options);
 
     BasicScene scene;
@@ -45,36 +62,12 @@ void main(int argc, char* argv[]) {
 
     Sampler sampler = scene.GetSampler();
 
-    using json = nlohmann::json;
-
-    std::string configName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".json");
-    std::ifstream configStream(configName);
-    json config = json::parse(configStream);
-
-    // graph::VoxelBoundary boundary(mediumData);
-    //
-    // graph::UniformGraph boundaryGraph;
-    // // boundaryGraph = boundary.CaptureBoundary(100, 45);
-    // boundaryGraph = boundary.CaptureBoundary(0.5f, 45);
-    //
-    // graph::UniformGraph transmittanceGrid = boundary.FillInside(boundaryGraph);
-    //
-    // graph::VoxelTransmittance transmittance(boundaryGraph, mediumData, sampler);
-    // transmittance.CaptureTransmittance(transmittanceGrid, 2, 2);
-    //
-    // graph::VoxelLightingCalculator lighting(transmittanceGrid, mediumData, light, sampler, 1000);
-    // lighting.GetFinalLightGrid(100);
-    //
-    // std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
-    // transmittanceGrid.WriteToDisk(fileName, graph::grid_lighting,
-    //     graph::StreamFlags{false, false, false, true});
-
     graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
-    graph::FreeGraph graph = graphBuilder.TracePaths(config["graphBuilder"]["dimensionSteps"], config["graphBuilder"]["maxDepth"]);
-    graphBuilder.ComputeTransmittance(graph, config["graphBuilder"]["edgeIterations"]);
+    graph::FreeGraph graph = graphBuilder.TracePaths(dimensionSteps, maxDepth);
+    graphBuilder.ComputeTransmittance(graph, edgeIterations);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, config["lightingCalculator"]["lightIterations"]);
-    lighting.ComputeFinalLight(config["lightingCalculator"]["transmittanceIterations"]);
+    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, lightIterations);
+    lighting.ComputeFinalLight(transmittanceIterations);
 
     // graph is in incorrect state after this
     graph.GetEdges().clear();

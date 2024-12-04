@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "pbrt/lights.h"
+#include "pbrt/options.h"
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
@@ -36,6 +37,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     ProgressReporter progress(workNeeded, "Computing initial lighting", false);
 
     int numVertices = static_cast<int>(graph.GetVertices().size());
+    int resolutionDimensionSize = Options->graphSamplingResolution->x;
     ParallelFor(0, numVertices, [&](int vertexId) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
@@ -53,12 +55,15 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             return;
         }
 
+        int yCoor = vertexId / resolutionDimensionSize;
+        int xCoor = vertexId - yCoor * resolutionDimensionSize;
+
         Sampler& samplerClone = samplers.Get();
         Point3f boundaryPoint = shapeIntersect->intr.p();
 
         lightMap[vertexId] = 0;
         for (int i = 0; i < initialLightingIterations; ++i) {
-            samplerClone.StartPixelSample(Point2i(vertexId, vertexId), i);
+            samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
             lightMap[vertexId] += Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, samplerClone);
             progress.Update();
         }
@@ -83,7 +88,7 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
         float T = edge.second.data.throughput;
         // float G = std::max(std::min(1 / LengthSquared(from.point - to.point), 100.f), 1.f);
 
-        gEntries.emplace_back(to.id, from.id, 1);
+        gEntries.emplace_back(to.id, from.id, T);
     }
 
     SparseMat gMatrix(numVertices, numVertices);

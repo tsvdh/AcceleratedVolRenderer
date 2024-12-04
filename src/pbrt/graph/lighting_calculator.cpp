@@ -54,7 +54,7 @@ void LightingCalculator::ComputeFinalLight(int transmittanceIterations) {
 
     for (auto& pair : graph.GetVertices()) {
         Vertex& v = pair.second;
-        v.data.lightScalar = light.coeffRef(v.id);
+        v.data.lightScalar = light.coeff(v.id);
     }
 }
 

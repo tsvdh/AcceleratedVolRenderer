@@ -4,6 +4,7 @@
 
 #include "pbrt/lights.h"
 #include "pbrt/media.h"
+#include "pbrt/options.h"
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
@@ -274,6 +275,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
     int workNeeded = numEdges * edgeIterations;
     ProgressReporter progress(workNeeded, "Computing edge transmittance", false);
 
+    int resolutionDimensionSize = Options->graphSamplingResolution->x;
     ParallelFor(0, numEdges, [&](int edgeId) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 
@@ -283,8 +285,11 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
 
         Sampler& samplerClone = samplers.Get();
 
+        int yCoor = edgeId / resolutionDimensionSize;
+        int xCoor = edgeId - yCoor * resolutionDimensionSize;
+
         for (int i = 0; i < edgeIterations; ++i) {
-            samplerClone.StartPixelSample(Point2i(edgeId, edgeId), i);
+            samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
 
             float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, samplerClone);
             graph.AddEdge(edge.from, edge.to, EdgeData{Tr, -1, 1});

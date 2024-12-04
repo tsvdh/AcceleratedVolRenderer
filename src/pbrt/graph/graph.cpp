@@ -258,6 +258,9 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
         << edges.size() << SEP
         << paths.size() << NEW;
 
+    int totalWork = static_cast<int>(vertices.size() + edges.size() + paths.size());
+    ProgressReporter progress(totalWork, "Writing graph to stream", false);
+
     for (auto& [id, vertex] : vertices) {
         out << vertex.id << SEP << vertex.point;
 
@@ -267,12 +270,16 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
         WriteVertexData(out, vertex.data, flags);
 
         out << NEW;
+
+        progress.Update();
     }
 
     for (auto& [id, edge] : edges) {
         out << edge.id << SEP << edge.from << SEP << edge.to << SEP;
         WriteEdgeData(out, edge.data, flags);
         out << NEW;
+
+        progress.Update();
     }
 
     for (auto& [id, path] : paths) {
@@ -280,7 +287,11 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
         for (int vertexId : path.vertices)
             out << vertexId << SEP;
         out << NEW;
+
+        progress.Update();
     }
+
+    progress.Done();
 }
 
 void Graph::ReadFromStream(std::istream& in) {
@@ -297,13 +308,15 @@ void Graph::ReadFromStream(std::istream& in) {
     if (useLighting == "True")
         flags.useLighting = true;
 
-    int verticesCap, edgesCap, pathsCap;
-    in >> curVertexId >> curEdgeId >> curPathId >> verticesCap >> edgesCap >> pathsCap;
-    vertices.reserve(verticesCap);
-    edges.reserve(edgesCap);
-    paths.reserve(pathsCap);
+    int numVertices, numEdges, numPaths;
+    in >> curVertexId >> curEdgeId >> curPathId >> numVertices >> numEdges >> numPaths;
+    vertices.reserve(numVertices);
+    edges.reserve(numEdges);
+    paths.reserve(numPaths);
 
-    for (int i = 0; i < verticesCap; ++i) {
+    ProgressReporter progress(numVertices + numEdges + numPaths, "Reading graph from stream", false);
+
+    for (int i = 0; i < numVertices; ++i) {
         int id;
         Point3f point;
         in >> id >> point;
@@ -317,17 +330,21 @@ void Graph::ReadFromStream(std::istream& in) {
             in >> coors;
             vertex.coors = coors;
         }
+
+        progress.Update();
     }
 
-    for (int i = 0; i < edgesCap; ++i) {
+    for (int i = 0; i < numEdges; ++i) {
         int id, fromId, toId;
         in >> id >> fromId >> toId;
         EdgeData data = ReadEdgeData(in, flags);
 
         AddEdge(id, fromId, toId, data);
+
+        progress.Update();
     }
 
-    for (int i = 0; i < pathsCap; ++i) {
+    for (int i = 0; i < numPaths; ++i) {
         int id, pathLength;
         in >> id >> pathLength;
 
@@ -339,7 +356,11 @@ void Graph::ReadFromStream(std::istream& in) {
 
             AddVertexToPath(pathVertexId, path.id);
         }
+
+        progress.Update();
     }
+
+    progress.Done();
 }
 
 void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags) {

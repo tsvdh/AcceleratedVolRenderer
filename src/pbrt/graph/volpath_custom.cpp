@@ -323,33 +323,12 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
     Float etaScale = 1;
     LightSampleContext prevIntrContext;
 
-    // Init graph path variables
-    // Path* path = graph.AddPath();
-    // Vertex* curVertex = nullptr;
-    //
-    // auto AddNewVertex = [&](Point3f p) {
-    //     auto newVertex = graph.AddVertex(p);
-    //     if (curVertex) {
-    //         auto edge = graph.AddEdge(curVertex, newVertex, nullptr, false);
-    //         path->edges.push_back(edge.value());
-    //     }
-    //     curVertex = newVertex;
-    // };
-    //
-    // AddNewVertex(ray.o);
-
     while (true) {
         // Sample segment of volumetric scattering path
         PBRT_DBG("%s\n", StringPrintf("Path tracer depth %d, current L = %s, beta = %s\n",
                                       depth, L, beta)
                 .c_str());
         pstd::optional<ShapeIntersection> si = Intersect(ray);
-
-        // std::cout << ray.o << std::endl;
-        // std::cout << (ray.medium ? "in" : "out") << std::endl;
-        // if (si.has_value())
-        //     std::cout << si.value().intr.p() << std::endl;
-        // std::cout << std::endl;
 
         if (ray.medium) {
 
@@ -394,11 +373,6 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
                     Float um = rng.Uniform<Float>();
                     // ReSharper disable once CppTooWideScopeInitStatement
                     int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
-
-                    // add edge to graph
-                    // if (mode == 0 || mode == 1) {
-                    //     AddNewVertex(p);
-                    // }
 
                     if (mode == 0) {
                         // Handle absorption along ray path

@@ -62,12 +62,10 @@ void GraphIntegrator::Render() {
     std::string description, name;
     file >> description >> name;
 
-    std::cout << "Building graph... ";
     if (name == "uniform")
         uniformGraph = UniformGraph::ReadFromDisk(graphName);
     if (name == "free")
         freeGraph = FreeGraph::ReadFromDisk(graphName);
-    std::cout << "done" << std::endl;
 
     if (uniformGraph) {
         if (Options->graphDebug) {

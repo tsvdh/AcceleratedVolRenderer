@@ -768,9 +768,12 @@ void BasicScene::SetOptions(SceneEntity filter, SceneEntity film,
     samplerJob = RunAsync([sampler, this]() {
         LOG_VERBOSE("Starting to create sampler");
         Allocator alloc = threadAllocators.Get();
+
         Point2i res = this->film.FullResolution();
-        return Sampler::Create(sampler.name, sampler.parameters, res, &sampler.loc,
-                               alloc);
+        if (Options->graphSamplingResolution)
+            res = Options->graphSamplingResolution.value();
+
+        return Sampler::Create(sampler.name, sampler.parameters, res, &sampler.loc, alloc);
     });
 
     // Enqueue asynchronous job to create camera

@@ -10,6 +10,7 @@
 #include <pbrt/util/pstd.h>
 #include <pbrt/util/vecmath.h>
 
+#include <optional>
 #include <string>
 
 namespace pbrt {
@@ -59,6 +60,7 @@ struct PBRTOptions : BasicPBRTOptions {
 
     bool graphDebug = false;
     bool graphDisableMT = false;
+    std::optional<Point2i> graphSamplingResolution;
 
     std::string ToString() const;
 };
