@@ -9,7 +9,7 @@ using namespace pbrt;
 
 class FreeGraphBuilder {
 public:
-    FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler);
+    FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler, float radiusModifier);
 
     FreeGraph TracePaths(int numStepsInDimension, int maxDepth);
     void ComputeTransmittance(FreeGraph& graph, int edgeIterations);

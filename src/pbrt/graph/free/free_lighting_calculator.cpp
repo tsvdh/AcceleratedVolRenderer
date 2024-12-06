@@ -64,7 +64,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         lightMap[vertexId] = 0;
         for (int i = 0; i < initialLightingIterations; ++i) {
             samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
-            lightMap[vertexId] += Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, samplerClone);
+            lightMap[vertexId] += util::Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, samplerClone);
             progress.Update();
         }
         lightMap[vertexId] /= static_cast<float>(initialLightingIterations);

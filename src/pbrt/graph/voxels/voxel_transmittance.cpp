@@ -89,7 +89,7 @@ void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f dir
             continue;
 
         if (curVertexId != -1) {
-            float Tr = Transmittance(curIntr, newIntr, mediumData.defaultLambda, sampler);
+            float Tr = util::Transmittance(curIntr, newIntr, mediumData.defaultLambda, sampler);
             grid.AddEdge(curVertexId, newVertexId, EdgeData{Tr, -1, 1});
         }
 

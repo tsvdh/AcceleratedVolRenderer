@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "deps/json.hpp"
 #include "pbrt/media.h"
 #include "pbrt/util/error.h"
 
@@ -181,37 +182,6 @@ inline Bounds3i FitBounds(const Bounds3f& bounds, float spacing) {
               get<0>(FitToGraph(bounds.pMax, spacing)) + Vector3i(1, 1, 1)};
 }
 
-}
-
-namespace graph {
-
-using namespace pbrt;
-
-enum Description {
-    basic,
-    surface,
-    paths,
-    search_queue,
-    search_surface,
-    grid,
-    grid_transmittance,
-    grid_lighting
-};
-const std::vector<std::string> descriptionNames{
-    "basic",
-    "surface",
-    "paths",
-    "search_queue",
-    "search_surface",
-    "grid",
-    "grid_transmittance",
-    "grid_lighting"
-};
-
-inline std::string GetDescriptionName(Description desc) {
-    return descriptionNames[desc];
-}
-
 inline float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda, Sampler sampler) {
     RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
 
@@ -241,8 +211,72 @@ inline float Transmittance(const MediumInteraction& p0, const MediumInteraction&
     return Transmittance(p0, p1.p(), lambda, sampler);
 }
 
-inline float GetSameSpotRadius(const util::MediumData& mediumData) {
+inline float GetSameSpotRadius(const MediumData& mediumData) {
     return mediumData.maxDistToCenter * 2 / 1000;
+}
+
+}
+
+namespace graph {
+
+enum Description {
+    basic,
+    surface,
+    paths,
+    search_queue,
+    search_surface,
+    grid,
+    grid_transmittance,
+    grid_lighting
+};
+const std::vector<std::string> descriptionNames{
+    "basic",
+    "surface",
+    "paths",
+    "search_queue",
+    "search_surface",
+    "grid",
+    "grid_transmittance",
+    "grid_lighting"
+};
+
+inline std::string GetDescriptionName(Description desc) {
+    return descriptionNames[desc];
+}
+
+using nlohmann::json;
+
+struct Config;
+struct GraphBuilderConfig;
+struct LightingCalculatorConfig;
+
+struct GraphBuilderConfig {
+    int dimensionSteps;
+    int maxDepth;
+    int edgeIterations;
+    float radiusModifier;
+};
+
+struct LightingCalculatorConfig {
+    int lightIterations;
+    int transmittanceIterations;
+};
+
+struct Config {
+    GraphBuilderConfig graphBuilder;
+    LightingCalculatorConfig lightingCalculator;
+};
+
+inline void from_json(const json& jsonObject, Config& config) {
+    auto graphBuilder = jsonObject.at("graphBuilder");
+    graphBuilder.at("dimensionSteps").get_to(config.graphBuilder.dimensionSteps);
+    graphBuilder.at("maxDepth").get_to(config.graphBuilder.maxDepth);
+    graphBuilder.at("edgeIterations").get_to(config.graphBuilder.edgeIterations);
+    graphBuilder.at("radiusModifier").get_to(config.graphBuilder.radiusModifier);
+
+    auto lightingCalculator = jsonObject.at("lightingCalculator");
+    lightingCalculator.at("lightIterations").get_to(config.lightingCalculator.lightIterations);
+    lightingCalculator.at("transmittanceIterations").get_to(config.lightingCalculator.transmittanceIterations);
 }
 
 }

@@ -9,11 +9,11 @@
 
 namespace graph {
 
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler)
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler, float radiusModifier)
         : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
     lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
-    searchRadius = GetSameSpotRadius(mediumData) / 4;
+    searchRadius = GetSameSpotRadius(mediumData) * radiusModifier;
 }
 
 int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
@@ -291,7 +291,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
         for (int i = 0; i < edgeIterations; ++i) {
             samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
 
-            float Tr = Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, samplerClone);
+            float Tr = util::Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, samplerClone);
             graph.AddEdge(edge.from, edge.to, EdgeData{Tr, -1, 1});
             progress.Update();
         }

@@ -10,7 +10,6 @@
 #include "pbrt/graph/deps/json.hpp"
 #include "pbrt/graph/free/free_graph_builder.h"
 #include "pbrt/graph/free/free_lighting_calculator.h"
-#include "pbrt/graph/voxels/voxel_boundary.h"
 
 using namespace pbrt;
 
@@ -19,19 +18,14 @@ void main(int argc, char* argv[]) {
 
     std::string configName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".json");
     std::ifstream configStream(configName);
-    nlohmann::json config = nlohmann::json::parse(configStream);
+    nlohmann::json jsonConfig = nlohmann::json::parse(configStream);
 
-    auto graphBuilderConfig = config["graphBuilder"];
-    auto lightingCalculatorConfig = config["lightingCalculator"];
+    auto config = jsonConfig.get<graph::Config>();
 
-    int dimensionSteps = graphBuilderConfig["dimensionSteps"];
-    int maxDepth = graphBuilderConfig["maxDepth"];
-    int edgeIterations = graphBuilderConfig["edgeIterations"];
-    int lightIterations = lightingCalculatorConfig["lightIterations"];
-    int transmittanceIterations = lightingCalculatorConfig["transmittanceIterations"];
-
-    int maxSampleDimensionSize = std::sqrt(Sqr(dimensionSteps) * maxDepth);
-    int pixelSamples = RoundUpPow2(std::max(edgeIterations, lightIterations));
+    int numRays = Sqr(config.graphBuilder.dimensionSteps);
+    int maxSampleDimensionSize = std::ceil(std::sqrt(numRays * config.graphBuilder.maxDepth));
+    int pixelSamples = RoundUpPow2(std::max(config.graphBuilder.edgeIterations,
+                                               config.lightingCalculator.lightIterations));
 
     PBRTOptions options;
     options.disablePixelJitter = true;
@@ -62,12 +56,12 @@ void main(int argc, char* argv[]) {
 
     Sampler sampler = scene.GetSampler();
 
-    graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler);
-    graph::FreeGraph graph = graphBuilder.TracePaths(dimensionSteps, maxDepth);
-    graphBuilder.ComputeTransmittance(graph, edgeIterations);
+    graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler, config.graphBuilder.radiusModifier);
+    graph::FreeGraph graph = graphBuilder.TracePaths(config.graphBuilder.dimensionSteps, config.graphBuilder.maxDepth);
+    graphBuilder.ComputeTransmittance(graph, config.graphBuilder.edgeIterations);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, lightIterations);
-    lighting.ComputeFinalLight(transmittanceIterations);
+    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, config.lightingCalculator.lightIterations);
+    lighting.ComputeFinalLight(config.lightingCalculator.transmittanceIterations);
 
     // graph is in incorrect state after this
     graph.GetEdges().clear();
