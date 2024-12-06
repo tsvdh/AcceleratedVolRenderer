@@ -34,6 +34,14 @@ struct BasicPBRTOptions {
     RenderingCoordinateSystem renderingSpace = RenderingCoordinateSystem::CameraWorld;
 };
 
+// GraphOptionsDefinition
+struct GraphOptions {
+    bool debug = false;
+    bool disableMT = false;
+    std::optional<Point2i> samplingResolution;
+    float renderRadiusModifier;
+};
+
 // PBRTOptions Definition
 struct PBRTOptions : BasicPBRTOptions {
     int nThreads = 0;
@@ -58,9 +66,7 @@ struct PBRTOptions : BasicPBRTOptions {
 
     std::string sceneFileName;
 
-    bool graphDebug = false;
-    bool graphDisableMT = false;
-    std::optional<Point2i> graphSamplingResolution;
+    GraphOptions graph;
 
     std::string ToString() const;
 };

@@ -32,7 +32,7 @@ void main(int argc, char* argv[]) {
     options.disableWavelengthJitter = true;
     options.renderingSpace = RenderingCoordinateSystem::World;
     options.pixelSamples = pixelSamples;
-    options.graphSamplingResolution = Point2i(maxSampleDimensionSize, maxSampleDimensionSize);
+    options.graph.samplingResolution = Point2i(maxSampleDimensionSize, maxSampleDimensionSize);
     InitPBRT(options);
 
     BasicScene scene;

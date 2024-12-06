@@ -770,8 +770,8 @@ void BasicScene::SetOptions(SceneEntity filter, SceneEntity film,
         Allocator alloc = threadAllocators.Get();
 
         Point2i res = this->film.FullResolution();
-        if (Options->graphSamplingResolution)
-            res = Options->graphSamplingResolution.value();
+        if (Options->graph.samplingResolution)
+            res = Options->graph.samplingResolution.value();
 
         return Sampler::Create(sampler.name, sampler.parameters, res, &sampler.loc, alloc);
     });

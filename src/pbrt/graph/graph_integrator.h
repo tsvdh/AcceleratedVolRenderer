@@ -28,7 +28,7 @@ public:
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
-        searchRadius = Sqr(GetSameSpotRadius(mediumData) * 20);
+        searchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier);
     }
 
     void Render() override;

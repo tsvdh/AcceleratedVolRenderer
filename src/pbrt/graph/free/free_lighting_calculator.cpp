@@ -37,7 +37,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     ProgressReporter progress(workNeeded, "Computing initial lighting", false);
 
     int numVertices = static_cast<int>(graph.GetVertices().size());
-    int resolutionDimensionSize = Options->graphSamplingResolution->x;
+    int resolutionDimensionSize = Options->graph.samplingResolution->x;
     ParallelFor(0, numVertices, [&](int vertexId) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 

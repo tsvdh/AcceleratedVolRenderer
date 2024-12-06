@@ -275,7 +275,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
     int workNeeded = numEdges * edgeIterations;
     ProgressReporter progress(workNeeded, "Computing edge transmittance", false);
 
-    int resolutionDimensionSize = Options->graphSamplingResolution->x;
+    int resolutionDimensionSize = Options->graph.samplingResolution->x;
     ParallelFor(0, numEdges, [&](int edgeId) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 

@@ -68,7 +68,7 @@ void GraphIntegrator::Render() {
         freeGraph = FreeGraph::ReadFromDisk(graphName);
 
     if (uniformGraph) {
-        if (Options->graphDebug) {
+        if (Options->graph.debug) {
             ProgressReporter progress(static_cast<int>(uniformGraph->GetVertices().size()), "Preprocessing voxels", false);
 
             Vector3f voxelHalfDiagonal = Vector3f(1, 1, 1) * uniformGraph->GetSpacing() / 2;
@@ -95,7 +95,7 @@ void GraphIntegrator::Render() {
     ThreadLocal<Sampler> samplers([this]() { return samplerPrototype.Clone(); });
 
     Bounds2i pixelBounds = camera.GetFilm().PixelBounds();
-    int spp = Options->graphDebug ? 8 : samplerPrototype.SamplesPerPixel();
+    int spp = Options->graph.debug ? 8 : samplerPrototype.SamplesPerPixel();
     ProgressReporter progress(static_cast<int64_t>(spp) * pixelBounds.Area(), "Rendering", Options->quiet);
 
     int waveStart = 0, waveEnd = 1, nextWaveSize = 1;
@@ -154,7 +154,7 @@ void GraphIntegrator::Render() {
     // Render image in waves
     while (waveStart < spp) {
 
-        if (Options->graphDisableMT) {
+        if (Options->graph.disableMT) {
             // Render current wave's image pixels in series
             for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
                 for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
@@ -321,7 +321,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
 
         float tMax = shapeIsect ? shapeIsect->tHit : Infinity;
 
-        if (Options->graphDebug) {
+        if (Options->graph.debug) {
             auto hit0 = std::make_unique<float>(-1);
             auto hit1 = std::make_unique<float>(-1);
 

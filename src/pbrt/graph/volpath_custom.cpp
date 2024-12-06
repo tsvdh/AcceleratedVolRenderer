@@ -139,7 +139,7 @@ void VolPathCustomIntegrator::Render() {
 
     // Render image in waves
     while (waveStart < spp) {
-        if (Options->graphDisableMT) {
+        if (Options->graph.disableMT) {
             // Render current wave's image in series
             for (int x = pixelBounds.pMin.x; x < pixelBounds.pMax.x; x++) {
                 for (int y = pixelBounds.pMin.y; y < pixelBounds.pMax.y; y++) {
