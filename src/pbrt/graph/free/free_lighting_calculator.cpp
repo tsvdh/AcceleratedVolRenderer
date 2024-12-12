@@ -1,16 +1,14 @@
 #include "free_lighting_calculator.h"
 
-#include <iostream>
-
 #include "pbrt/lights.h"
 #include "pbrt/options.h"
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
 
-FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
-        int initialLightingIterations)
-    : LightingCalculator(graph, mediumData, light, std::move(sampler), initialLightingIterations) {
+FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
+        LightingCalculatorConfig config, bool quiet)
+    : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet) {
 
     freeGraph = dynamic_cast<FreeGraph*>(&graph);
 }
@@ -33,8 +31,8 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 
     ThreadLocal<Sampler> samplers([this]() { return sampler.Clone(); });
 
-    int workNeeded = numEntryVertices * initialLightingIterations;
-    ProgressReporter progress(workNeeded, "Computing initial lighting", false);
+    int workNeeded = numEntryVertices * config.lightIterations;
+    ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
     int numVertices = static_cast<int>(graph.GetVertices().size());
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
@@ -47,11 +45,11 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         Point3f graphPoint = vertex.point;
         MediumInteraction interaction(graphPoint, Vector3f(), 0, mediumData.medium, nullptr);
 
-        Ray rayToLight(graphPoint, -lightDir);
-        pstd::optional<ShapeIntersection> shapeIntersect = mediumData.aggregate->Intersect(rayToLight, Infinity);
+        Ray rayToEntryPoint(graphPoint, -inDirection);
+        pstd::optional<ShapeIntersection> shapeIntersect = mediumData.primitiveData.primitive.Intersect(rayToEntryPoint, Infinity);
         if (!shapeIntersect) {
             lightMap[vertexId] = 1;
-            progress.Update(initialLightingIterations);
+            progress.Update(config.lightIterations);
             return;
         }
 
@@ -62,12 +60,12 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         Point3f boundaryPoint = shapeIntersect->intr.p();
 
         lightMap[vertexId] = 0;
-        for (int i = 0; i < initialLightingIterations; ++i) {
+        for (int i = 0; i < config.lightIterations; ++i) {
             samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
             lightMap[vertexId] += util::Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, samplerClone);
             progress.Update();
         }
-        lightMap[vertexId] /= static_cast<float>(initialLightingIterations);
+        lightMap[vertexId] /= static_cast<float>(config.lightIterations);
     });
     progress.Done();
 

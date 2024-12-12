@@ -20,15 +20,18 @@ class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
     GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
-        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
-            maxDepth(maxDepth) {
-
+        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate),
+                        lights), maxDepth(maxDepth) {
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
-        searchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier);
+
+        if (!Options->graph.renderRadiusModifier)
+            ErrorExit("Render search radius modifier must be specified");
+        searchRadius = Sqr(
+            GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
     }
 
     void Render() override;

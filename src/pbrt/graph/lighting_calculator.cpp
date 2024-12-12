@@ -1,23 +1,19 @@
 #include "lighting_calculator.h"
 
-#include <iostream>
-
 #include "pbrt/lights.h"
-#include "pbrt/media.h"
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
-        int initialLightingIterations)
-    : graph(graph), mediumData(mediumData), light(light), sampler(std::move(sampler)), initialLightingIterations(initialLightingIterations) {
 
-    if (initialLightingIterations <= 0)
+LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
+        LightingCalculatorConfig config, bool quiet)
+    : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet) {
+
+    if (config.lightIterations <= 0)
         ErrorExit("Must have at least one initial lighting iteration");
 
     CheckSequentialIds();
-
     numVertices = static_cast<int>(graph.GetVerticesConst().size());
-    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 }
 
 void LightingCalculator::CheckSequentialIds() const {
@@ -35,18 +31,23 @@ void LightingCalculator::CheckSequentialIds() const {
     }
 }
 
-void LightingCalculator::ComputeFinalLight(int transmittanceIterations) {
-    SparseVec light = GetLightVector();
+void LightingCalculator::ComputeFinalLight() {
+    SparseVec initialLight = GetLightVector();
+    ComputeFinalLight(initialLight);
+}
 
-    if (transmittanceIterations > 0) {
+void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
+    SparseVec finalLight(light);
+
+    if (config.transmittanceIterations > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
-        SparseVec curLight = light;
+        SparseVec curLight = finalLight;
 
-        ProgressReporter progress(transmittanceIterations, "Computing final lighting", false);
+        ProgressReporter progress(config.transmittanceIterations, "Computing final lighting", quiet);
 
-        for (int i = 0; i < transmittanceIterations; ++i) {
+        for (int i = 0; i < config.transmittanceIterations; ++i) {
             curLight = transmittance * curLight;
-            light += curLight;
+            finalLight += curLight;
             progress.Update();
         }
         progress.Done();
@@ -54,7 +55,7 @@ void LightingCalculator::ComputeFinalLight(int transmittanceIterations) {
 
     for (auto& pair : graph.GetVertices()) {
         Vertex& v = pair.second;
-        v.data.lightScalar = light.coeff(v.id);
+        v.data.lightScalar = finalLight.coeff(v.id);
     }
 }
 

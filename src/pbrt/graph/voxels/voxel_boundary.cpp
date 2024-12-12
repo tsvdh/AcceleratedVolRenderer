@@ -1,7 +1,6 @@
 #include "voxel_boundary.h"
 
 #include <pbrt/media.h>
-#include <pbrt/cpu/aggregates.h>
 
 #include <iostream>
 #include <queue>
@@ -12,17 +11,18 @@
 namespace graph {
 
 FreeGraph VoxelBoundary::CaptureBoundary(float equatorStepSize) const {
-    std::vector<Point3f> spherePoints = util::GetSpherePoints(mediumData.boundsCenter, mediumData.maxDistToCenter * 2, equatorStepSize);
+    const util::PrimitiveData& primitiveData = mediumData.primitiveData;
+    std::vector<Point3f> spherePoints = util::GetSpherePoints(primitiveData.boundsCenter, primitiveData.maxDistToCenter * 2, equatorStepSize);
 
     ProgressReporter captureProgress(static_cast<int>(spherePoints.size()), "Capturing volume boundary", false);
 
     FreeGraph graph;
 
     int numSteps = 100;
-    float stepSize = mediumData.maxDistToCenter / static_cast<float>(numSteps);
+    float stepSize = primitiveData.maxDistToCenter / static_cast<float>(numSteps);
 
     for (Point3f origin : spherePoints) {
-        Vector3f dir = mediumData.boundsCenter - origin;
+        Vector3f dir = primitiveData.boundsCenter - origin;
 
         Vector3f xVector;
         Vector3f yVector;
@@ -36,7 +36,7 @@ FreeGraph VoxelBoundary::CaptureBoundary(float equatorStepSize) const {
                 Point3f newOrigin = origin + xVector * i + yVector * j;
                 RayDifferential gridRay(newOrigin, dir);
 
-                auto shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity);
+                auto shapeIsect = primitiveData.primitive.Intersect(gridRay, Infinity);
                 if (!shapeIsect)
                     continue;
 
@@ -120,7 +120,7 @@ inline std::vector<Point3i> GetNeighbours(Point3i coors, const std::optional<Bou
 }
 
 void VoxelBoundary::ToSingleLayerAndSaveCast(UniformGraph& boundary) {
-    Bounds3i coorBounds = util::FitBounds(mediumData.bounds, boundary.GetSpacing());
+    Bounds3i coorBounds = util::FitBounds(mediumData.primitiveData.bounds, boundary.GetSpacing());
 
     int numVisited = 0;
     auto start = std::chrono::system_clock::now();
@@ -185,7 +185,7 @@ UniformGraph VoxelBoundary::FillInside(UniformGraph& boundary) {
     if (result == castCache.end())
         ToSingleLayerAndSaveCast(boundary);
 
-    Bounds3i coorBounds = util::FitBounds(mediumData.bounds, boundary.GetSpacing());
+    Bounds3i coorBounds = util::FitBounds(mediumData.primitiveData.bounds, boundary.GetSpacing());
 
     auto start = std::chrono::system_clock::now();
     std::cout << "starting filling... ";

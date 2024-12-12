@@ -821,12 +821,13 @@ set_property (TARGET soac PROPERTY FOLDER "cmd")
 # Graph lib
 
 set(GRAPH
+        src/pbrt/graph/util.h
         src/pbrt/graph/graph.h
         src/pbrt/graph/graph.cpp
         src/pbrt/graph/volpath_custom.h
         src/pbrt/graph/volpath_custom.cpp
         src/pbrt/graph/T_sampler_custom.h
-        src/pbrt/graph/util.h
+
 
         src/pbrt/graph/graph_integrator.h
         src/pbrt/graph/graph_integrator.cpp
@@ -840,13 +841,15 @@ set(GRAPH
         src/pbrt/graph/voxels/voxel_lighting_calculator.h
         src/pbrt/graph/voxels/voxel_lighting_calculator.cpp
 
+        src/pbrt/graph/free/subdivider.h
+        src/pbrt/graph/free/subdivider.cpp
         src/pbrt/graph/free/free_graph_builder.h
         src/pbrt/graph/free/free_graph_builder.cpp
         src/pbrt/graph/free/free_lighting_calculator.h
         src/pbrt/graph/free/free_lighting_calculator.cpp
 
-        src/pbrt/graph/deps/nanoflann.hpp
         src/pbrt/graph/deps/json.hpp
+        src/pbrt/graph/deps/nanoflann.hpp
 )
 
 source_group ("Graph files" FILES ${GRAPH})

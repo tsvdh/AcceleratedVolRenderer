@@ -1,6 +1,5 @@
 #pragma once
 
-#include <pbrt/util/spectrum.h>
 #include <pbrt/util/vecmath.h>
 
 #include <optional>

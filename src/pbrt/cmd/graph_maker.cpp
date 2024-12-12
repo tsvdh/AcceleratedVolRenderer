@@ -10,6 +10,7 @@
 #include "pbrt/graph/deps/json.hpp"
 #include "pbrt/graph/free/free_graph_builder.h"
 #include "pbrt/graph/free/free_lighting_calculator.h"
+#include "pbrt/graph/free/subdivider.h"
 
 using namespace pbrt;
 
@@ -52,16 +53,23 @@ void main(int argc, char* argv[]) {
     Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
 
     util::MediumData mediumData(accel, scene.GetCamera().GetFilm().SampleWavelengths(0));
-    light->Preprocess(mediumData.bounds);
+    light->Preprocess(mediumData.primitiveData.bounds);
 
     Sampler sampler = scene.GetSampler();
 
-    graph::FreeGraphBuilder graphBuilder(mediumData, light, sampler, config.graphBuilder.radiusModifier);
-    graph::FreeGraph graph = graphBuilder.TracePaths(config.graphBuilder.dimensionSteps, config.graphBuilder.maxDepth);
-    graphBuilder.ComputeTransmittance(graph, config.graphBuilder.edgeIterations);
+    Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, light, sampler, config.lightingCalculator.lightIterations);
-    lighting.ComputeFinalLight(config.lightingCalculator.transmittanceIterations);
+    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
+    graph::FreeGraph graph = graphBuilder.TracePaths();
+    graphBuilder.ComputeTransmittance(graph);
+
+    graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
+    graph::SparseVec lightVec = lighting.GetLightVector();
+
+    graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, graphBuilder.GetSearchRadius(), config.subdivider);
+    subdivider.ComputeSubdivisionEffect(lightVec);
+
+    lighting.ComputeFinalLight(lightVec);
 
     // graph is in incorrect state after this
     graph.GetEdges().clear();

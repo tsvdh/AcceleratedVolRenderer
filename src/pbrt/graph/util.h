@@ -35,31 +35,34 @@ inline std::string FileNameToPath(const std::string& fileName) {
     return "files/graphs/" + fileName + ".txt";
 }
 
-struct MediumData {
-    SampledWavelengths defaultLambda;
-    Medium medium;
-    BVHAggregate* aggregate;
+struct PrimitiveData {
+    Primitive primitive;
     Bounds3f bounds;
     Point3f boundsCenter;
     float maxDistToCenter;
 
-    MediumData() {
-        aggregate = nullptr;
-        maxDistToCenter = -1;
-    }
+    PrimitiveData() = default;
 
-    MediumData(Primitive accel, const SampledWavelengths& defaultLambda) : defaultLambda(defaultLambda) {
+    explicit PrimitiveData(const Primitive& primitive) {
+        this->primitive = primitive;
+        bounds = primitive.Bounds();
+        boundsCenter = bounds.pMin + bounds.Diagonal() / 2;
+        maxDistToCenter = Length(bounds.Diagonal() / 2);
+    }
+};
+
+struct MediumData {
+    SampledWavelengths defaultLambda;
+    Medium medium;
+    PrimitiveData primitiveData;
+
+    MediumData() = default;
+
+    MediumData(Primitive accel, const SampledWavelengths& defaultLambda) : defaultLambda(defaultLambda), primitiveData(accel) {
         if (!accel.Is<BVHAggregate>())
             ErrorExit("Accelerator primitive must be a 'BVHAggregate' type");
 
-        aggregate = accel.Cast<BVHAggregate>();
-        bounds = aggregate->Bounds();
-        boundsCenter = bounds.pMin + bounds.Diagonal() / 2;
-        maxDistToCenter = Length(bounds.Diagonal() / 2);
-
-        std::vector<Primitive>& primitives = aggregate->GetPrimitives();
-
-        medium = nullptr;
+        std::vector<Primitive>& primitives = accel.Cast<BVHAggregate>()->GetPrimitives();
 
         for (Primitive& primitive : primitives) {
             if (!primitive.Is<GeometricPrimitive>())
@@ -212,7 +215,7 @@ inline float Transmittance(const MediumInteraction& p0, const MediumInteraction&
 }
 
 inline float GetSameSpotRadius(const MediumData& mediumData) {
-    return mediumData.maxDistToCenter * 2 / 1000;
+    return mediumData.primitiveData.maxDistToCenter * 2 / 1000;
 }
 
 }
@@ -262,21 +265,43 @@ struct LightingCalculatorConfig {
     int transmittanceIterations;
 };
 
-struct Config {
+struct SubDividerConfig {
+    int subdivisions;
     GraphBuilderConfig graphBuilder;
     LightingCalculatorConfig lightingCalculator;
 };
 
-inline void from_json(const json& jsonObject, Config& config) {
-    auto graphBuilder = jsonObject.at("graphBuilder");
-    graphBuilder.at("dimensionSteps").get_to(config.graphBuilder.dimensionSteps);
-    graphBuilder.at("maxDepth").get_to(config.graphBuilder.maxDepth);
-    graphBuilder.at("edgeIterations").get_to(config.graphBuilder.edgeIterations);
-    graphBuilder.at("radiusModifier").get_to(config.graphBuilder.radiusModifier);
+struct Config {
+    GraphBuilderConfig graphBuilder;
+    LightingCalculatorConfig lightingCalculator;
+    SubDividerConfig subdivider;
+};
 
+inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderConfig) {
+    auto graphBuilder = jsonObject.at("graphBuilder");
+    graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
+    graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
+    graphBuilder.at("edgeIterations").get_to(graphBuilderConfig.edgeIterations);
+    graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
+}
+
+inline void from_json(const json& jsonObject, LightingCalculatorConfig& lightingCalculatorConfig) {
     auto lightingCalculator = jsonObject.at("lightingCalculator");
-    lightingCalculator.at("lightIterations").get_to(config.lightingCalculator.lightIterations);
-    lightingCalculator.at("transmittanceIterations").get_to(config.lightingCalculator.transmittanceIterations);
+    lightingCalculator.at("lightIterations").get_to(lightingCalculatorConfig.lightIterations);
+    lightingCalculator.at("transmittanceIterations").get_to(lightingCalculatorConfig.transmittanceIterations);
+}
+
+inline void from_json(const json& jsonObject, SubDividerConfig& subDividerConfig) {
+    auto subdivider = jsonObject.at("subdivider");
+    subdivider.at("subdivisions").get_to(subDividerConfig.subdivisions);
+    from_json(subdivider, subDividerConfig.graphBuilder);
+    from_json(subdivider, subDividerConfig.lightingCalculator);
+}
+
+inline void from_json(const json& jsonObject, Config& config) {
+    from_json(jsonObject, config.graphBuilder);
+    from_json(jsonObject, config.lightingCalculator);
+    from_json(jsonObject, config.subdivider);
 }
 
 }

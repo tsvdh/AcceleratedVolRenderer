@@ -9,7 +9,7 @@ namespace graph {
 
 void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f direction, UniformGraph& grid) {
     RayDifferential ray(startPoint, direction);
-    auto optShapeIsect = mediumData.aggregate->Intersect(ray, Infinity);
+    auto optShapeIsect = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
     if (!optShapeIsect)
         return;
     optShapeIsect->intr.SkipIntersection(&ray, optShapeIsect->tHit);
@@ -26,7 +26,7 @@ void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f dir
 
         std::optional<MediumInteraction> optNewIntr;
 
-        pstd::optional<ShapeIntersection> optIsect = mediumData.aggregate->Intersect(ray, Infinity);
+        pstd::optional<ShapeIntersection> optIsect = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
         if (!optIsect)
             return;
 
@@ -117,7 +117,7 @@ void VoxelTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereSt
 
     std::array<float, 3> dimensionStepSize{};
     for (int i = 0; i < 3; ++i) {
-        dimensionStepSize[i] = mediumData.bounds.Diagonal()[i] / static_cast<float>(spheresPerDimension + 1);
+        dimensionStepSize[i] = mediumData.primitiveData.bounds.Diagonal()[i] / static_cast<float>(spheresPerDimension + 1);
     }
 
     numPathsScatteredOutsideGrid = 0;
@@ -126,11 +126,12 @@ void VoxelTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereSt
     for (int x = 1; x <= spheresPerDimension; ++x) {
         for (int y = 1; y <= spheresPerDimension; ++y) {
             for (int z = 1; z <= spheresPerDimension; ++z) {
-                Point3f center = mediumData.bounds.pMin + Vector3f(static_cast<float>(x) * dimensionStepSize[0],
-                                                                   static_cast<float>(y) * dimensionStepSize[1],
-                                                                   static_cast<float>(z) * dimensionStepSize[2]);
+                Point3f center = mediumData.primitiveData.bounds.pMin
+                                 + Vector3f(static_cast<float>(x) * dimensionStepSize[0],
+                                            static_cast<float>(y) * dimensionStepSize[1],
+                                            static_cast<float>(z) * dimensionStepSize[2]);
 
-                std::vector<Point3f> spherePoints = util::GetSpherePoints(center, mediumData.maxDistToCenter * 2, sphereStepDegrees);
+                std::vector<Point3f> spherePoints = util::GetSpherePoints(center, mediumData.primitiveData.maxDistToCenter * 2, sphereStepDegrees);
 
                 for (int i = 0; i < spherePoints.size(); ++i) {
                     sampler.StartPixelSample(Point2i(i, curSphere), 0);

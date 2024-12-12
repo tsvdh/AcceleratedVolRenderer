@@ -9,11 +9,13 @@
 
 namespace graph {
 
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, DistantLight* light, Sampler sampler, float radiusModifier)
-        : mediumData(mediumData), light(light), sampler(std::move(sampler)) {
-    lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet)
+    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config,
+                       GetSameSpotRadius(mediumData) * config.radiusModifier, quiet) {}
+
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, float radius, bool quiet)
+        : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), searchRadius(radius), quiet(quiet) {
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
-    searchRadius = GetSameSpotRadius(mediumData) * radiusModifier;
 }
 
 int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
@@ -28,7 +30,7 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
 
         std::optional<MediumInteraction> optNewInteraction;
 
-        pstd::optional<ShapeIntersection> optIntersection = mediumData.aggregate->Intersect(ray, Infinity);
+        pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
         if (!optIntersection)
             return numNewVertices;
 
@@ -101,27 +103,28 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
     }
 }
 
-FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
+FreeGraph FreeGraphBuilder::TracePaths() {
     Vector3f xVector;
     Vector3f yVector;
-    CoordinateSystem(lightDir, &xVector, &yVector);
+    CoordinateSystem(inDirection, &xVector, &yVector);
 
-    Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
-    origin -= Vector3f((xVector + yVector) * mediumData.maxDistToCenter);
+    const util::PrimitiveData& primitiveData = mediumData.primitiveData;
+    Point3f origin(primitiveData.boundsCenter - inDirection * primitiveData.maxDistToCenter * 2);
+    origin -= Vector3f((xVector + yVector) * primitiveData.maxDistToCenter);
 
-    float stepSize = mediumData.maxDistToCenter * 2 / static_cast<float>(numStepsInDimension + 1);
+    float stepSize = primitiveData.maxDistToCenter * 2 / static_cast<float>(config.dimensionSteps + 1);
     xVector *= stepSize;
     yVector *= stepSize;
 
-    ProgressReporter workEstimateProgress(Sqr(numStepsInDimension), "Estimating work needed", false);
+    ProgressReporter workEstimateProgress(Sqr(config.dimensionSteps), "Estimating work needed", false);
 
     int workNeeded = 0;
-    for (int x = 1; x <= numStepsInDimension; ++x) {
-        for (int y = 1; y <= numStepsInDimension; ++y) {
+    for (int x = 1; x <= config.dimensionSteps; ++x) {
+        for (int y = 1; y <= config.dimensionSteps; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
-            RayDifferential ray(newOrigin, lightDir);
+            RayDifferential ray(newOrigin, inDirection);
 
-            if (mediumData.aggregate->Intersect(ray, Infinity))
+            if (primitiveData.primitive.Intersect(ray, Infinity))
                 ++workNeeded;
 
             workEstimateProgress.Update();
@@ -129,25 +132,25 @@ FreeGraph FreeGraphBuilder::TracePaths(int numStepsInDimension, int maxDepth) {
     }
     workEstimateProgress.Done();
 
-    ProgressReporter tracingProgress(workNeeded, "Tracing light paths", false);
+    ProgressReporter tracingProgress(workNeeded, "Tracing light paths", quiet);
 
     FreeGraph graph;
     int batchSize = 100;
     int startingId = 0;
     int currentBatch = 0;
 
-    for (int x = 1; x <= numStepsInDimension; ++x) {
-        for (int y = 1; y <= numStepsInDimension; ++y) {
+    for (int x = 1; x <= config.dimensionSteps; ++x) {
+        for (int y = 1; y <= config.dimensionSteps; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
-            RayDifferential ray(newOrigin, lightDir);
+            RayDifferential ray(newOrigin, inDirection);
 
-            auto optShapeIntersection = mediumData.aggregate->Intersect(ray, Infinity);
+            auto optShapeIntersection = primitiveData.primitive.Intersect(ray, Infinity);
             if (!optShapeIntersection)
                 continue;
             optShapeIntersection->intr.SkipIntersection(&ray, optShapeIntersection->tHit);
 
             sampler.StartPixelSample(Point2i(x, y), 0);
-            int newVertices = TracePath(ray, graph, maxDepth);
+            int newVertices = TracePath(ray, graph, config.maxDepth);
 
             currentBatch += newVertices;
 
@@ -268,12 +271,15 @@ void FreeGraphBuilder::ProcessPaths(Graph& graph) {
     std::cout << "done" << std::endl;
 }
 
-void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations) {
+void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     ThreadLocal<Sampler> samplers([this]() { return sampler.Clone(); });
 
     int numEdges = static_cast<int>(graph.GetEdges().size());
-    int workNeeded = numEdges * edgeIterations;
-    ProgressReporter progress(workNeeded, "Computing edge transmittance", false);
+    int workNeeded = numEdges * config.edgeIterations;
+    if (workNeeded == 0)
+        return;
+
+    ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
 
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
     ParallelFor(0, numEdges, [&](int edgeId) {
@@ -288,7 +294,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph, int edgeIterations
         int yCoor = edgeId / resolutionDimensionSize;
         int xCoor = edgeId - yCoor * resolutionDimensionSize;
 
-        for (int i = 0; i < edgeIterations; ++i) {
+        for (int i = 0; i < config.edgeIterations; ++i) {
             samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
 
             float Tr = util::Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, samplerClone);

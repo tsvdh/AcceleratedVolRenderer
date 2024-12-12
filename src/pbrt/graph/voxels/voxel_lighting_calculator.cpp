@@ -9,9 +9,9 @@
 
 namespace graph {
 
-VoxelLightingCalculator::VoxelLightingCalculator(Graph& graph, const util::MediumData& mediumData, DistantLight* light, Sampler sampler,
-    int initialLightingIterations)
-        : LightingCalculator(graph, mediumData, light, std::move(sampler), initialLightingIterations) {
+VoxelLightingCalculator::VoxelLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
+    LightingCalculatorConfig config, bool quiet)
+        : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet) {
 
     uniformGraph = dynamic_cast<UniformGraph*>(&graph);
 }
@@ -20,21 +20,22 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
     int lightRaysPerVoxelDist = 4;
 
     float L = 1;
-    L /= static_cast<float>(initialLightingIterations)
+    L /= static_cast<float>(config.lightIterations)
        * static_cast<float>(Sqr(lightRaysPerVoxelDist))
        * uniformGraph->GetSpacing();
 
-    Point3f origin(mediumData.boundsCenter - lightDir * mediumData.maxDistToCenter * 2);
+    const util::PrimitiveData& primitiveData = mediumData.primitiveData;
+    Point3f origin(primitiveData.boundsCenter - inDirection * primitiveData.maxDistToCenter * 2);
 
     Vector3f xVector;
     Vector3f yVector;
-    CoordinateSystem(lightDir, &xVector, &yVector);
+    CoordinateSystem(inDirection, &xVector, &yVector);
 
     float distBetweenRays = uniformGraph->GetSpacing() / static_cast<float>(lightRaysPerVoxelDist);
     xVector *= distBetweenRays;
     yVector *= distBetweenRays;
 
-    int numSteps = std::ceil(mediumData.maxDistToCenter / distBetweenRays);
+    int numSteps = std::ceil(primitiveData.maxDistToCenter / distBetweenRays);
 
     std::unordered_map<int, float> lightMap;
     lightMap.reserve(numVertices); // rarely need this amount, but better to have enough capacity
@@ -43,24 +44,24 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
     for (int x = -numSteps; x <= numSteps; ++x) {
         for (int y = -numSteps; y <= numSteps; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
-            RayDifferential gridRay(newOrigin, lightDir);
+            RayDifferential gridRay(newOrigin, inDirection);
 
-            if (auto shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity))
+            if (auto shapeIsect = primitiveData.primitive.Intersect(gridRay, Infinity))
                 ++raysHitting;
         }
     }
 
-    int workNeeded = raysHitting * initialLightingIterations;
-    ProgressReporter progress(workNeeded, "Computing initial lighting", false);
+    int workNeeded = raysHitting * config.lightIterations;
+    ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
     int numRaysScatteredOutsideGrid = 0;
 
     for (int x = -numSteps; x <= numSteps; ++x) {
         for (int y = -numSteps; y <= numSteps; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
-            RayDifferential gridRay(newOrigin, lightDir);
+            RayDifferential gridRay(newOrigin, inDirection);
 
-            auto shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity);
+            auto shapeIsect = primitiveData.primitive.Intersect(gridRay, Infinity);
             if (!shapeIsect)
                 continue;
 
@@ -70,13 +71,13 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
                 continue;
             }
 
-            shapeIsect = mediumData.aggregate->Intersect(gridRay, Infinity);
+            shapeIsect = primitiveData.primitive.Intersect(gridRay, Infinity);
             if (!shapeIsect)
                 continue;
 
             float tMax = shapeIsect->tHit;
 
-            for (int i = 0; i < initialLightingIterations; ++i) {
+            for (int i = 0; i < config.lightIterations; ++i) {
                 sampler.StartPixelSample(Point2i(x, y), i);
 
                 // Initialize _RNG_ for sampling the majorant transmittance

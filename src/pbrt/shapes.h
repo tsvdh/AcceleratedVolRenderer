@@ -391,6 +391,12 @@ class Sphere {
         return 1 / (2 * Pi * oneMinusCosThetaMax);
     }
 
+    Float GetRadius() { return radius; }
+
+    void SetObjectFromRender(const Transform* objectFromRender) {
+        this->objectFromRender = objectFromRender;
+    }
+
   private:
     // Sphere Private Members
     Float radius;

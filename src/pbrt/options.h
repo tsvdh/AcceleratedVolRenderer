@@ -38,8 +38,8 @@ struct BasicPBRTOptions {
 struct GraphOptions {
     bool debug = false;
     bool disableMT = false;
-    std::optional<Point2i> samplingResolution;
-    float renderRadiusModifier;
+    pstd::optional<Point2i> samplingResolution;
+    pstd::optional<float> renderRadiusModifier;
 };
 
 // PBRTOptions Definition
