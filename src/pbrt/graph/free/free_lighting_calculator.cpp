@@ -7,8 +7,8 @@
 namespace graph {
 
 FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet)
-    : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet) {
+        LightingCalculatorConfig config, bool quiet, bool runInParallel)
+    : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, runInParallel) {
 
     freeGraph = dynamic_cast<FreeGraph*>(&graph);
 }
@@ -36,7 +36,8 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 
     int numVertices = static_cast<int>(graph.GetVertices().size());
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
-    ParallelFor(0, numVertices, [&](int vertexId) {
+
+    ParallelFor(0, numVertices, runInParallel, [&](int vertexId) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
         if (!vertex.data.type || vertex.data.type != entry)

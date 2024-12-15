@@ -264,11 +264,19 @@ void ParallelFor(int64_t start, int64_t end, std::function<void(int64_t, int64_t
 void ParallelFor2D(const Bounds2i &extent, std::function<void(Bounds2i)> func);
 
 // Parallel Inline Functions
-inline void ParallelFor(int64_t start, int64_t end, std::function<void(int64_t)> func) {
-    ParallelFor(start, end, [&func](int64_t start, int64_t end) {
-        for (int64_t i = start; i < end; ++i)
+inline void ParallelFor(int64_t start, int64_t end, bool runInParallel, std::function<void(int64_t)> func) {
+    if (!runInParallel)
+        for (int i = start; i < end; ++i)
+            func(i);
+
+    ParallelFor(start, end, [&func](int64_t thread_start, int64_t thread_end) {
+        for (int64_t i = thread_start; i < thread_end; ++i)
             func(i);
     });
+}
+
+inline void ParallelFor(int64_t start, int64_t end, std::function<void(int64_t)> func) {
+    ParallelFor(start, end, true, std::move(func));
 }
 
 inline void ParallelFor2D(const Bounds2i &extent, std::function<void(Point2i)> func) {

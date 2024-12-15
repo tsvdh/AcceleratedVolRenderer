@@ -30,8 +30,7 @@ public:
 
         if (!Options->graph.renderRadiusModifier)
             ErrorExit("Render search radius modifier must be specified");
-        searchRadius = Sqr(
-            GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
+        searchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
     }
 
     void Render() override;

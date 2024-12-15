@@ -4,11 +4,10 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-
 LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet)
-    : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet) {
-
+                                       LightingCalculatorConfig config, bool quiet, bool runInParallel)
+    : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
+      runInParallel(runInParallel) {
     if (config.lightIterations <= 0)
         ErrorExit("Must have at least one initial lighting iteration");
 
@@ -78,7 +77,7 @@ SparseMat LightingCalculator::GetTransmittanceMatrix() const {
 SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, float>& lightMap) const {
     std::vector<std::pair<int, float>> lightPairs(lightMap.begin(), lightMap.end());
     std::sort(lightPairs.begin(), lightPairs.end(),
-        [](const auto& a, const auto& b) { return a.first < b.first; });
+              [](const auto& a, const auto& b) { return a.first < b.first; });
 
     SparseVec lightVector(numVertices);
     for (auto& pair : lightPairs) {
@@ -87,5 +86,4 @@ SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, flo
 
     return lightVector;
 }
-
 }

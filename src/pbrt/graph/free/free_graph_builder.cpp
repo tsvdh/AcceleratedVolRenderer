@@ -8,13 +8,16 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
+                                   bool runInParallel)
+    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, runInParallel,
+                       Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier)) {
+}
 
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet)
-    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config,
-                       GetSameSpotRadius(mediumData) * config.radiusModifier, quiet) {}
-
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, float radius, bool quiet)
-        : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), searchRadius(radius), quiet(quiet) {
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
+                                   bool runInParallel, float radius)
+    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet), runInParallel(runInParallel),
+      searchRadius(radius) {
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
@@ -116,7 +119,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     xVector *= stepSize;
     yVector *= stepSize;
 
-    ProgressReporter workEstimateProgress(Sqr(config.dimensionSteps), "Estimating work needed", false);
+    ProgressReporter workEstimateProgress(Sqr(config.dimensionSteps), "Estimating work needed", quiet);
 
     int workNeeded = 0;
     for (int x = 1; x <= config.dimensionSteps; ++x) {
@@ -142,7 +145,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     for (int x = 1; x <= config.dimensionSteps; ++x) {
         for (int y = 1; y <= config.dimensionSteps; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
-            RayDifferential ray(newOrigin, inDirection);
+            RayDifferential ray(newOrigin, inDirection, 0, mediumData.medium);
 
             auto optShapeIntersection = primitiveData.primitive.Intersect(ray, Infinity);
             if (!optShapeIntersection)
@@ -175,7 +178,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
     nanoflann::RadiusResultSet resultSet(searchRadius, resultItems);
-    float point[3] = { pointRef.x, pointRef.y, pointRef.z };
+    float point[3] = {pointRef.x, pointRef.y, pointRef.z};
 
     searchTree->findNeighbors(resultSet, point);
     resultSet.sort();
@@ -213,7 +216,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     }
 }
 
-void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
+void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
     auto GetLargestTakenId = [&](int currentLargestId) {
         for (int i = currentLargestId; i >= 0; --i)
             if (graph.GetVertex(i).has_value())
@@ -222,7 +225,8 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
         return -1;
     };
 
-    std::cout << "Rearranging vertex ids... ";
+    if (!quiet)
+        std::cout << "Rearranging vertex ids... ";
 
     int currentLargestId = GetLargestTakenId(graph.GetCurVertexId());
 
@@ -242,11 +246,14 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
             currentLargestId = GetLargestTakenId(currentLargestId);
         }
     }
-    std::cout << "done" << std::endl;
+
+    if (!quiet)
+        std::cout << "done" << std::endl;
 }
 
-void FreeGraphBuilder::ProcessPaths(Graph& graph) {
-    std::cout << "Adding edges... ";
+void FreeGraphBuilder::ProcessPaths(Graph& graph) const {
+    if (!quiet)
+        std::cout << "Adding edges... ";
 
     for (auto& [_, path] : graph.GetPaths()) {
         if (path.Length() > 0)
@@ -268,7 +275,8 @@ void FreeGraphBuilder::ProcessPaths(Graph& graph) {
     }
     graph.GetPaths().clear();
 
-    std::cout << "done" << std::endl;
+    if (!quiet)
+        std::cout << "done" << std::endl;
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
@@ -282,7 +290,8 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
 
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
-    ParallelFor(0, numEdges, [&](int edgeId) {
+
+    ParallelFor(0, numEdges, runInParallel, [&](int edgeId) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 
         Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
@@ -304,5 +313,4 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     });
     progress.Done();
 }
-
 }

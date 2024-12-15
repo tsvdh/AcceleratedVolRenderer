@@ -116,10 +116,15 @@ class Sphere {
 
     Sphere(const Transform *renderFromObject, const Transform *objectFromRender,
            bool reverseOrientation, Float radius, Float zMin, Float zMax, Float phiMax)
+               : Sphere(renderFromObject, objectFromRender, reverseOrientation, renderFromObject->SwapsHandedness(),
+                   radius, zMin, zMax, phiMax) {}
+
+    Sphere(const Transform *renderFromObject, const Transform *objectFromRender,
+           bool reverseOrientation, bool transformSwapsHandedness, Float radius, Float zMin, Float zMax, Float phiMax)
         : renderFromObject(renderFromObject),
           objectFromRender(objectFromRender),
           reverseOrientation(reverseOrientation),
-          transformSwapsHandedness(renderFromObject->SwapsHandedness()),
+          transformSwapsHandedness(transformSwapsHandedness),
           radius(radius),
           zMin(Clamp(std::min(zMin, zMax), -radius, radius)),
           zMax(Clamp(std::max(zMin, zMax), -radius, radius)),
@@ -391,11 +396,10 @@ class Sphere {
         return 1 / (2 * Pi * oneMinusCosThetaMax);
     }
 
-    Float GetRadius() { return radius; }
+    Float GetRadius() const { return radius; }
 
-    void SetObjectFromRender(const Transform* objectFromRender) {
-        this->objectFromRender = objectFromRender;
-    }
+    void SetObjectFromRender(const Transform* objectFromRender) { this->objectFromRender = objectFromRender; }
+    void SetRenderFromObject(const Transform* renderFromObject) { this->renderFromObject = renderFromObject; }
 
   private:
     // Sphere Private Members
