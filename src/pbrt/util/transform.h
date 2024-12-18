@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <cmath>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <memory>
 
@@ -282,19 +283,13 @@ PBRT_CPU_GPU inline Vector3fi Transform::operator()(const Vector3fi &v) const {
         vOutError.x = gamma(3) * (std::abs(m[0][0] * x) + std::abs(m[0][1] * y) +
                                   std::abs(m[0][2] * z));
         if (vOutError.x > 1) {
-            float g1 = gamma(3);
+            std::cout << m[1][0] << " | " << x << " | " << m[1][0] * x << " | " << std::abs(m[1][0] * x) << std::endl;
+
             float xx1 = std::abs(m[1][0] * x);
             float yy1 = std::abs(m[1][1] * y);
             float zz1 = std::abs(m[1][2] * z);
-            float test1 = g * (xx1 + yy1 + zz1);
 
             int a = 1;
-
-            float g2 = gamma(3);
-            float xx2 = std::abs(m[1][0] * x);
-            float yy2 = std::abs(m[1][1] * y);
-            float zz2 = std::abs(m[1][2] * z);
-            float test2 = g * (xx2 + yy2 + zz2);
         }
 
 
