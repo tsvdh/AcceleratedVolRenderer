@@ -59,7 +59,13 @@ void main(int argc, char* argv[]) {
         configName = std::regex_replace(fileNames[0], std::regex("\\.pbrt"), ".json");
     }
     std::ifstream configStream(configName.value());
-    nlohmann::json jsonConfig = nlohmann::json::parse(configStream);
+
+    nlohmann::json jsonConfig;
+    try {
+         jsonConfig = nlohmann::json::parse(configStream);
+    } catch (const std::exception& exception) {
+        ErrorExit(exception.what());
+    }
 
     auto config = jsonConfig.get<graph::Config>();
 
@@ -127,4 +133,5 @@ void main(int argc, char* argv[]) {
                       graph::StreamFlags{false, false, false, true});
 
     CleanupPBRT();
+    exit(0);
 }

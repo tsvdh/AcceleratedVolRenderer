@@ -2135,9 +2135,6 @@ SampledSpectrum G(const Integrator &integrator, Sampler sampler, const Vertex &v
 Float MISWeight(const Integrator &integrator, Camera camera, Vertex *lightVertices,
                 Vertex *cameraVertices, Vertex &sampled, int s, int t,
                 LightSampler lightSampler) {
-    if (s == 2 && t == 2)
-        int bla = 1;
-
     if (s + t == 2)
         return 1;
     Float sumRi = 0;

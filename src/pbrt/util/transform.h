@@ -273,10 +273,36 @@ PBRT_CPU_GPU inline Vector3fi Transform::operator()(const Vector3fi &v) const {
     Float x = Float(v.x), y = Float(v.y), z = Float(v.z);
     Vector3f vOutError;
     if (v.IsExact()) {
+        float g = gamma(3);
+        float xx = std::abs(m[1][0] * x);
+        float yy = std::abs(m[1][1] * y);
+        float zz = std::abs(m[1][2] * z);
+        float test = g * (xx + yy + zz);
+
         vOutError.x = gamma(3) * (std::abs(m[0][0] * x) + std::abs(m[0][1] * y) +
                                   std::abs(m[0][2] * z));
+        if (vOutError.x > 1) {
+            float g1 = gamma(3);
+            float xx1 = std::abs(m[1][0] * x);
+            float yy1 = std::abs(m[1][1] * y);
+            float zz1 = std::abs(m[1][2] * z);
+            float test1 = g * (xx1 + yy1 + zz1);
+
+            int a = 1;
+
+            float g2 = gamma(3);
+            float xx2 = std::abs(m[1][0] * x);
+            float yy2 = std::abs(m[1][1] * y);
+            float zz2 = std::abs(m[1][2] * z);
+            float test2 = g * (xx2 + yy2 + zz2);
+        }
+
+
+
         vOutError.y = gamma(3) * (std::abs(m[1][0] * x) + std::abs(m[1][1] * y) +
                                   std::abs(m[1][2] * z));
+
+
         vOutError.z = gamma(3) * (std::abs(m[2][0] * x) + std::abs(m[2][1] * y) +
                                   std::abs(m[2][2] * z));
     } else {
