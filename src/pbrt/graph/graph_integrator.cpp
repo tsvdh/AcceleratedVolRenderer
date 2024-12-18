@@ -1,7 +1,7 @@
 #include "graph_integrator.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #include <pbrt/materials.h>
 #include <pbrt/graph/T_sampler_custom.h>
@@ -56,8 +56,12 @@ void GraphIntegrator::Render() {
                             threadPixel.x, threadPixel.y, threadSampleIndex);
     });
 
-    std::string graphName = Options->sceneFileName;
-    graphName = std::regex_replace(graphName, std::regex("\\.pbrt"), ".txt");
+    std::string graphName;
+    if (Options->graph.configFile) {
+        graphName = std::regex_replace(Options->graph.configFile.value(), std::regex("\\.json"), ".txt");
+    } else {
+        graphName = std::regex_replace(Options->graph.sceneFile, std::regex("\\.pbrt"), ".txt");
+    }
     std::ifstream file(util::FileNameToPath(graphName));
     std::string description, name;
     file >> description >> name;

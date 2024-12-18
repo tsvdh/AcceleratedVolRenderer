@@ -101,6 +101,7 @@ Graph integrator options:
   --graph-debug                 Shows light values of voxels
   --graph-disable-MT            Disable multi threading
   --graph-render-radius-mod     Specify rendering search radius modifier
+  --graph-config                Path to config file
 )",
             NSpectrumSamples);
     exit(msg.empty() ? 0 : 1);
@@ -209,7 +210,8 @@ int main(int argc, char *argv[]) {
             ParseArg(&iter, args.end(), "upgrade", &options.upgrade, onError) ||
             ParseArg(&iter, args.end(), "graph-debug", &options.graph.debug, onError) ||
             ParseArg(&iter, args.end(), "graph-disable-MT", &options.graph.disableMT, onError) ||
-            ParseArg(&iter, args.end(), "graph-render-radius-mod", &options.graph.renderRadiusModifier, onError)) {
+            ParseArg(&iter, args.end(), "graph-render-radius-mod", &options.graph.renderRadiusModifier, onError) ||
+            ParseArg(&iter, args.end(), "graph-config", &options.graph.configFile, onError)) {
             // success
         } else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
             usage();
@@ -280,7 +282,7 @@ int main(int argc, char *argv[]) {
     if (filenames.size() != 1)
         ErrorExit("Only one filename supported");
 
-    options.sceneFileName = filenames[0];
+    options.graph.sceneFile = filenames[0];
 
     // Initialize pbrt
     InitPBRT(options);

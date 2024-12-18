@@ -14,11 +14,51 @@
 
 using namespace pbrt;
 
+static void usage() {
+    fprintf(stderr,
+            R"(
+Usage: graph_maker [<options>] <filename.pbrt>
+
+Graph making options:
+--config <filename>     Specifies a config file not in the default location
+)");
+}
+
 void main(int argc, char* argv[]) {
     std::vector<std::string> args = GetCommandLineArguments(argv);
 
-    std::string configName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".json");
-    std::ifstream configStream(configName);
+    std::vector<std::string> fileNames;
+    pstd::optional<std::string> configName;
+
+    for (auto iter = args.begin(); iter != args.end(); ++iter) {
+        if ((*iter)[0] != '-') {
+            fileNames.push_back(*iter);
+            continue;
+        }
+
+        auto onError = [](const std::string& error) {
+            usage();
+            exit(1);
+        };
+
+        if (ParseArg(&iter, args.end(), "config", &configName, onError)) {
+            // argument parsed
+        } else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
+            usage();
+            exit(0);
+        } else {
+            usage();
+            exit(1);
+        }
+    }
+
+    if (fileNames.empty())
+        ErrorExit("Must specify exactly one filename");
+
+    if (!configName) {
+        configName = std::regex_replace(fileNames[0], std::regex("\\.pbrt"), ".json");
+    }
+    std::ifstream configStream(configName.value());
     nlohmann::json jsonConfig = nlohmann::json::parse(configStream);
 
     auto config = jsonConfig.get<graph::Config>();
@@ -46,7 +86,7 @@ void main(int argc, char* argv[]) {
 
     BasicScene scene;
     BasicSceneBuilder builder(&scene);
-    ParseFiles(&builder, args);
+    ParseFiles(&builder, fileNames);
 
     std::map<std::string, Medium> media = scene.CreateMedia();
 
@@ -82,7 +122,9 @@ void main(int argc, char* argv[]) {
     // graph is in incorrect state after this
     graph.GetEdges().clear();
 
-    std::string fileName = std::regex_replace(args[0], std::regex("\\.pbrt"), ".txt");
-    graph.WriteToDisk(fileName, graph::basic,
+    std::string graphFileName = std::regex_replace(configName.value(), std::regex("\\.json"), ".txt");
+    graph.WriteToDisk(graphFileName, graph::basic,
                       graph::StreamFlags{false, false, false, true});
+
+    CleanupPBRT();
 }

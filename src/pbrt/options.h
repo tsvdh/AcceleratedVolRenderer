@@ -36,10 +36,12 @@ struct BasicPBRTOptions {
 
 // GraphOptionsDefinition
 struct GraphOptions {
+    std::string sceneFile;
     bool debug = false;
     bool disableMT = false;
     pstd::optional<Point2i> samplingResolution;
     pstd::optional<float> renderRadiusModifier;
+    pstd::optional<std::string> configFile;
 };
 
 // PBRTOptions Definition
@@ -63,8 +65,6 @@ struct PBRTOptions : BasicPBRTOptions {
     pstd::optional<Bounds2i> pixelBounds;
     pstd::optional<Point2i> pixelMaterial;
     Float displacementEdgeScale = 1;
-
-    std::string sceneFileName;
 
     GraphOptions graph;
 

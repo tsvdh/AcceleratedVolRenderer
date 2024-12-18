@@ -16,7 +16,7 @@ FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumD
 SparseVec FreeLightingCalculator::GetLightVector() {
     int numEntryVertices = 0;
     for (auto& pair : graph.GetVertices()) {
-        if (pair.second.data.type && pair.second.data.type == entry)
+        if (pair.second.data.type == entry)
             ++numEntryVertices;
     }
 
@@ -25,7 +25,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 
     // allocate space for concurrent access
     for (auto& pair : graph.GetVertices()) {
-        if (pair.second.data.type && pair.second.data.type == entry)
+        if (pair.second.data.type == entry)
             lightMap[pair.first] = 0;
     }
 
@@ -40,7 +40,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     ParallelFor(0, numVertices, runInParallel, [&](int vertexId) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
-        if (!vertex.data.type || vertex.data.type != entry)
+        if (vertex.data.type != entry)
             return;
 
         Point3f graphPoint = vertex.point;

@@ -23,7 +23,7 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f 
 
 int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
     int numNewVertices = 0;
-    Path& path = graph.AddPath();
+    std::vector<int> path;
 
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
@@ -81,20 +81,32 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
         // ReSharper disable once CppTooWideScope
         std::optional<nanoflann::ResultItem<int, float>> optResult = GetClosestInRadius(newPoint);
 
+        const Vertex* newVertex;
         if (optResult) {
-            Vertex& newVertex = graph.GetVertex(vHolder.GetList()[optResult->first].first)->get();
-            graph.AddVertexToPath(newVertex.id, path.id);
-        }
-        else {
-            Vertex& newVertex = graph.AddVertex(newPoint, VertexData{});
-            graph.AddVertexToPath(newVertex.id, path.id);
+            newVertex = &graph.GetVertex(vHolder.GetList()[optResult->first].first)->get();
+        } else {
+            newVertex = &graph.AddVertex(newPoint, VertexData{});
 
-            vHolder.GetList().emplace_back(newVertex.id, newVertex.point);
+            vHolder.GetList().emplace_back(newVertex->id, newVertex->point);
             ++numNewVertices;
         }
 
+        path.push_back(newVertex->id);
+        int pathSize = static_cast<int>(path.size());
+
+        if (pathSize == 1)
+            graph.GetVertex(path[0])->get().data.type = entry;
+        else { // path > 1
+            int from = path[pathSize - 2];
+            int to = path[pathSize - 1];
+
+            Vertex& fromVertex = graph.GetVertex(from)->get();
+            if (from != to && fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
+                graph.AddEdge(from, to, EdgeData{});
+        }
+
         // terminate if max depth reached
-        if (path.Length() == maxDepth)
+        if (pathSize == maxDepth)
             return numNewVertices;
 
         // Sample new direction at real-scattering event
@@ -170,8 +182,6 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     tracingProgress.Done();
 
     OrderVertexIds(graph);
-    ProcessPaths(graph);
-
     return graph;
 }
 
@@ -186,16 +196,55 @@ std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInR
     return resultItems.size() <= 1 ? std::nullopt : std::make_optional(resultItems[1]);
 }
 
-inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
-    for (auto& [pathId, pathIndices] : toMoveVertex.paths) {
-        targetVertex.AddPathIndices(pathId, pathIndices);
+inline void MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
+    struct TempEdge {
+        TempEdge(int id, int from, int to) : id(id), from(from), to(to) {}
+        int id, from, to;
+    };
 
-        Path& path = graph.GetPath(pathId)->get();
-        for (auto pathIndex : pathIndices)
-            path.vertices[pathIndex] = targetVertex.id;
+    std::vector<TempEdge> edgesToAdd;
+    std::vector<int> edgesToRemove;
+
+    for (auto& [fromId, edgeId] : toMoveVertex.inEdges) {
+        Vertex& fromVertex = graph.GetVertex(fromId)->get();
+
+        if (fromVertex.id == targetVertex.id)
+            edgesToRemove.push_back(edgeId);
+        else if (targetVertex.inEdges.find(fromVertex.id) == targetVertex.inEdges.end()) {
+            edgesToAdd.emplace_back(edgeId, fromVertex.id, targetVertex.id);
+            edgesToRemove.push_back(edgeId);
+        }
+        else
+            edgesToRemove.push_back(edgeId);
     }
 
-    toMoveVertex.paths.clear();
+    for (auto& [toId, edgeId] : toMoveVertex.outEdges) {
+        Vertex& toVertex = graph.GetVertex(toId)->get();
+
+        if (toVertex.id == targetVertex.id)
+            edgesToRemove.push_back(edgeId);
+        else if (targetVertex.outEdges.find(toVertex.id) == targetVertex.outEdges.end()) {
+            edgesToAdd.emplace_back(edgeId, targetVertex.id, toVertex.id);
+            edgesToRemove.push_back(edgeId);
+        }
+        else
+            edgesToRemove.push_back(edgeId);
+    }
+
+    for (int toRemoveId : edgesToRemove)
+        graph.RemoveEdge(toRemoveId);
+
+    for (TempEdge toAdd : edgesToAdd)
+        graph.AddEdge(toAdd.id, toAdd.from, toAdd.to, EdgeData{});
+}
+
+inline void MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
+    if (vertexToMove.data.type == entry)
+        targetVertex.data.type = entry;
+
+    MoveEdgeReferences(vertexToMove, targetVertex, graph);
+
+    graph.RemoveVertex(vertexToMove.id);
 }
 
 void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
@@ -208,9 +257,8 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();
             Vertex& targetVertex = graph.GetVertex(resultItem->first)->get();
 
-            MovePathReferences(vertexToMove, targetVertex, graph);
+            MoveVertexToTarget(vertexToMove, targetVertex, graph);
 
-            graph.RemoveVertex(curId);
             searchTree->removePoint(curId);
         }
     }
@@ -240,40 +288,11 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
             Vertex& vertexToMove = graph.GetVertex(currentLargestId)->get();
             Vertex& newVertex = graph.AddVertex(curId, vertexToMove.point, VertexData{});
 
-            MovePathReferences(vertexToMove, newVertex, graph);
+            MoveVertexToTarget(vertexToMove, newVertex, graph);
 
-            graph.RemoveVertex(vertexToMove.id);
             currentLargestId = GetLargestTakenId(currentLargestId);
         }
     }
-
-    if (!quiet)
-        std::cout << "done" << std::endl;
-}
-
-void FreeGraphBuilder::ProcessPaths(Graph& graph) const {
-    if (!quiet)
-        std::cout << "Adding edges... ";
-
-    for (auto& [_, path] : graph.GetPaths()) {
-        if (path.Length() > 0)
-            graph.GetVertex(path.vertices[0])->get().data.type = entry;
-
-        for (int i = 0; i < path.Length() - 1; ++i) {
-            int fromId = path.vertices[i];
-            int toId = path.vertices[i + 1];
-
-            if (fromId == toId)
-                continue;
-
-            auto outEdges = graph.GetVertex(fromId)->get().outEdges;
-            auto edgeResult = outEdges.find(toId);
-
-            if (edgeResult == outEdges.end())
-                graph.AddEdge(path.vertices[i], path.vertices[i + 1], EdgeData{});
-        }
-    }
-    graph.GetPaths().clear();
 
     if (!quiet)
         std::cout << "done" << std::endl;
@@ -287,11 +306,17 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     if (workNeeded == 0)
         return;
 
-    ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
+    std::vector<int> edgeIds;
+    edgeIds.reserve(numEdges);
+    for (auto& [id, _] : graph.GetEdges())
+        edgeIds.push_back(id);
 
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
-    ParallelFor(0, numEdges, runInParallel, [&](int edgeId) {
+    ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
+
+    ParallelFor(0, numEdges, runInParallel, [&](int listIndex) {
+        int edgeId = edgeIds[listIndex];
         Edge& edge = graph.GetEdge(edgeId)->get();
 
         Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
@@ -300,8 +325,8 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
 
         Sampler& samplerClone = samplers.Get();
 
-        int yCoor = edgeId / resolutionDimensionSize;
-        int xCoor = edgeId - yCoor * resolutionDimensionSize;
+        int yCoor = listIndex / resolutionDimensionSize;
+        int xCoor = listIndex - yCoor * resolutionDimensionSize;
 
         for (int i = 0; i < config.edgeIterations; ++i) {
             samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);

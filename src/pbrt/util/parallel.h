@@ -269,10 +269,12 @@ inline void ParallelFor(int64_t start, int64_t end, bool runInParallel, std::fun
         for (int i = start; i < end; ++i)
             func(i);
 
-    ParallelFor(start, end, [&func](int64_t thread_start, int64_t thread_end) {
-        for (int64_t i = thread_start; i < thread_end; ++i)
-            func(i);
-    });
+    else {
+        ParallelFor(start, end, [&func](int64_t thread_start, int64_t thread_end) {
+            for (int64_t i = thread_start; i < thread_end; ++i)
+                func(i);
+        });
+    }
 }
 
 inline void ParallelFor(int64_t start, int64_t end, std::function<void(int64_t)> func) {

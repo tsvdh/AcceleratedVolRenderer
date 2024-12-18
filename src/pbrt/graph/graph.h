@@ -36,6 +36,7 @@ struct EdgeData;
 struct Path;
 
 enum RayVertexType {
+    none,
     absorb,
     scatter,
     null,
@@ -44,7 +45,7 @@ enum RayVertexType {
 };
 
 struct VertexData {
-    std::optional<RayVertexType> type;
+    RayVertexType type = none;
     float lightScalar = -1;
 };
 

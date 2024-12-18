@@ -39,6 +39,9 @@ void Vertex::AddPathIndices(int pathId, const std::vector<int>& indices) {
 }
 
 void EdgeData::AddSample(const EdgeData& sample) {
+    if (sample.numSamples == 0)
+        ErrorExit("Cannot add an empty sample to existing edge");
+
     throughput *= numSamples;
     weightedThroughput *= numSamples;
 
@@ -121,8 +124,8 @@ bool Graph::RemoveEdge(int id) {
 
     auto& [_, from, to, data] = result->second;
 
-    GetVertex(from).value().get().outEdges.erase(to);
-    GetVertex(to).value().get().inEdges.erase(from);
+    GetVertex(from)->get().outEdges.erase(to);
+    GetVertex(to)->get().inEdges.erase(from);
 
     edges.erase(id);
     return true;
@@ -190,15 +193,15 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
 
     if (edgeResult != to.inEdges.end() && from.outEdges.find(to.id) != from.outEdges.end()) {
         OptRef<Edge> edge = GetEdge(edgeResult->second);
-        edge.value().get().data.AddSample(data);
+        edge->get().data.AddSample(data);
         return edge;
     }
 
     auto emplaceResult = edges.emplace(id, Edge{id, from.id, to.id, data});
     auto& newEdge = emplaceResult.first->second;
 
-    from.outEdges.insert({to.id, newEdge.id});
-    to.inEdges.insert({from.id, newEdge.id});
+    from.outEdges.emplace(to.id, newEdge.id);
+    to.inEdges.emplace(from.id, newEdge.id);
 
     if (incrId)
         ++curEdgeId;
@@ -208,7 +211,7 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
 
 inline void WriteVertexData(std::ostream& out, VertexData data, StreamFlags flags) {
     if (flags.useRayVertexTypes)
-        out << (data.type.has_value() ? data.type.value() : -1) << SEP;
+        out << data.type << SEP;
 
     if (flags.useLighting) {
         out << data.lightScalar << SEP;
@@ -225,8 +228,7 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
         in >> lighting;
     }
 
-    return VertexData{rayVertexType == -1 ? std::nullopt : std::optional(static_cast<RayVertexType>(rayVertexType)),
-                      lighting};
+    return VertexData{static_cast<RayVertexType>(rayVertexType), lighting};
 }
 
 inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
