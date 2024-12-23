@@ -21,6 +21,8 @@
 #include <limits>
 #include <memory>
 
+#include "error.h"
+
 namespace pbrt {
 
 // Transform Definition
@@ -184,6 +186,7 @@ class Transform {
   private:
     // Transform Private Members
     SquareMatrix<4> m, mInv;
+    int a;
 };
 
 // Transform Function Declarations
@@ -274,25 +277,17 @@ PBRT_CPU_GPU inline Vector3fi Transform::operator()(const Vector3fi &v) const {
     Float x = Float(v.x), y = Float(v.y), z = Float(v.z);
     Vector3f vOutError;
     if (v.IsExact()) {
-        float g = gamma(3);
-        float xx = std::abs(m[1][0] * x);
-        float yy = std::abs(m[1][1] * y);
-        float zz = std::abs(m[1][2] * z);
-        float test = g * (xx + yy + zz);
+        auto mCopy = m;
+        auto mInvCopy = mInv;
+        auto aCopy = a;
 
         vOutError.x = gamma(3) * (std::abs(m[0][0] * x) + std::abs(m[0][1] * y) +
                                   std::abs(m[0][2] * z));
         if (vOutError.x > 1) {
-            std::cout << m[1][0] << " | " << x << " | " << m[1][0] * x << " | " << std::abs(m[1][0] * x) << std::endl;
+            std::cout << mCopy.ToString() + "\n" + mInvCopy.ToString() + "\n" + std::to_string(aCopy) + " | " << std::endl;
 
-            float xx1 = std::abs(m[1][0] * x);
-            float yy1 = std::abs(m[1][1] * y);
-            float zz1 = std::abs(m[1][2] * z);
-
-            int a = 1;
+            ErrorExit("Error too large");
         }
-
-
 
         vOutError.y = gamma(3) * (std::abs(m[1][0] * x) + std::abs(m[1][1] * y) +
                                   std::abs(m[1][2] * z));

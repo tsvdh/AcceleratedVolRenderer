@@ -114,7 +114,8 @@ void main(int argc, char* argv[]) {
     Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false, true);
-    graph::FreeGraph graph = graphBuilder.TracePaths();
+    std::atomic<int64_t> a;
+    graph::FreeGraph graph = graphBuilder.TracePaths(a);
     graphBuilder.ComputeTransmittance(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false, true);

@@ -23,29 +23,37 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
     if (config.subdivisions > 1)
         ErrorExit("Number of subdivisions limited to 1");
 
+    int numVertices = static_cast<int>(graph.GetVertices().size());
     int workNeeded = 0;
-    for (int id = 0; id < graph.GetVertices().size(); ++id)
+    for (int id = 0; id < numVertices; ++id)
         if (initialLight.coeff(id) != 0)
             ++workNeeded;
 
     for (auto& [_, vertex] : graph.GetVertices())
         workNeeded += static_cast<int>(vertex.inEdges.size());
 
-    Sphere vertexSphere = MakeSphere(baseRadius);
+    Sphere defaultSphere = MakeSphere(baseRadius);
     float graphRadius = Sqr(std::sqrt(baseRadius) * config.graphBuilder.radiusModifier);
 
     ProgressReporter progress(workNeeded, "Computing subdivision effect", false);
 
-    ParallelFor(0, graph.GetVertices().size(), runInParallel, [&](int vertexId)  {
+    ParallelFor(0, numVertices, runInParallel, [&](int vertexId)  {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
         Transform objectFromWorld = Translate(Point3f(0, 0, 0) - vertex.point);
         Transform worldFromObject = Inverse(objectFromWorld);
-        vertexSphere.SetObjectFromRender(&objectFromWorld);
-        vertexSphere.SetRenderFromObject(&worldFromObject);
+
+        Sphere currentSphere = defaultSphere;
+        currentSphere.SetObjectFromRender(&objectFromWorld);
+        currentSphere.SetRenderFromObject(&worldFromObject);
 
         if (initialLight.coeff(vertexId) != 0) {
-            initialLight.coeffRef(vertexId) *= Subdivide(vertexSphere, lightDir, graphRadius);
+            auto start = std::chrono::high_resolution_clock::now();
+            initialLight.coeffRef(vertexId) *= Subdivide(currentSphere, lightDir, graphRadius);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            completeTotal += duration;
+
             progress.Update();
         }
 
@@ -54,25 +62,44 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
             Vertex& otherVertex = graph.GetVertex(otherId)->get();
             Vector3f edgeDir = Normalize(vertex.point - otherVertex.point);
 
-            edge.data.throughput *= Subdivide(vertexSphere, edgeDir, graphRadius);
+            // edge.data.throughput *= Subdivide(defaultSphere, edgeDir, graphRadius);
+
             progress.Update();
         }
     });
     progress.Done();
+
+    std::cout << total1 / numVertices << std::endl;
+    std::cout << total2 / numVertices << std::endl;
+    std::cout << total3 / numVertices << std::endl;
+    std::cout << total4 / numVertices << std::endl;
+    std::cout << total5 / numVertices << std::endl;
+    std::cout << completeTotal / numVertices << std::endl;
 }
 
-float Subdivider::Subdivide(const Sphere& sphere, Vector3f inDirection, float graphRadius) const {
+float Subdivider::Subdivide(const Sphere& sphere, Vector3f inDirection, float graphRadius) {
     GeometricPrimitive primitive(&sphere, nullptr, nullptr, sphereInterface);
     util::PrimitiveData primitiveData(&primitive);
     util::MediumData localMediumData = mediumData;
     localMediumData.primitiveData = primitiveData;
+    auto start = std::chrono::high_resolution_clock::now();
 
     FreeGraphBuilder graphBuilder(localMediumData, inDirection, sampler, config.graphBuilder, true, false, graphRadius);
-    FreeGraph graph = graphBuilder.TracePaths();
+    FreeGraph graph = graphBuilder.TracePaths(total3);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    total1 += duration;
+
     graphBuilder.ComputeTransmittance(graph);
+    start = std::chrono::high_resolution_clock::now();
 
     FreeLightingCalculator lightingCalculator(graph, localMediumData, inDirection, sampler, config.lightingCalculator, true, false);
     lightingCalculator.ComputeFinalLight();
+
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    total2 += duration;
 
     float averageLight = 0;
     for (auto& [id, vertex] : graph.GetVertices())

@@ -118,7 +118,7 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
     }
 }
 
-FreeGraph FreeGraphBuilder::TracePaths() {
+FreeGraph FreeGraphBuilder::TracePaths(std::atomic<int64_t>& total) {
     Vector3f xVector;
     Vector3f yVector;
     CoordinateSystem(inDirection, &xVector, &yVector);
@@ -136,11 +136,19 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     int workNeeded = 0;
     for (int x = 1; x <= config.dimensionSteps; ++x) {
         for (int y = 1; y <= config.dimensionSteps; ++y) {
+
+
             Point3f newOrigin = origin + xVector * x + yVector * y;
             RayDifferential ray(newOrigin, inDirection);
 
+            auto start = std::chrono::high_resolution_clock::now();
+
             if (primitiveData.primitive.Intersect(ray, Infinity))
                 ++workNeeded;
+
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            total += duration;
 
             workEstimateProgress.Update();
         }
