@@ -115,7 +115,7 @@ void main(int argc, char* argv[]) {
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false, true);
     std::atomic<int64_t> a;
-    graph::FreeGraph graph = graphBuilder.TracePaths(a);
+    graph::FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false, true);

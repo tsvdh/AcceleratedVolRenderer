@@ -23,12 +23,5 @@ private:
     float baseRadius;
     SubDividerConfig config;
     bool runInParallel;
-
-    std::atomic<int64_t> total1 = 0;
-    std::atomic<int64_t> total2 = 0;
-    std::atomic<int64_t> total3 = 0;
-    std::atomic<int64_t> total4 = 0;
-    std::atomic<int64_t> total5 = 0;
-    std::atomic<int64_t> completeTotal = 0;
 };
 }

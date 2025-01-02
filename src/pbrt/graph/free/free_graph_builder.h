@@ -13,7 +13,7 @@ public:
     FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
                      bool runInParallel, float radius);
 
-    FreeGraph TracePaths(std::atomic<int64_t>& total);
+    FreeGraph TracePaths();
     void ComputeTransmittance(FreeGraph& graph);
 
     float GetSearchRadius() const { return searchRadius; }

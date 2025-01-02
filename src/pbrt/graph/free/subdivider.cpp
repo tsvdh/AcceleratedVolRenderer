@@ -48,12 +48,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
         currentSphere.SetRenderFromObject(&worldFromObject);
 
         if (initialLight.coeff(vertexId) != 0) {
-            auto start = std::chrono::high_resolution_clock::now();
             initialLight.coeffRef(vertexId) *= Subdivide(currentSphere, lightDir, graphRadius);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            completeTotal += duration;
-
             progress.Update();
         }
 
@@ -62,19 +57,12 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
             Vertex& otherVertex = graph.GetVertex(otherId)->get();
             Vector3f edgeDir = Normalize(vertex.point - otherVertex.point);
 
-            // edge.data.throughput *= Subdivide(defaultSphere, edgeDir, graphRadius);
+            edge.data.throughput *= Subdivide(currentSphere, edgeDir, graphRadius);
 
             progress.Update();
         }
     });
     progress.Done();
-
-    std::cout << total1 / numVertices << std::endl;
-    std::cout << total2 / numVertices << std::endl;
-    std::cout << total3 / numVertices << std::endl;
-    std::cout << total4 / numVertices << std::endl;
-    std::cout << total5 / numVertices << std::endl;
-    std::cout << completeTotal / numVertices << std::endl;
 }
 
 float Subdivider::Subdivide(const Sphere& sphere, Vector3f inDirection, float graphRadius) {
@@ -82,29 +70,19 @@ float Subdivider::Subdivide(const Sphere& sphere, Vector3f inDirection, float gr
     util::PrimitiveData primitiveData(&primitive);
     util::MediumData localMediumData = mediumData;
     localMediumData.primitiveData = primitiveData;
-    auto start = std::chrono::high_resolution_clock::now();
 
     FreeGraphBuilder graphBuilder(localMediumData, inDirection, sampler, config.graphBuilder, true, false, graphRadius);
-    FreeGraph graph = graphBuilder.TracePaths(total3);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    total1 += duration;
-
+    FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
-    start = std::chrono::high_resolution_clock::now();
 
     FreeLightingCalculator lightingCalculator(graph, localMediumData, inDirection, sampler, config.lightingCalculator, true, false);
     lightingCalculator.ComputeFinalLight();
-
-    end = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    total2 += duration;
 
     float averageLight = 0;
     for (auto& [id, vertex] : graph.GetVertices())
         averageLight += vertex.data.lightScalar;
 
-    return averageLight / static_cast<float>(graph.GetVertices().size());
+    float numVertices = static_cast<float>(graph.GetVertices().size());
+    return numVertices == 0 ? 1 : averageLight / numVertices;
 }
 }
