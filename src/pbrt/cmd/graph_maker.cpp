@@ -114,14 +114,13 @@ void main(int argc, char* argv[]) {
     Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false, true);
-    std::atomic<int64_t> a;
     graph::FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false, true);
     graph::SparseVec lightVec = lighting.GetLightVector();
 
-    graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, graphBuilder.GetSearchRadius(), config.subdivider, true);
+    graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, graphBuilder.GetSearchRadius(), config.subdivider, false);
     subdivider.ComputeSubdivisionEffect(lightVec);
 
     lighting.ComputeFinalLight(lightVec);

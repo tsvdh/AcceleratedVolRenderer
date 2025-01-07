@@ -33,7 +33,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
         workNeeded += static_cast<int>(vertex.inEdges.size());
 
     Sphere defaultSphere = MakeSphere(baseRadius);
-    float graphRadius = Sqr(std::sqrt(baseRadius) * config.graphBuilder.radiusModifier);
+    float subRadius = Sqr(std::sqrt(baseRadius) * config.graphBuilder.radiusModifier);
 
     ProgressReporter progress(workNeeded, "Computing subdivision effect", false);
 
@@ -48,7 +48,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
         currentSphere.SetRenderFromObject(&worldFromObject);
 
         if (initialLight.coeff(vertexId) != 0) {
-            initialLight.coeffRef(vertexId) *= Subdivide(currentSphere, lightDir, graphRadius);
+            initialLight.coeffRef(vertexId) *= Subdivide(currentSphere, lightDir, subRadius);
             progress.Update();
         }
 
@@ -57,7 +57,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
             Vertex& otherVertex = graph.GetVertex(otherId)->get();
             Vector3f edgeDir = Normalize(vertex.point - otherVertex.point);
 
-            edge.data.throughput *= Subdivide(currentSphere, edgeDir, graphRadius);
+            edge.data.throughput *= Subdivide(currentSphere, edgeDir, subRadius);
 
             progress.Update();
         }
@@ -83,6 +83,8 @@ float Subdivider::Subdivide(const Sphere& sphere, Vector3f inDirection, float gr
         averageLight += vertex.data.lightScalar;
 
     float numVertices = static_cast<float>(graph.GetVertices().size());
-    return numVertices == 0 ? 1 : averageLight / numVertices;
+    float result = numVertices == 0 ? 1 : averageLight / numVertices;
+    std::cout << std::to_string(result) + " \n";
+    return result;
 }
 }
