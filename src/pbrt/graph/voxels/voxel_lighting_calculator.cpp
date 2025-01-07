@@ -10,8 +10,8 @@
 namespace graph {
 
 VoxelLightingCalculator::VoxelLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-    LightingCalculatorConfig config, bool quiet, bool runInParallel)
-        : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, runInParallel) {
+    LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset)
+        : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, runInParallel, sampleIndexOffset) {
 
     uniformGraph = dynamic_cast<UniformGraph*>(&graph);
 }

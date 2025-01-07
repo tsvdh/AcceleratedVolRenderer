@@ -23,4 +23,12 @@ void main(int argc, char* argv[]) {
     else
         std::cout << resultItems[0].second;
     std::cout << std::endl;
+
+    std::unordered_map<int, bool> testMap;
+    for (int i = 0; i < 1000; ++i)
+        testMap.emplace(i, true);
+
+    for (auto pair : testMap)
+        std::cout << pair.first << " ";
+    std::cout << std::endl;
 }

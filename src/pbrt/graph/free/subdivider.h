@@ -13,7 +13,7 @@ public:
     void ComputeSubdivisionEffect(SparseVec& initialLight);
 
 private:
-    float Subdivide(const Sphere& sphere, Vector3f inDirection, float graphRadius);
+    float Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float graphRadius);
 
     Graph& graph;
     const util::MediumData& mediumData;

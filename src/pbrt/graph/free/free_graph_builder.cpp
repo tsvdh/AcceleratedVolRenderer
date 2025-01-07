@@ -9,15 +9,15 @@
 
 namespace graph {
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                                   bool runInParallel)
-    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, runInParallel,
+                                   bool runInParallel, int sampleIndexOffset)
+    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, runInParallel, sampleIndexOffset,
                        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier)) {
 }
 
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                                   bool runInParallel, float radius)
+                                   bool runInParallel, int sampleIndexOffset, float radius)
     : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet), runInParallel(runInParallel),
-      searchRadius(radius) {
+      searchRadius(radius), sampleIndexOffset(sampleIndexOffset) {
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
@@ -164,7 +164,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 continue;
             optShapeIntersection->intr.SkipIntersection(&ray, optShapeIntersection->tHit);
 
-            sampler.StartPixelSample(Point2i(x, y), 0);
+            sampler.StartPixelSample(Point2i(x, y), sampleIndexOffset);
             int newVertices = TracePath(ray, graph, config.maxDepth);
 
             currentBatch += newVertices;

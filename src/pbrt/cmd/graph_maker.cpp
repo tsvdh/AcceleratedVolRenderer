@@ -79,8 +79,9 @@ void main(int argc, char* argv[]) {
     );
 
     int numRays = Sqr(maxDimensionSteps);
-    int maxSampleDimensionSize = std::ceil(std::sqrt(numRays * maxMaxDepth));
-    int pixelSamples = RoundUpPow2(maxIterations);
+    int maxNumVertices = numRays * maxMaxDepth;
+    int maxSampleDimensionSize = std::ceil(std::sqrt(maxNumVertices));
+    int pixelSamples = RoundUpPow2(std::max(maxNumVertices, maxIterations));
 
     PBRTOptions options;
     options.disablePixelJitter = true;

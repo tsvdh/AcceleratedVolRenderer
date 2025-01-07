@@ -5,9 +5,9 @@
 
 namespace graph {
 LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-                                       LightingCalculatorConfig config, bool quiet, bool runInParallel)
+                                       LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset)
     : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
-      runInParallel(runInParallel) {
+      runInParallel(runInParallel), sampleIndexOffset(sampleIndexOffset) {
     if (config.lightIterations <= 0)
         ErrorExit("Must have at least one initial lighting iteration");
 

@@ -9,9 +9,9 @@ using namespace pbrt;
 class FreeGraphBuilder {
 public:
     FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                     bool runInParallel);
+                     bool runInParallel, int sampleIndexOffset = 0);
     FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                     bool runInParallel, float radius);
+                     bool runInParallel, int sampleIndexOffset, float radius);
 
     FreeGraph TracePaths();
     void ComputeTransmittance(FreeGraph& graph);
@@ -33,5 +33,6 @@ private:
     bool quiet;
     bool runInParallel;
     float searchRadius;
+    int sampleIndexOffset;
 };
 }

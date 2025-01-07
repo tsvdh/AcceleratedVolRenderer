@@ -6,7 +6,7 @@ namespace graph {
 class FreeLightingCalculator final : public LightingCalculator {
 public:
     FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet, bool runInParallel);
+        LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset = 0);
 
     [[nodiscard]] SparseVec GetLightVector() override;
     

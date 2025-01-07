@@ -48,7 +48,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
         currentSphere.SetRenderFromObject(&worldFromObject);
 
         if (initialLight.coeff(vertexId) != 0) {
-            initialLight.coeffRef(vertexId) *= Subdivide(currentSphere, lightDir, subRadius);
+            initialLight.coeffRef(vertexId) *= Subdivide(vertexId, currentSphere, lightDir, subRadius);
             progress.Update();
         }
 
@@ -57,7 +57,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
             Vertex& otherVertex = graph.GetVertex(otherId)->get();
             Vector3f edgeDir = Normalize(vertex.point - otherVertex.point);
 
-            edge.data.throughput *= Subdivide(currentSphere, edgeDir, subRadius);
+            edge.data.throughput *= Subdivide(vertexId, currentSphere, edgeDir, subRadius);
 
             progress.Update();
         }
@@ -65,13 +65,13 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
     progress.Done();
 }
 
-float Subdivider::Subdivide(const Sphere& sphere, Vector3f inDirection, float graphRadius) {
+float Subdivider::Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float graphRadius) {
     GeometricPrimitive primitive(&sphere, nullptr, nullptr, sphereInterface);
     util::PrimitiveData primitiveData(&primitive);
     util::MediumData localMediumData = mediumData;
     localMediumData.primitiveData = primitiveData;
 
-    FreeGraphBuilder graphBuilder(localMediumData, inDirection, sampler, config.graphBuilder, true, false, graphRadius);
+    FreeGraphBuilder graphBuilder(localMediumData, inDirection, sampler, config.graphBuilder, true, false, vertexId, graphRadius);
     FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
 
