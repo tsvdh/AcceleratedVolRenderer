@@ -23,6 +23,10 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
     if (config.subdivisions > 1)
         ErrorExit("Number of subdivisions limited to 1");
 
+    float totalLight = 0;
+    int totalDuration = 0;
+    int numSubdivisions = 0;
+
     int numVertices = static_cast<int>(graph.GetVertices().size());
     int workNeeded = 0;
     for (int id = 0; id < numVertices; ++id)
@@ -48,7 +52,14 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
         currentSphere.SetRenderFromObject(&worldFromObject);
 
         if (initialLight.coeff(vertexId) != 0) {
-            initialLight.coeffRef(vertexId) *= Subdivide(vertexId, currentSphere, lightDir, subRadius);
+            auto start = std::chrono::high_resolution_clock::now();
+            float light = Subdivide(vertexId, currentSphere, lightDir, subRadius);
+            auto end = std::chrono::high_resolution_clock::now();
+            totalDuration += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+            totalLight += light;
+            ++numSubdivisions;
+            initialLight.coeffRef(vertexId) *= light;
             progress.Update();
         }
 
@@ -57,12 +68,21 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
             Vertex& otherVertex = graph.GetVertex(otherId)->get();
             Vector3f edgeDir = Normalize(vertex.point - otherVertex.point);
 
-            edge.data.throughput *= Subdivide(vertexId, currentSphere, edgeDir, subRadius);
+            auto start = std::chrono::high_resolution_clock::now();
+            float light = Subdivide(vertexId, currentSphere, edgeDir, subRadius);
+            auto end = std::chrono::high_resolution_clock::now();
+            totalDuration += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
+            totalLight += light;
+            ++numSubdivisions;
+            edge.data.throughput *= light;
             progress.Update();
         }
     });
     progress.Done();
+
+    std::cout << "average light: " << totalLight / numSubdivisions << std::endl;
+    std::cout << "average duration: " << totalDuration / numSubdivisions << std::endl;
 }
 
 float Subdivider::Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float graphRadius) {
@@ -83,8 +103,7 @@ float Subdivider::Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirec
         averageLight += vertex.data.lightScalar;
 
     float numVertices = static_cast<float>(graph.GetVertices().size());
-    float result = numVertices == 0 ? 1 : averageLight / numVertices;
-    std::cout << std::to_string(result) + " \n";
-    return result;
+    float res = numVertices == 0 ? 1 : averageLight / numVertices;
+    return res;
 }
 }

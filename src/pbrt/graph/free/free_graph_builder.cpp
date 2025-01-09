@@ -10,20 +10,21 @@
 namespace graph {
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
                                    bool runInParallel, int sampleIndexOffset)
-    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, runInParallel, sampleIndexOffset,
+    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), std::move(config), quiet, runInParallel, sampleIndexOffset,
                        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier)) {
 }
 
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
                                    bool runInParallel, int sampleIndexOffset, float radius)
-    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet), runInParallel(runInParallel),
+    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(std::move(config)), quiet(quiet), runInParallel(runInParallel),
       searchRadius(radius), sampleIndexOffset(sampleIndexOffset) {
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
-int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxDepth) {
+int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit) {
     int numNewVertices = 0;
     std::vector<int> path;
+    bool usedTHit = false;
 
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
@@ -33,11 +34,18 @@ int FreeGraphBuilder::TracePath(RayDifferential& ray, FreeGraph& graph, int maxD
 
         std::optional<MediumInteraction> optNewInteraction;
 
-        pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
-        if (!optIntersection)
-            return numNewVertices;
+        float tMax;
+        if (!usedTHit) {
+            tMax = firstSegmentTHit;
+            usedTHit = true;
+        }
+        else {
+            pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
+            if (!optIntersection)
+                return numNewVertices;
 
-        float tMax = optIntersection.value().tHit;
+            tMax = optIntersection.value().tHit;
+        }
 
         // Sample new point on ray
         SampleT_maj(
@@ -145,6 +153,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
             workEstimateProgress.Update();
         }
     }
+    workNeeded *= config.iterationsPerStep;
     workEstimateProgress.Done();
 
     ProgressReporter tracingProgress(workNeeded, "Tracing light paths", quiet);
@@ -153,6 +162,8 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     int batchSize = 100;
     int startingId = 0;
     int currentBatch = 0;
+
+    int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
     for (int x = 1; x <= config.dimensionSteps; ++x) {
         for (int y = 1; y <= config.dimensionSteps; ++y) {
@@ -164,21 +175,35 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 continue;
             optShapeIntersection->intr.SkipIntersection(&ray, optShapeIntersection->tHit);
 
-            sampler.StartPixelSample(Point2i(x, y), sampleIndexOffset);
-            int newVertices = TracePath(ray, graph, config.maxDepth);
+            pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
+            if (!optIntersection)
+                continue;
+            float firstSegmentTHit = optIntersection.value().tHit;
 
-            currentBatch += newVertices;
+            int startIndex = ((x - 1) + (y - 1) * config.dimensionSteps) * config.iterationsPerStep;
+            for (int i = 0; i < config.iterationsPerStep; ++i) {
+                int curIndex = startIndex + i;
 
-            if (currentBatch >= batchSize) {
-                AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+                int yCoor = curIndex / resolutionDimensionSize;
+                int xCoor = curIndex - yCoor * resolutionDimensionSize;
 
-                startingId += currentBatch;
-                currentBatch = 0;
+                sampler.StartPixelSample(Point2i(xCoor, yCoor), sampleIndexOffset);
+                int newVertices = TracePath(ray, graph, config.maxDepth, firstSegmentTHit);
+
+                currentBatch += newVertices;
+
+                if (currentBatch >= batchSize) {
+                    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+
+                    startingId += currentBatch;
+                    currentBatch = 0;
+                }
+
+                tracingProgress.Update();
             }
-
-            tracingProgress.Update();
         }
     }
+    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
     tracingProgress.Done();
 
     OrderVertexIds(graph);
@@ -273,6 +298,7 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
         return -1;
     };
 
+    auto startTime = std::chrono::high_resolution_clock::now();
     if (!quiet)
         std::cout << "Rearranging vertex ids... ";
 
@@ -294,8 +320,10 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
         }
     }
 
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
     if (!quiet)
-        std::cout << "done" << std::endl;
+        std::cout << "done (" << duration << "s)" << std::endl;
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {

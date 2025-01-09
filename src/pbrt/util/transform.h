@@ -277,22 +277,10 @@ PBRT_CPU_GPU inline Vector3fi Transform::operator()(const Vector3fi &v) const {
     Float x = Float(v.x), y = Float(v.y), z = Float(v.z);
     Vector3f vOutError;
     if (v.IsExact()) {
-        auto mCopy = m;
-        auto mInvCopy = mInv;
-        auto aCopy = a;
-
         vOutError.x = gamma(3) * (std::abs(m[0][0] * x) + std::abs(m[0][1] * y) +
                                   std::abs(m[0][2] * z));
-        if (vOutError.x > 1) {
-            std::cout << mCopy.ToString() + "\n" + mInvCopy.ToString() + "\n" + std::to_string(aCopy) + " | " << std::endl;
-
-            ErrorExit("Error too large");
-        }
-
         vOutError.y = gamma(3) * (std::abs(m[1][0] * x) + std::abs(m[1][1] * y) +
                                   std::abs(m[1][2] * z));
-
-
         vOutError.z = gamma(3) * (std::abs(m[2][0] * x) + std::abs(m[2][1] * y) +
                                   std::abs(m[2][2] * z));
     } else {

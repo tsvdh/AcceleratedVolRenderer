@@ -230,7 +230,8 @@ enum Description {
     search_surface,
     grid,
     grid_transmittance,
-    grid_lighting
+    grid_lighting,
+    outline
 };
 const std::vector<std::string> descriptionNames{
     "basic",
@@ -240,7 +241,8 @@ const std::vector<std::string> descriptionNames{
     "search_surface",
     "grid",
     "grid_transmittance",
-    "grid_lighting"
+    "grid_lighting",
+    "outline"
 };
 
 inline std::string GetDescriptionName(Description desc) {
@@ -255,6 +257,7 @@ struct LightingCalculatorConfig;
 
 struct GraphBuilderConfig {
     int dimensionSteps;
+    int iterationsPerStep;
     int maxDepth;
     int edgeIterations;
     float radiusModifier;
@@ -280,6 +283,7 @@ struct Config {
 inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderConfig) {
     auto graphBuilder = jsonObject.at("graphBuilder");
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
+    graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);
     graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
     graphBuilder.at("edgeIterations").get_to(graphBuilderConfig.edgeIterations);
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
