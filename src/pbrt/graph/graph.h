@@ -170,7 +170,7 @@ protected:
 class UniformGraph final : public Graph {
 public:
     UniformGraph() = default;
-    explicit UniformGraph(float spacing) : spacing(spacing) {};
+    explicit UniformGraph(float spacing) : spacing(spacing) {}
 
     [[nodiscard]] float GetSpacing() const { return spacing; }
     [[nodiscard]] std::unordered_map<Point3i, int, util::PointHash> GetCoorsMap() const { return coorsMap; }
@@ -207,7 +207,12 @@ private:
 
 class FreeGraph final : public Graph {
 public:
+    FreeGraph() = default;
+    explicit FreeGraph(float vertexRadius) : vertexRadius(vertexRadius) {}
+
     using Graph::AddVertex;
+
+    std::optional<float> GetVertexRadius() { return vertexRadius; }
 
     [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 
@@ -218,6 +223,9 @@ public:
 
 protected:
     Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) override;
+
+private:
+    std::optional<float> vertexRadius;
 };
 
 }

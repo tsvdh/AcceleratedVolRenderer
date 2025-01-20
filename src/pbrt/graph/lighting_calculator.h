@@ -15,7 +15,7 @@ public:
     virtual ~LightingCalculator() = default;
 
     LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset);
+        LightingCalculatorConfig config, bool quiet, int sampleIndexOffset);
 
     [[nodiscard]] virtual SparseVec GetLightVector() = 0;
     void ComputeFinalLight();
@@ -36,7 +36,6 @@ protected:
     int numVertices;
     LightingCalculatorConfig config;
     bool quiet;
-    bool runInParallel;
     int sampleIndexOffset;
 };
 

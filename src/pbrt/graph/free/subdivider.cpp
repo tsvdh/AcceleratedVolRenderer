@@ -5,16 +5,11 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-Subdivider::Subdivider(Graph& graph, const util::MediumData& mediumData, Vector3f lightDir, Sampler sampler, float baseRadius,
-                       const SubDividerConfig& config, bool runInParallel)
-    : graph(graph), mediumData(mediumData), lightDir(lightDir), sampler(std::move(sampler)), baseRadius(baseRadius), config(config),
-      runInParallel(runInParallel) {
+Subdivider::Subdivider(FreeGraph& graph, const util::MediumData& mediumData, Vector3f lightDir, Sampler sampler, const SubDividerConfig& config)
+    : graph(graph), mediumData(mediumData), lightDir(lightDir), sampler(std::move(sampler)), config(config) {
+    if (!graph.GetVertexRadius())
+        ErrorExit("Graph must have a vertex radius");
     sphereInterface = MediumInterface(mediumData.medium);
-}
-
-inline Sphere MakeSphere(float radius) {
-    return Sphere(nullptr, nullptr, false, false,
-                  radius, -radius, radius, 360);
 }
 
 void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
@@ -28,7 +23,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
     int numSubdivisions = 0;
 
     int numVertices = static_cast<int>(graph.GetVertices().size());
-    int workNeeded = 0;
+    int64_t workNeeded = 0;
     for (int id = 0; id < numVertices; ++id)
         if (initialLight.coeff(id) != 0)
             ++workNeeded;
@@ -36,26 +31,22 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
     for (auto& [_, vertex] : graph.GetVertices())
         workNeeded += static_cast<int>(vertex.inEdges.size());
 
-    Sphere defaultSphere = MakeSphere(baseRadius);
-    float subRadius = Sqr(std::sqrt(baseRadius) * config.graphBuilder.radiusModifier);
+    float baseSphereRadius = graph.GetVertexRadius().value();
+    util::SphereMaker sphereMaker(baseSphereRadius);
+    float squaredSubRadius = Sqr(baseSphereRadius * config.graphBuilder.radiusModifier);
 
     ProgressReporter progress(workNeeded, "Computing subdivision effect", false);
 
-    ParallelFor(0, numVertices, runInParallel, [&](int vertexId)  {
+    ParallelFor(0, numVertices, config.runInParallel, [&](int vertexId)  {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
-        Transform objectFromWorld = Translate(Point3f(0, 0, 0) - vertex.point);
-        Transform worldFromObject = Inverse(objectFromWorld);
-
-        Sphere currentSphere = defaultSphere;
-        currentSphere.SetObjectFromRender(&objectFromWorld);
-        currentSphere.SetRenderFromObject(&worldFromObject);
+        SphereContainer currentSphere = sphereMaker.GetSphereFor(vertex.point);
 
         if (initialLight.coeff(vertexId) != 0) {
             auto start = std::chrono::high_resolution_clock::now();
-            float light = Subdivide(vertexId, currentSphere, lightDir, subRadius);
+            float light = Subdivide(vertexId, currentSphere.sphere, lightDir, squaredSubRadius);
             auto end = std::chrono::high_resolution_clock::now();
-            totalDuration += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            totalDuration += static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
 
             totalLight += light;
             ++numSubdivisions;
@@ -69,9 +60,9 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
             Vector3f edgeDir = Normalize(vertex.point - otherVertex.point);
 
             auto start = std::chrono::high_resolution_clock::now();
-            float light = Subdivide(vertexId, currentSphere, edgeDir, subRadius);
+            float light = Subdivide(vertexId, currentSphere.sphere, edgeDir, squaredSubRadius);
             auto end = std::chrono::high_resolution_clock::now();
-            totalDuration += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            totalDuration += static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
 
             totalLight += light;
             ++numSubdivisions;
@@ -81,21 +72,21 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
     });
     progress.Done();
 
-    std::cout << "average light: " << totalLight / numSubdivisions << std::endl;
+    std::cout << "average light: " << totalLight / static_cast<float>(numSubdivisions) << std::endl;
     std::cout << "average duration: " << totalDuration / numSubdivisions << std::endl;
 }
 
-float Subdivider::Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float graphRadius) {
+float Subdivider::Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float squaredSearchRadius) {
     GeometricPrimitive primitive(&sphere, nullptr, nullptr, sphereInterface);
     util::PrimitiveData primitiveData(&primitive);
     util::MediumData localMediumData = mediumData;
     localMediumData.primitiveData = primitiveData;
 
-    FreeGraphBuilder graphBuilder(localMediumData, inDirection, sampler, config.graphBuilder, true, false, vertexId, graphRadius);
+    FreeGraphBuilder graphBuilder(localMediumData, inDirection, sampler, config.graphBuilder, true, vertexId, squaredSearchRadius);
     FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
 
-    FreeLightingCalculator lightingCalculator(graph, localMediumData, inDirection, sampler, config.lightingCalculator, true, false);
+    FreeLightingCalculator lightingCalculator(graph, localMediumData, inDirection, sampler, config.lightingCalculator, true);
     lightingCalculator.ComputeFinalLight();
 
     float averageLight = 0;

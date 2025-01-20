@@ -7,8 +7,8 @@
 namespace graph {
 
 FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset)
-    : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, runInParallel, sampleIndexOffset) {
+        LightingCalculatorConfig config, bool quiet, int sampleIndexOffset)
+    : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, sampleIndexOffset) {
 
     freeGraph = dynamic_cast<FreeGraph*>(&graph);
 }
@@ -21,52 +21,80 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     }
 
     std::unordered_map<int, float> lightMap;
+    std::vector<int> entryVertexIds;
     lightMap.reserve(numEntryVertices);
+    entryVertexIds.reserve(numEntryVertices);
 
-    // allocate space for concurrent access
-    for (auto& pair : graph.GetVertices()) {
-        if (pair.second.data.type == entry)
-            lightMap[pair.first] = 0;
+    for (auto& [id, vertex] : graph.GetVertices()) {
+        if (vertex.data.type == entry) {
+            lightMap[id] = 0; // allocate space for concurrent access
+            entryVertexIds.push_back(id);
+        }
     }
 
-    ThreadLocal<Sampler> samplers([this]() { return sampler.Clone(); });
+    ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
 
-    int workNeeded = numEntryVertices * config.lightIterations;
-    ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
+    float sphereRadius = freeGraph->GetVertexRadius().value();
+    util::SphereMaker sphereMaker(sphereRadius);
 
-    int numVertices = static_cast<int>(graph.GetVertices().size());
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
-    ParallelFor(0, numVertices, runInParallel, [&](int vertexId) {
+    int64_t workNeeded = static_cast<int64_t>(numEntryVertices) * config.lightRayIterations * util::GetDiskPointsSize(config.pointsOnRadius);
+    ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
+
+    ParallelFor(0, numEntryVertices, config.runInParallel, [&](int listIndex) {
+        Sampler& samplerClone = samplers.Get();
+
+        int vertexId = entryVertexIds[listIndex];
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
-        if (vertex.data.type != entry)
-            return;
+        SphereContainer currentSphere = sphereMaker.GetSphereFor(vertex.point);
 
-        Point3f graphPoint = vertex.point;
-        MediumInteraction interaction(graphPoint, Vector3f(), 0, mediumData.medium, nullptr);
+        Point3f origin = vertex.point - inDirection * mediumData.primitiveData.maxDistToCenter * 2;
+        std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadius, inDirection);
 
-        Ray rayToEntryPoint(graphPoint, -inDirection);
-        pstd::optional<ShapeIntersection> shapeIntersect = mediumData.primitiveData.primitive.Intersect(rayToEntryPoint, Infinity);
-        if (!shapeIntersect) {
-            lightMap[vertexId] = 1;
-            progress.Update(config.lightIterations);
-            return;
+        util::AverageDenoiser averageDenoiser(static_cast<int>(diskPoints.size()));
+
+        uint64_t startIndex = listIndex * diskPoints.size();
+        for (int pointIndex = 0; pointIndex < diskPoints.size(); ++pointIndex) {
+            uint64_t curIndex = startIndex + pointIndex;
+            int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
+            int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
+
+            Point3f diskPoint = diskPoints[pointIndex];
+            RayDifferential ray(diskPoint, inDirection);
+
+            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
+            util::HitsResult sphereHits = GetHits(currentSphere.sphere, ray, mediumData);
+
+            if (mediumHits.type != util::OutsideTwoHits || sphereHits.type != util::OutsideTwoHits) {
+                progress.Update(config.lightRayIterations);
+                continue;
+            }
+
+            util::StartEndT startEnd = GetStartEndT(mediumHits, sphereHits);
+
+            if (startEnd.sphereRayNotInMedium) {
+                progress.Update(config.lightRayIterations);
+                continue;
+            }
+
+            mediumHits.intersections[0].intr.SkipIntersection(&ray, startEnd.startT);
+
+            float rayTotal = 0;
+            for (int i = 0; i < config.lightRayIterations; ++i) {
+                samplerClone.StartPixelSample({xCoor, yCoor}, i);
+
+                if (SampleScatterNearPoint(ray, vertex.point, sphereRadius, startEnd.endT, samplerClone, mediumData))
+                    rayTotal += 1;
+
+                progress.Update();
+            }
+
+            float distInSphereNormalizer = 1.f / (startEnd.endScatterT - startEnd.startScatterT);
+            averageDenoiser.AddValue(rayTotal * distInSphereNormalizer / static_cast<float>(config.lightRayIterations));
         }
-
-        int yCoor = vertexId / resolutionDimensionSize;
-        int xCoor = vertexId - yCoor * resolutionDimensionSize;
-
-        Sampler& samplerClone = samplers.Get();
-        Point3f boundaryPoint = shapeIntersect->intr.p();
-
-        lightMap[vertexId] = 0;
-        for (int i = 0; i < config.lightIterations; ++i) {
-            samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
-            lightMap[vertexId] += util::Transmittance(interaction, boundaryPoint, mediumData.defaultLambda, samplerClone);
-            progress.Update();
-        }
-        lightMap[vertexId] /= static_cast<float>(config.lightIterations);
+        lightMap[vertexId] = averageDenoiser.GetAverage();
     });
     progress.Done();
 

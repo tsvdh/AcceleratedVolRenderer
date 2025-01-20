@@ -8,16 +8,16 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                                   bool runInParallel, int sampleIndexOffset)
-    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), std::move(config), quiet, runInParallel, sampleIndexOffset,
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config,
+                                   bool quiet, int sampleIndexOffset)
+    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, sampleIndexOffset,
                        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier)) {
 }
 
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                                   bool runInParallel, int sampleIndexOffset, float radius)
-    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(std::move(config)), quiet(quiet), runInParallel(runInParallel),
-      searchRadius(radius), sampleIndexOffset(sampleIndexOffset) {
+FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config,
+                                   bool quiet, int sampleIndexOffset, float squaredSearchRadius)
+    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
+      squaredSearchRadius(squaredSearchRadius), sampleIndexOffset(sampleIndexOffset) {
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
@@ -92,7 +92,8 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         const Vertex* newVertex;
         if (optResult) {
             newVertex = &graph.GetVertex(vHolder.GetList()[optResult->first].first)->get();
-        } else {
+        }
+        else {
             newVertex = &graph.AddVertex(newPoint, VertexData{});
 
             vHolder.GetList().emplace_back(newVertex->id, newVertex->point);
@@ -104,7 +105,8 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
 
         if (pathSize == 1)
             graph.GetVertex(path[0])->get().data.type = entry;
-        else { // path > 1
+        else {
+            // path > 1
             int from = path[pathSize - 2];
             int to = path[pathSize - 1];
 
@@ -141,7 +143,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
     ProgressReporter workEstimateProgress(Sqr(config.dimensionSteps), "Estimating work needed", quiet);
 
-    int workNeeded = 0;
+    int64_t workNeeded = 0;
     for (int x = 1; x <= config.dimensionSteps; ++x) {
         for (int y = 1; y <= config.dimensionSteps; ++y) {
             Point3f newOrigin = origin + xVector * x + yVector * y;
@@ -158,7 +160,8 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
     ProgressReporter tracingProgress(workNeeded, "Tracing light paths", quiet);
 
-    FreeGraph graph;
+    FreeGraph graph(std::sqrt(squaredSearchRadius));
+
     int batchSize = 100;
     int startingId = 0;
     int currentBatch = 0;
@@ -170,25 +173,24 @@ FreeGraph FreeGraphBuilder::TracePaths() {
             Point3f newOrigin = origin + xVector * x + yVector * y;
             RayDifferential ray(newOrigin, inDirection, 0, mediumData.medium);
 
-            auto optShapeIntersection = primitiveData.primitive.Intersect(ray, Infinity);
-            if (!optShapeIntersection)
+            pstd::optional<ShapeIntersection> shapeEntry = primitiveData.primitive.Intersect(ray, Infinity);
+            if (!shapeEntry)
                 continue;
-            optShapeIntersection->intr.SkipIntersection(&ray, optShapeIntersection->tHit);
+            shapeEntry->intr.SkipIntersection(&ray, shapeEntry->tHit);
 
-            pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
-            if (!optIntersection)
+            pstd::optional<ShapeIntersection> shapeExit = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
+            if (!shapeExit)
                 continue;
-            float firstSegmentTHit = optIntersection.value().tHit;
+            float firstRayTHit = shapeExit.value().tHit;
 
-            int startIndex = ((x - 1) + (y - 1) * config.dimensionSteps) * config.iterationsPerStep;
+            uint64_t startIndex = ((x - 1) + (y - 1) * config.dimensionSteps) * config.iterationsPerStep;
             for (int i = 0; i < config.iterationsPerStep; ++i) {
-                int curIndex = startIndex + i;
+                uint64_t curIndex = startIndex + i;
+                int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
+                int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
 
-                int yCoor = curIndex / resolutionDimensionSize;
-                int xCoor = curIndex - yCoor * resolutionDimensionSize;
-
-                sampler.StartPixelSample(Point2i(xCoor, yCoor), sampleIndexOffset);
-                int newVertices = TracePath(ray, graph, config.maxDepth, firstSegmentTHit);
+                sampler.StartPixelSample({xCoor, yCoor}, sampleIndexOffset);
+                int newVertices = TracePath(ray, graph, config.maxDepth, firstRayTHit);
 
                 currentBatch += newVertices;
 
@@ -212,7 +214,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
 std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
-    nanoflann::RadiusResultSet resultSet(searchRadius, resultItems);
+    nanoflann::RadiusResultSet resultSet(squaredSearchRadius, resultItems);
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
 
     searchTree->findNeighbors(resultSet, point);
@@ -223,7 +225,10 @@ std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInR
 
 inline void MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
     struct TempEdge {
-        TempEdge(int id, int from, int to) : id(id), from(from), to(to) {}
+        TempEdge(int id, int from, int to)
+            : id(id), from(from), to(to) {
+        }
+
         int id, from, to;
     };
 
@@ -327,42 +332,92 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
-    ThreadLocal<Sampler> samplers([this]() { return sampler.Clone(); });
+    ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
 
-    int numEdges = static_cast<int>(graph.GetEdges().size());
-    int workNeeded = numEdges * config.edgeIterations;
+    float sphereRadius = graph.GetVertexRadius().value();
+    util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadius);
+    util::SphereMaker sphereMaker(sphereRadius);
+
+    int64_t numEdges = static_cast<int64_t>(graph.GetEdges().size());
+    int numRaysPerEdge = config.edgeTransmittanceIterations * util::GetSphereVolumePointsSize(config.pointsOnRadius);
+    int64_t workNeeded = numEdges * numRaysPerEdge;
     if (workNeeded == 0)
         return;
 
     std::vector<int> edgeIds;
     edgeIds.reserve(numEdges);
-    for (auto& [id, _] : graph.GetEdges())
+    for (auto& [id, edge] : graph.GetEdges())
         edgeIds.push_back(id);
 
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
     ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
 
-    ParallelFor(0, numEdges, runInParallel, [&](int listIndex) {
+    ParallelFor(0, numEdges, config.runInParallel, [&](int listIndex) {
+        Sampler& samplerClone = samplers.Get();
+
         int edgeId = edgeIds[listIndex];
         Edge& edge = graph.GetEdge(edgeId)->get();
 
         Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
         Point3f toPoint = graph.GetVertex(edge.to)->get().point;
-        MediumInteraction fromInteraction(fromPoint, Vector3f(), 0, mediumData.medium, nullptr);
+        Vector3f pointToPointDirection = Normalize(toPoint - fromPoint);
 
-        Sampler& samplerClone = samplers.Get();
+        SphereContainer currentSphere = sphereMaker.GetSphereFor(toPoint);
+        std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(fromPoint);
 
-        int yCoor = listIndex / resolutionDimensionSize;
-        int xCoor = listIndex - yCoor * resolutionDimensionSize;
+        util::AverageDenoiser averageDenoiser(static_cast<int>(spherePoints.size()));
 
-        for (int i = 0; i < config.edgeIterations; ++i) {
-            samplerClone.StartPixelSample(Point2i(xCoor, yCoor), i);
+        uint64_t startIndex = listIndex * static_cast<int>(spherePoints.size());
+        for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
+            uint64_t curIndex = startIndex + pointIndex;
+            int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
+            int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
 
-            float Tr = util::Transmittance(fromInteraction, toPoint, mediumData.defaultLambda, samplerClone);
-            graph.AddEdge(edge.from, edge.to, EdgeData{Tr, -1, 1});
-            progress.Update();
+            Point3f spherePoint = spherePoints[pointIndex];
+            RayDifferential ray(spherePoint, pointToPointDirection, 0, mediumData.medium);
+
+            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
+            util::HitsResult sphereHits = GetHits(currentSphere.sphere, ray, mediumData);
+
+            auto rayEntersVolume = [](util::HitsType type) -> bool {
+                return type == util::InsideOneHit || type == util::OutsideTwoHits;
+            };
+
+            if (!rayEntersVolume(mediumHits.type) || !rayEntersVolume(sphereHits.type)) {
+                progress.Update(config.edgeTransmittanceIterations);
+                continue;
+            }
+
+            util::StartEndT startEnd = GetStartEndT(mediumHits, sphereHits);
+
+            if (startEnd.sphereRayNotInMedium) {
+                progress.Update(config.edgeTransmittanceIterations);
+                continue;
+            }
+
+            if (mediumHits.type == util::OutsideTwoHits)
+                mediumHits.intersections[0].intr.SkipIntersection(&ray, startEnd.startT);
+
+            float rayTotal = 0;
+            for (int i = 0; i < config.edgeTransmittanceIterations; ++i) {
+                samplerClone.StartPixelSample({xCoor, yCoor}, i);
+
+                if (SampleScatterNearPoint(ray, toPoint, sphereRadius, startEnd.endT, samplerClone, mediumData))
+                    rayTotal += 1;
+            }
+
+            float distInSphereNormalizer = 1.f / (startEnd.endScatterT - startEnd.startScatterT);
+            averageDenoiser.AddValue(rayTotal * distInSphereNormalizer / static_cast<float>(config.edgeTransmittanceIterations));
+
+            progress.Update(config.edgeTransmittanceIterations);
         }
+
+        graph.AddEdge(edge.from, edge.to, EdgeData{
+            averageDenoiser.GetAverage(),
+            -1,
+            static_cast<float>(numRaysPerEdge)
+        });
     });
     progress.Done();
 }

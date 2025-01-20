@@ -89,7 +89,7 @@ void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f dir
             continue;
 
         if (curVertexId != -1) {
-            float Tr = util::Transmittance(curIntr, newIntr, mediumData.defaultLambda, sampler);
+            float Tr = util::Transmittance(curIntr, newIntr.p(), mediumData.defaultLambda, sampler);
             grid.AddEdge(curVertexId, newVertexId, EdgeData{Tr, -1, 1});
         }
 
@@ -111,7 +111,7 @@ void VoxelTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereSt
     if (sphereStepDegrees > 90)
         ErrorExit("Sphere step degrees must be less or equal to 90");
 
-    int workNeeded = static_cast<int>(util::GetSpherePoints(Point3f(), 1, sphereStepDegrees).size())
+    int workNeeded = static_cast<int>(util::GetSphereSurfacePoints(Point3f(), 1, sphereStepDegrees).size())
                      * static_cast<int>(std::pow(spheresPerDimension, 3));
     auto progress = ProgressReporter(workNeeded, "Tracing lit surface", false);
 
@@ -131,7 +131,7 @@ void VoxelTransmittance::CaptureTransmittance(UniformGraph& grid, float sphereSt
                                             static_cast<float>(y) * dimensionStepSize[1],
                                             static_cast<float>(z) * dimensionStepSize[2]);
 
-                std::vector<Point3f> spherePoints = util::GetSpherePoints(center, mediumData.primitiveData.maxDistToCenter * 2, sphereStepDegrees);
+                std::vector<Point3f> spherePoints = util::GetSphereSurfacePoints(center, mediumData.primitiveData.maxDistToCenter * 2, sphereStepDegrees);
 
                 for (int i = 0; i < spherePoints.size(); ++i) {
                     sampler.StartPixelSample(Point2i(i, curSphere), 0);

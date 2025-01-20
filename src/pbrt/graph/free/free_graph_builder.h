@@ -8,15 +8,13 @@ using namespace pbrt;
 
 class FreeGraphBuilder {
 public:
-    FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                     bool runInParallel, int sampleIndexOffset = 0);
-    FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, GraphBuilderConfig config, bool quiet,
-                     bool runInParallel, int sampleIndexOffset, float radius);
+    FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config, bool quiet,
+    int sampleIndexOffset = 0);
+    FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config, bool quiet,
+                     int sampleIndexOffset, float squaredSearchRadius);
 
     FreeGraph TracePaths();
     void ComputeTransmittance(FreeGraph& graph);
-
-    float GetSearchRadius() const { return searchRadius; }
 
 private:
     int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit);
@@ -31,8 +29,7 @@ private:
     std::unique_ptr<DynamicTreeType> searchTree;
     GraphBuilderConfig config;
     bool quiet;
-    bool runInParallel;
-    float searchRadius;
+    float squaredSearchRadius;
     int sampleIndexOffset;
 };
 }

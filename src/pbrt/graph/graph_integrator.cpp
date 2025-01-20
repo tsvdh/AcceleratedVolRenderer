@@ -474,7 +474,7 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
 
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
 
-    searchTree->radiusSearch(searchPointArray, searchRadius, resultItems);
+    searchTree->radiusSearch(searchPointArray, squaredSearchRadius, resultItems);
 
     float resultScalar = 0;
     for (auto resultItem : resultItems) {

@@ -7,21 +7,18 @@
 namespace graph {
 class Subdivider {
 public:
-    Subdivider(Graph& graph, const util::MediumData& mediumData, Vector3f lightDir, Sampler sampler, float baseRadius, const SubDividerConfig& config,
-               bool runInParallel);
+    Subdivider(FreeGraph& graph, const util::MediumData& mediumData, Vector3f lightDir, Sampler sampler, const SubDividerConfig& config);
 
     void ComputeSubdivisionEffect(SparseVec& initialLight);
 
 private:
-    float Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float graphRadius);
+    float Subdivide(int vertexId, const Sphere& sphere, Vector3f inDirection, float squaredSearchRadius);
 
-    Graph& graph;
+    FreeGraph& graph;
     const util::MediumData& mediumData;
     MediumInterface sphereInterface;
     Vector3f lightDir;
     Sampler sampler;
-    float baseRadius;
     SubDividerConfig config;
-    bool runInParallel;
 };
 }

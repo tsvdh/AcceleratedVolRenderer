@@ -43,10 +43,12 @@ void main(int argc, char* argv[]) {
 
         if (ParseArg(&iter, args.end(), "config", &configName, onError)) {
             // argument parsed
-        } else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
+        }
+        else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
             usage();
             exit(0);
-        } else {
+        }
+        else {
             usage();
             exit(1);
         }
@@ -63,7 +65,8 @@ void main(int argc, char* argv[]) {
     nlohmann::json jsonConfig;
     try {
         jsonConfig = nlohmann::json::parse(configStream);
-    } catch (const std::exception& exception) {
+    }
+    catch (const std::exception& exception) {
         ErrorExit(exception.what());
     }
 
@@ -76,20 +79,35 @@ void main(int argc, char* argv[]) {
     int maxMaxDepth = std::max(config.graphBuilder.maxDepth,
                                config.subdivider.graphBuilder.maxDepth);
     int maxIterations = std::max(
-        std::max(config.graphBuilder.edgeIterations, config.lightingCalculator.lightIterations),
-        std::max(config.subdivider.graphBuilder.edgeIterations, config.subdivider.lightingCalculator.lightIterations));
+        std::max(config.graphBuilder.edgeTransmittanceIterations, config.lightingCalculator.lightRayIterations),
+        std::max(config.subdivider.graphBuilder.edgeTransmittanceIterations, config.subdivider.lightingCalculator.lightRayIterations));
 
-    int numRays = Sqr(maxDimensionSteps);
-    int maxNumVertices = numRays * maxIterationsPerStep * maxMaxDepth;
-    int maxSampleDimensionSize = std::ceil(std::sqrt(maxNumVertices));
+    int maxDiskPoints = util::GetDiskPointsSize(std::max(
+        config.lightingCalculator.pointsOnRadius,
+        config.subdivider.lightingCalculator.pointsOnRadius));
+
+    int maxSpherePoints = util::GetSphereVolumePointsSize(std::max(
+        config.graphBuilder.pointsOnRadius,
+        config.subdivider.graphBuilder.pointsOnRadius));
+
+    int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
+
+    int64_t numRays = Sqr(maxDimensionSteps);
+    int64_t maxNumVertices = numRays * maxIterationsPerStep * maxMaxDepth;
+    int64_t maxNumRays = maxNumVertices * maxRaysPerVertex;
+    int64_t maxSampleDimensionSizeAsLong = std::ceil(std::sqrt(maxNumRays));
     int pixelSamples = RoundUpPow2(maxIterations);
+
+    if (maxSampleDimensionSizeAsLong > std::numeric_limits<int>::max())
+        ErrorExit("Dimension size too big");
+    int maxSampleDimensionSizeAsInt = static_cast<int>(maxSampleDimensionSizeAsLong);
 
     PBRTOptions options;
     options.disablePixelJitter = true;
     options.disableWavelengthJitter = true;
     options.renderingSpace = RenderingCoordinateSystem::World;
     options.pixelSamples = pixelSamples;
-    options.graph.samplingResolution = Point2i(maxSampleDimensionSize, maxSampleDimensionSize);
+    options.graph.samplingResolution = Point2i(maxSampleDimensionSizeAsInt, maxSampleDimensionSizeAsInt);
     InitPBRT(options);
 
     BasicScene scene;
@@ -115,14 +133,14 @@ void main(int argc, char* argv[]) {
 
     Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
-    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false, true);
+    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false, true);
+    graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
 
-    graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, graphBuilder.GetSearchRadius(), config.subdivider, true);
+    graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, config.subdivider);
     subdivider.ComputeSubdivisionEffect(lightVec);
 
     lighting.ComputeFinalLight(lightVec);
@@ -133,34 +151,6 @@ void main(int argc, char* argv[]) {
     std::string graphFileName = std::regex_replace(configName.value(), std::regex("\\.json"), ".txt");
     graph.WriteToDisk(graphFileName, graph::basic,
                       graph::StreamFlags{false, false, false, true});
-
-    // graph::FreeGraph outline;
-    // Bounds3f bounds = mediumData.primitiveData.bounds;
-    // std::vector boundsMinMax = {bounds.pMin, bounds.pMax};
-    // for (int x = 0; x < 2; ++x) {
-    //     float xValue = boundsMinMax[x].x;
-    //     for (int y = 0; y < 2; ++y) {
-    //         float yValue = boundsMinMax[y].y;
-    //         for (int z = 0; z < 2; ++z) {
-    //             float zValue = boundsMinMax[z].z;
-    //             outline.AddVertex({xValue, yValue, zValue}, graph::VertexData{});
-    //         }
-    //     }
-    // }
-    // auto SameSign = [](float a, float b) {
-    //     return (a < 0 && b < 0) || (a >= 0 && b >= 0);
-    // };
-    // for (auto& [id1, v1] : outline.GetVertices()) {
-    //     for (auto& [id2, v2] : outline.GetVertices()) {
-    //         int numSame = 0;
-    //         for (int i = 0; i < 3; ++i)
-    //             if (SameSign(v1.point[i], v2.point[i]))
-    //                 ++numSame;
-    //         if (numSame == 2)
-    //             outline.AddEdge(id1, id2, graph::EdgeData{});
-    //     }
-    // }
-    // outline.WriteToDisk("C:/Users/tsvdh/CodeProjects/VSCode/PbrtScenes/cube/outline.txt", graph::outline, graph::StreamFlags{});
 
     CleanupPBRT();
     exit(0);

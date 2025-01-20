@@ -10,8 +10,8 @@
 namespace graph {
 
 VoxelLightingCalculator::VoxelLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-    LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset)
-        : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, runInParallel, sampleIndexOffset) {
+    LightingCalculatorConfig config, bool quiet, int sampleIndexOffset)
+        : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, sampleIndexOffset) {
 
     uniformGraph = dynamic_cast<UniformGraph*>(&graph);
 }
@@ -20,7 +20,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
     int lightRaysPerVoxelDist = 4;
 
     float L = 1;
-    L /= static_cast<float>(config.lightIterations)
+    L /= static_cast<float>(config.lightRayIterations)
        * static_cast<float>(Sqr(lightRaysPerVoxelDist))
        * uniformGraph->GetSpacing();
 
@@ -51,7 +51,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
         }
     }
 
-    int workNeeded = raysHitting * config.lightIterations;
+    int workNeeded = raysHitting * config.lightRayIterations;
     ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
     int numRaysScatteredOutsideGrid = 0;
@@ -77,7 +77,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
 
             float tMax = shapeIsect->tHit;
 
-            for (int i = 0; i < config.lightIterations; ++i) {
+            for (int i = 0; i < config.lightRayIterations; ++i) {
                 sampler.StartPixelSample(Point2i(x, y), i);
 
                 // Initialize _RNG_ for sampling the majorant transmittance

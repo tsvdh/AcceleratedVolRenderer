@@ -5,11 +5,11 @@
 
 namespace graph {
 LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-                                       LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset)
+                                       LightingCalculatorConfig config, bool quiet, int sampleIndexOffset)
     : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
-      runInParallel(runInParallel), sampleIndexOffset(sampleIndexOffset) {
-    if (config.lightIterations <= 0)
-        ErrorExit("Must have at least one initial lighting iteration");
+      sampleIndexOffset(sampleIndexOffset) {
+    if (config.lightRayIterations <= 0)
+        ErrorExit("Must have at least one light ray iteration");
 
     CheckSequentialIds();
     numVertices = static_cast<int>(graph.GetVerticesConst().size());
@@ -38,13 +38,13 @@ void LightingCalculator::ComputeFinalLight() {
 void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
     SparseVec finalLight(light);
 
-    if (config.transmittanceIterations > 0) {
+    if (config.transmittanceMatrixIterations > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
         SparseVec curLight = finalLight;
 
-        ProgressReporter progress(config.transmittanceIterations, "Computing final lighting", quiet);
+        ProgressReporter progress(config.transmittanceMatrixIterations, "Computing final lighting", quiet);
 
-        for (int i = 0; i < config.transmittanceIterations; ++i) {
+        for (int i = 0; i < config.transmittanceMatrixIterations; ++i) {
             curLight = transmittance * curLight;
             finalLight += curLight;
             progress.Update();

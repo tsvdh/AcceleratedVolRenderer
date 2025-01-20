@@ -827,8 +827,6 @@ set(GRAPH
         src/pbrt/graph/volpath_custom.h
         src/pbrt/graph/volpath_custom.cpp
         src/pbrt/graph/T_sampler_custom.h
-
-
         src/pbrt/graph/graph_integrator.h
         src/pbrt/graph/graph_integrator.cpp
         src/pbrt/graph/lighting_calculator.h

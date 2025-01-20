@@ -148,7 +148,7 @@ bool Graph::RemovePath(int id) {
     if (result == paths.end())
         return false;
 
-    //TODO: remove contents of path
+    //TODO: maybe remove contents of path
 
     paths.erase(id);
     return true;
@@ -468,7 +468,7 @@ Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data, b
 
     auto findResult = coorsMap.find(coors);
     if (findResult != coorsMap.end()) {
-        // TODO: merge vertex data
+        // TODO: merge vertex data (how?)
         return GetVertex(findResult->second).value();
     }
 

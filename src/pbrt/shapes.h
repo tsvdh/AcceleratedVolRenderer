@@ -408,6 +408,18 @@ class Sphere {
     Float thetaZMin, thetaZMax, phiMax;
     const Transform *renderFromObject, *objectFromRender;
     bool reverseOrientation, transformSwapsHandedness;
+
+};
+
+struct SphereContainer {
+    explicit SphereContainer(const Sphere& sphere, const Transform& renderFromObject)
+    : sphere(sphere), renderFromObject(renderFromObject), objectFromRender(Inverse(renderFromObject)) {
+        this->sphere.SetRenderFromObject(&this->renderFromObject);
+        this->sphere.SetObjectFromRender(&this->objectFromRender);
+    }
+
+    Sphere sphere;
+    Transform renderFromObject, objectFromRender;
 };
 
 // Disk Definition

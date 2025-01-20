@@ -8,10 +8,10 @@
 
 #include "deps/json.hpp"
 #include "pbrt/media.h"
+#include "pbrt/shapes.h"
 #include "pbrt/util/error.h"
 
 namespace util {
-
 using namespace pbrt;
 
 struct PointHash {
@@ -124,7 +124,7 @@ inline DistantLight* GetLight(std::vector<Light>& lights) {
     return lights[0].Cast<DistantLight>();
 }
 
-inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, float equatorStepDegrees) {
+static std::vector<Point3f> GetSphereSurfacePoints(Point3f center, float radius, float equatorStepDegrees) {
     if (equatorStepDegrees <= 0 || equatorStepDegrees > 90)
         ErrorExit("Step must be between 0 and 90 degrees");
 
@@ -168,6 +168,113 @@ inline std::vector<Point3f> GetSpherePoints(Point3f center, float radius, float 
     return points;
 }
 
+static std::vector<Point3f> GetDiskPoints(Point3f center, float radius, int numPointsOnRadius, Vector3f direction) {
+    if (numPointsOnRadius == 0)
+        return {center};
+
+    Vector3f xVector;
+    Vector3f yVector;
+    CoordinateSystem(direction, &xVector, &yVector);
+
+    float stepSize = radius / static_cast<float>(numPointsOnRadius + 1);
+    xVector *= stepSize;
+    yVector *= stepSize;
+
+    std::vector<Point3f> points;
+    points.reserve(Pi * Sqr(numPointsOnRadius));
+
+    for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
+        for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {
+            Point3f newPoint = center + x * xVector + y * yVector;
+            if (Distance(newPoint, center) <= radius)
+                points.push_back(newPoint);
+        }
+    }
+
+    points.shrink_to_fit();
+    return points;
+}
+
+inline int GetDiskPointsSize(int numPointOnRadius) {
+    return static_cast<int>(GetDiskPoints(Point3f(), 1, numPointOnRadius, Vector3f(1, 0, 0)).size());
+}
+
+static std::vector<Point3f> GetSphereVolumePoints(float radius, int numPointsOnRadius) {
+    if (numPointsOnRadius == 0)
+        return {Point3f()};
+
+    Point3f center;
+    float stepSize = radius / static_cast<float>(numPointsOnRadius + 1);
+
+    std::vector<Point3f> points;
+    points.reserve(4.f / 3.f * Pi * std::pow(numPointsOnRadius, 3));
+
+    for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
+        for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {
+            for (int z = -numPointsOnRadius; z <= numPointsOnRadius; ++z) {
+                Point3f newPoint = {
+                    stepSize * static_cast<float>(x),
+                    stepSize * static_cast<float>(y),
+                    stepSize * static_cast<float>(z)
+                };
+                if (Distance(newPoint, center) <= radius)
+                    points.push_back(newPoint);
+            }
+        }
+    }
+
+    points.shrink_to_fit();
+    return points;
+}
+
+inline int GetSphereVolumePointsSize(int numPointsOnRadius) {
+    return static_cast<int>(GetSphereVolumePoints(1, numPointsOnRadius).size());
+}
+
+class SpherePointsMaker {
+public:
+    SpherePointsMaker(float radius, int numPointsOnRadius)
+    : radius(radius), numPointsOnRadius(numPointsOnRadius), points(GetSphereVolumePoints(radius, numPointsOnRadius)) {}
+
+    std::vector<Point3f> GetSpherePointsFor(Point3f center) {
+        std::vector<Point3f> newPoints = points;
+        for (Point3f& newPoint : newPoints)
+            newPoint += center;
+        return newPoints;
+    }
+
+private:
+    float radius;
+    int numPointsOnRadius;
+    std::vector<Point3f> points;
+};
+
+inline std::vector<Point3f> GetSphereVolumePoints(float radius, int numPointsOnRadius, Point3f center) {
+    return SpherePointsMaker(radius, numPointsOnRadius).GetSpherePointsFor(center);
+}
+
+inline Sphere MakeSphere(float radius) {
+    return Sphere(nullptr, nullptr, false, false,
+                  radius, -radius, radius, 360);
+}
+
+class SphereMaker {
+public:
+    explicit SphereMaker(float radius) : radius(radius), sphere(MakeSphere(radius)) {}
+
+    SphereContainer GetSphereFor(Point3f center) {
+        return SphereContainer(sphere, Translate(Vector3f(center)));
+    }
+
+private:
+    float radius;
+    Sphere sphere;
+};
+
+inline SphereContainer MakeSphere(float radius, Point3f center) {
+    return SphereMaker(radius).GetSphereFor(center);
+}
+
 inline std::pair<Point3i, Point3f> FitToGraph(Point3f p, float spacing) {
     Point3i coors;
     for (int i = 0; i < 3; ++i) {
@@ -185,7 +292,8 @@ inline Bounds3i FitBounds(const Bounds3f& bounds, float spacing) {
               get<0>(FitToGraph(bounds.pMax, spacing)) + Vector3i(1, 1, 1)};
 }
 
-inline float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda, Sampler sampler) {
+[[deprecated("Use 'SampleScatterNearPoint' instead")]]
+static float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda, Sampler sampler) {
     RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
 
     Ray ray = p0.SpawnRayTo(p1);
@@ -210,13 +318,179 @@ inline float Transmittance(const MediumInteraction& p0, Point3f p1, const Sample
     return Tr;
 }
 
-inline float Transmittance(const MediumInteraction& p0, const MediumInteraction& p1, const SampledWavelengths& lambda, const Sampler& sampler) {
-    return Transmittance(p0, p1.p(), lambda, sampler);
+static bool SampleScatterNearPoint(const Ray& ray, Point3f point, float nearDistance, float tMax, Sampler sampler, const MediumData& mediumData) {
+    // Initialize _RNG_ for sampling the majorant transmittance
+    uint64_t hash0 = Hash(sampler.Get1D());
+    uint64_t hash1 = Hash(sampler.Get1D());
+    RNG rng(hash0, hash1);
+
+    std::optional<Point3f> scatterPoint;
+
+    // Sample new point on ray
+    SampleT_maj(
+        ray, tMax, sampler.Get1D(), rng, mediumData.defaultLambda,
+        [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
+            // Handle medium scattering event for ray
+
+            // Compute medium event probabilities for interaction
+            Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
+            Float pScatter = mp.sigma_s[0] / sigma_maj[0];
+            Float pNull = std::max<Float>(0, 1 - pAbsorb - pScatter);
+
+            CHECK_GE(1 - pAbsorb - pScatter, -1e-6);
+            // Sample medium scattering event type and update path
+            Float um = rng.Uniform<Float>();
+            int mode = SampleDiscrete({pAbsorb, pScatter, pNull}, um);
+
+            if (mode == 0) {
+                // Handle absorption along ray path
+                return false;
+            }
+            if (mode == 1) {
+                // Handle scattering along ray path
+                // Stop path sampling if maximum depth has been reached
+                scatterPoint = p;
+                return false;
+            }
+            else {
+                // Handle null scattering along ray path
+                return true;
+            }
+        });
+
+    if (scatterPoint) {
+        float dist = Distance(scatterPoint.value(), point);
+        return dist <= nearDistance;
+    }
+    return false;
+}
+
+enum HitsType {
+    OutsideTwoHits, OutsideOneHit, OutsideZeroHits, InsideOneHit
+};
+
+struct HitsResult {
+    std::vector<float> tHits;
+    std::vector<ShapeIntersection> intersections;
+    HitsType type;
+};
+
+static HitsResult GetHits(const Primitive& primitive, RayDifferential ray, const MediumData& mediumData) {
+    std::vector<float> tHits;
+    std::vector<ShapeIntersection> intersections;
+
+    float distBack = mediumData.primitiveData.maxDistToCenter * 2;
+    RayDifferential rayOutside = ray;
+    rayOutside.o -= ray.d * distBack;
+
+    pstd::optional<ShapeIntersection> firstIntersect = primitive.Intersect(ray, Infinity);
+    if (!firstIntersect) {
+        return {tHits, intersections, OutsideZeroHits};
+    }
+    tHits.push_back(firstIntersect->tHit);
+    intersections.push_back(firstIntersect.value());
+    firstIntersect->intr.SkipIntersection(&ray, Infinity);
+
+    pstd::optional<ShapeIntersection> secondIntersect = primitive.Intersect(ray, Infinity);
+    if (secondIntersect) {
+        tHits.push_back(tHits[0] + secondIntersect->tHit);
+        intersections.push_back(secondIntersect.value());
+        return {tHits, intersections, OutsideTwoHits};
+    }
+
+    pstd::optional<ShapeIntersection> intersectFromFar = primitive.Intersect(rayOutside, Infinity);
+    if (!intersectFromFar)
+        ErrorExit("Not possible!");
+
+    float adjustedFromFarTHit = intersectFromFar->tHit - distBack;
+    float tHitDiff = std::abs(firstIntersect->tHit - adjustedFromFarTHit);
+
+    HitsType type = tHitDiff < std::pow(10, -6) ? OutsideOneHit : InsideOneHit;
+    if (type == OutsideOneHit)
+        Warning("Rare case of outside ray hitting primitive once happened");
+
+    return {tHits, intersections, type};
+}
+
+inline HitsResult GetHits(const Sphere& sphere, const RayDifferential& ray, const MediumData& mediumData) {
+    GeometricPrimitive primitive(&sphere, nullptr, nullptr, {});
+    return GetHits(&primitive, ray, mediumData);
 }
 
 inline float GetSameSpotRadius(const MediumData& mediumData) {
     return mediumData.primitiveData.maxDistToCenter * 2 / 1000;
 }
+
+struct StartEndT {
+    float startT;
+    float endT;
+    float startScatterT;
+    float endScatterT;
+    bool sphereRayNotInMedium;
+};
+
+inline StartEndT GetStartEndT(const HitsResult& mediumHits, const HitsResult& sphereHits) {
+    StartEndT startEnd;
+
+    std::vector<float> mediumTHits = mediumHits.tHits;
+    std::vector<float> sphereTHits = sphereHits.tHits;
+
+    float mediumEntry = mediumHits.type == OutsideTwoHits ? mediumTHits[0] : 0;
+    float sphereEntry = sphereHits.type == OutsideTwoHits ? sphereTHits[0] : 0;
+    float mediumExit = mediumHits.type == OutsideTwoHits ? mediumTHits[1] : mediumTHits[0];
+    float sphereExit = sphereHits.type == OutsideTwoHits ? sphereTHits[1] : sphereTHits[0];
+
+    startEnd.startT = mediumEntry;
+    startEnd.endT = std::min(mediumExit, sphereExit);
+    startEnd.startScatterT = std::max(mediumEntry, sphereEntry);
+    startEnd.endScatterT = startEnd.endT;
+
+    startEnd.sphereRayNotInMedium = startEnd.endT < startEnd.startScatterT || startEnd.endScatterT < startEnd.startT;
+
+    return startEnd;
+}
+
+class AverageDenoiser {
+public:
+    explicit AverageDenoiser(int numValues) {
+        values.reserve(numValues);
+    }
+
+    void AddValue(float value) {
+        values.push_back(value);
+    }
+
+    float GetAverage() {
+        float average = 0;
+        for (float value : values)
+            average += value;
+        average /= static_cast<float>(values.size());
+
+        float variance = 0;
+        for (float value : values)
+            variance += Sqr(value - average);
+        variance /= static_cast<float>(values.size());
+
+        float std = std::sqrt(variance);
+
+        float denoisedAverage = 0;
+        float numRemaining = 0;
+        for (float value : values) {
+            if (std::abs(value - average) < std) {
+                denoisedAverage += value;
+                ++numRemaining;
+            }
+        }
+        if (numRemaining == 0)
+            return average;
+
+        denoisedAverage /= numRemaining;
+        return denoisedAverage;
+    }
+
+private:
+    std::vector<float> values;
+};
 
 }
 
@@ -259,19 +533,24 @@ struct GraphBuilderConfig {
     int dimensionSteps;
     int iterationsPerStep;
     int maxDepth;
-    int edgeIterations;
+    int edgeTransmittanceIterations;
+    int pointsOnRadius;
     float radiusModifier;
+    bool runInParallel;
 };
 
 struct LightingCalculatorConfig {
-    int lightIterations;
-    int transmittanceIterations;
+    int lightRayIterations;
+    int pointsOnRadius;
+    int transmittanceMatrixIterations;
+    bool runInParallel;
 };
 
 struct SubDividerConfig {
     int subdivisions;
     GraphBuilderConfig graphBuilder;
     LightingCalculatorConfig lightingCalculator;
+    bool runInParallel;
 };
 
 struct Config {
@@ -285,14 +564,18 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);
     graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
-    graphBuilder.at("edgeIterations").get_to(graphBuilderConfig.edgeIterations);
+    graphBuilder.at("edgeTransmittanceIterations").get_to(graphBuilderConfig.edgeTransmittanceIterations);
+    graphBuilder.at("pointsOnRadius").get_to(graphBuilderConfig.pointsOnRadius);
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
+    graphBuilder.at("runInParallel").get_to(graphBuilderConfig.runInParallel);
 }
 
 inline void from_json(const json& jsonObject, LightingCalculatorConfig& lightingCalculatorConfig) {
     auto lightingCalculator = jsonObject.at("lightingCalculator");
-    lightingCalculator.at("lightIterations").get_to(lightingCalculatorConfig.lightIterations);
-    lightingCalculator.at("transmittanceIterations").get_to(lightingCalculatorConfig.transmittanceIterations);
+    lightingCalculator.at("lightRayIterations").get_to(lightingCalculatorConfig.lightRayIterations);
+    lightingCalculator.at("pointsOnRadius").get_to(lightingCalculatorConfig.pointsOnRadius);
+    lightingCalculator.at("transmittanceMatrixIterations").get_to(lightingCalculatorConfig.transmittanceMatrixIterations);
+    lightingCalculator.at("runInParallel").get_to(lightingCalculatorConfig.runInParallel);
 }
 
 inline void from_json(const json& jsonObject, SubDividerConfig& subDividerConfig) {
@@ -300,6 +583,7 @@ inline void from_json(const json& jsonObject, SubDividerConfig& subDividerConfig
     subdivider.at("subdivisions").get_to(subDividerConfig.subdivisions);
     from_json(subdivider, subDividerConfig.graphBuilder);
     from_json(subdivider, subDividerConfig.lightingCalculator);
+    subdivider.at("runInParallel").get_to(subDividerConfig.runInParallel);
 }
 
 inline void from_json(const json& jsonObject, Config& config) {

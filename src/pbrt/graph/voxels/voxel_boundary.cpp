@@ -12,7 +12,7 @@ namespace graph {
 
 FreeGraph VoxelBoundary::CaptureBoundary(float equatorStepSize) const {
     const util::PrimitiveData& primitiveData = mediumData.primitiveData;
-    std::vector<Point3f> spherePoints = util::GetSpherePoints(primitiveData.boundsCenter, primitiveData.maxDistToCenter * 2, equatorStepSize);
+    std::vector<Point3f> spherePoints = util::GetSphereSurfacePoints(primitiveData.boundsCenter, primitiveData.maxDistToCenter * 2, equatorStepSize);
 
     ProgressReporter captureProgress(static_cast<int>(spherePoints.size()), "Capturing volume boundary", false);
 

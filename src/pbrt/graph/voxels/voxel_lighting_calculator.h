@@ -6,7 +6,7 @@ namespace graph {
 class VoxelLightingCalculator final : public LightingCalculator {
 public:
     VoxelLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet, bool runInParallel, int sampleIndexOffset = 0);
+        LightingCalculatorConfig config, bool quiet, int sampleIndexOffset = 0);
 
     [[nodiscard]] SparseVec GetLightVector() override;
 

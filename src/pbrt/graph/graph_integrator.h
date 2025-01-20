@@ -30,7 +30,7 @@ public:
 
         if (!Options->graph.renderRadiusModifier)
             ErrorExit("Render search radius modifier must be specified");
-        searchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
+        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
     }
 
     void Render() override;
@@ -66,7 +66,7 @@ private:
     std::optional<FreeGraph> freeGraph;
     std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
-    float searchRadius;
+    float squaredSearchRadius;
 };
 
 }
