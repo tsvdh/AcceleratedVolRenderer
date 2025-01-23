@@ -52,10 +52,8 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
         progress.Done();
     }
 
-    for (auto& pair : graph.GetVertices()) {
-        Vertex& v = pair.second;
-        v.data.lightScalar = finalLight.coeff(v.id);
-    }
+    for (auto& [id, vertex] : graph.GetVertices())
+        vertex.data.lightScalar = finalLight.coeff(id);
 }
 
 SparseMat LightingCalculator::GetPhaseMatrix() const {

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="pbrt_exe" type="CMakeRunConfiguration" factoryName="Application" folderName="quick_access" PROGRAM_PARAMS="C:\Users\tsvdh\CodeProjects\VSCode\PbrtScenes\cube\cube.pbrt" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="PBRT-V4" TARGET_NAME="pbrt_exe" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="PBRT-V4" RUN_TARGET_NAME="pbrt_exe">
+  <configuration default="false" name="pbrt_exe" type="CMakeRunConfiguration" factoryName="Application" folderName="quick_access" PROGRAM_PARAMS="C:\Users\tsvdh\CodeProjects\VSCode\PbrtScenes\disney-cloud\disney-cloud.pbrt --graph-disable-MT" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="PBRT-V4" TARGET_NAME="pbrt_exe" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="PBRT-V4" RUN_TARGET_NAME="pbrt_exe">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

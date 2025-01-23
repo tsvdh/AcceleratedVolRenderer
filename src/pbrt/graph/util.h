@@ -8,6 +8,7 @@
 
 #include "deps/json.hpp"
 #include "pbrt/media.h"
+#include "pbrt/options.h"
 #include "pbrt/shapes.h"
 #include "pbrt/util/error.h"
 
@@ -292,8 +293,7 @@ inline Bounds3i FitBounds(const Bounds3f& bounds, float spacing) {
               get<0>(FitToGraph(bounds.pMax, spacing)) + Vector3i(1, 1, 1)};
 }
 
-[[deprecated("Use 'SampleScatterNearPoint' instead")]]
-static float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda, Sampler sampler) {
+inline float Transmittance(const MediumInteraction& p0, Point3f p1, const SampledWavelengths& lambda, Sampler sampler) {
     RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
 
     Ray ray = p0.SpawnRayTo(p1);
@@ -318,20 +318,42 @@ static float Transmittance(const MediumInteraction& p0, Point3f p1, const Sample
     return Tr;
 }
 
-static bool SampleScatterNearPoint(const Ray& ray, Point3f point, float nearDistance, float tMax, Sampler sampler, const MediumData& mediumData) {
+inline float SampleTransmittance(const Ray& ray, float tMax, Sampler sampler, const MediumData& mediumData) {
     // Initialize _RNG_ for sampling the majorant transmittance
-    uint64_t hash0 = Hash(sampler.Get1D());
-    uint64_t hash1 = Hash(sampler.Get1D());
-    RNG rng(hash0, hash1);
+    RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
 
-    std::optional<Point3f> scatterPoint;
+    float Tr = 1;
 
     // Sample new point on ray
     SampleT_maj(
         ray, tMax, sampler.Get1D(), rng, mediumData.defaultLambda,
         [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
-            // Handle medium scattering event for ray
+            SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
 
+            // ratio-tracking: only evaluate null scattering
+            Tr *= sigma_n[0] / sigma_maj[0];
+
+            if (Tr == 0)
+                return false;
+
+            return true;
+        });
+
+    return Tr;
+}
+
+inline std::tuple<float, float> SampleScatter(const Ray& ray, float tMax, Sampler sampler, const MediumData& mediumData) {
+    // Initialize _RNG_ for sampling the majorant transmittance
+    RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
+
+    float Tr = 1;
+    float Tr_maj = 1;
+    bool scattered = false;
+
+    // Sample new point on ray
+    SampledSpectrum T_majRemain = SampleT_maj(
+        ray, tMax, sampler.Get1D(), rng, mediumData.defaultLambda,
+        [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
             // Compute medium event probabilities for interaction
             Float pAbsorb = mp.sigma_a[0] / sigma_maj[0];
             Float pScatter = mp.sigma_s[0] / sigma_maj[0];
@@ -344,25 +366,29 @@ static bool SampleScatterNearPoint(const Ray& ray, Point3f point, float nearDist
 
             if (mode == 0) {
                 // Handle absorption along ray path
+                Tr = 0;
+                Tr_maj = 0;
+                scattered = true;
                 return false;
             }
             if (mode == 1) {
                 // Handle scattering along ray path
-                // Stop path sampling if maximum depth has been reached
-                scatterPoint = p;
+                scattered = true;
                 return false;
             }
             else {
                 // Handle null scattering along ray path
+                SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
+                Tr *= sigma_n[0] / sigma_maj[0];
+                Tr_maj *= T_maj[0];
                 return true;
             }
         });
 
-    if (scatterPoint) {
-        float dist = Distance(scatterPoint.value(), point);
-        return dist <= nearDistance;
-    }
-    return false;
+    if (scattered)
+        Tr_maj *= T_majRemain[0];
+
+    return scattered ? std::tuple{Tr, Tr_maj} : std::tuple{0, 0};
 }
 
 enum HitsType {
@@ -427,10 +453,17 @@ struct StartEndT {
     float startScatterT;
     float endScatterT;
     bool sphereRayNotInMedium;
+
+    void SkipForward(float time) {
+        startT -= time;
+        endT -= time;
+        startScatterT -= time;
+        endScatterT -= time;
+    }
 };
 
 inline StartEndT GetStartEndT(const HitsResult& mediumHits, const HitsResult& sphereHits) {
-    StartEndT startEnd;
+    StartEndT startEnd{};
 
     std::vector<float> mediumTHits = mediumHits.tHits;
     std::vector<float> sphereTHits = sphereHits.tHits;
@@ -590,6 +623,54 @@ inline void from_json(const json& jsonObject, Config& config) {
     from_json(jsonObject, config.graphBuilder);
     from_json(jsonObject, config.lightingCalculator);
     from_json(jsonObject, config.subdivider);
+}
+
+using namespace pbrt;
+
+inline float GetSigmaMajUnitDistNormalizer(const Ray& ray, float tMax, const util::MediumData& mediumData, ScratchBuffer& buffer) {
+    float sigmaMaj = 0;
+
+    RayMajorantIterator iterator = mediumData.medium.SampleRay(ray, tMax, mediumData.defaultLambda, buffer);
+    while (true) {
+        pstd::optional<RayMajorantSegment> segment = iterator.Next();
+        if (!segment)
+            break;
+
+        sigmaMaj += segment->sigma_maj[0] * (segment->tMax - segment->tMin) / tMax;
+    }
+
+    return 1 - FastExp(-sigmaMaj);
+}
+
+inline float ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
+                                          Sampler sampler, ScratchBuffer& buffer, int iterations, uint64_t samplingIndex) {
+    int yCoor = static_cast<int>(samplingIndex / Options->graph.samplingResolution->x);
+    int xCoor = static_cast<int>(samplingIndex - yCoor * Options->graph.samplingResolution->x);
+
+    RayDifferential rayInSphere(rayToSphere(startEnd.startScatterT), rayToSphere.d, 0, mediumData.medium);
+    float rayInSphereEndT = startEnd.endScatterT - startEnd.startScatterT;
+
+    float transmittanceToSphere = 0;
+    float scatterInSphere = 0;
+    float scatterInSphereMaj = 0;
+    for (int i = 0; i < iterations; ++i) {
+        sampler.StartPixelSample({xCoor, yCoor}, i);
+
+        transmittanceToSphere += SampleTransmittance(rayToSphere, startEnd.startScatterT, sampler, mediumData);
+        auto [Tr, Tr_maj] = SampleScatter(rayInSphere, rayInSphereEndT, sampler, mediumData);
+        scatterInSphere += Tr;
+        scatterInSphereMaj += Tr_maj;
+    }
+
+    float amountCaptured = transmittanceToSphere; // * scatterInSphere / scatterInSphereMaj;
+    if (amountCaptured == 0.f || IsNaN(amountCaptured))
+        return 0;
+
+    amountCaptured /= iterations;
+
+    // amountCaptured *= GetSigmaMajUnitDistNormalizer(rayInSphere, rayInSphereEndT, mediumData, buffer);
+
+    return amountCaptured;
 }
 
 }

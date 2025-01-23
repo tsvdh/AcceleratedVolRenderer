@@ -333,6 +333,7 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
+    ThreadLocal<ScratchBuffer> scratchBuffers([] { return ScratchBuffer(); });
 
     float sphereRadius = graph.GetVertexRadius().value();
     util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadius);
@@ -349,12 +350,11 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     for (auto& [id, edge] : graph.GetEdges())
         edgeIds.push_back(id);
 
-    int resolutionDimensionSize = Options->graph.samplingResolution->x;
-
     ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
 
     ParallelFor(0, numEdges, config.runInParallel, [&](int listIndex) {
         Sampler& samplerClone = samplers.Get();
+        ScratchBuffer& buffer = scratchBuffers.Get();
 
         int edgeId = edgeIds[listIndex];
         Edge& edge = graph.GetEdge(edgeId)->get();
@@ -366,19 +366,17 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
         SphereContainer currentSphere = sphereMaker.GetSphereFor(toPoint);
         std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(fromPoint);
 
-        util::AverageDenoiser averageDenoiser(static_cast<int>(spherePoints.size()));
+        float transmittanceTotal = 0;
 
         uint64_t startIndex = listIndex * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
             uint64_t curIndex = startIndex + pointIndex;
-            int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
-            int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
 
             Point3f spherePoint = spherePoints[pointIndex];
-            RayDifferential ray(spherePoint, pointToPointDirection, 0, mediumData.medium);
+            RayDifferential rayToSphere(spherePoint, pointToPointDirection, 0, mediumData.medium);
 
-            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
-            util::HitsResult sphereHits = GetHits(currentSphere.sphere, ray, mediumData);
+            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, rayToSphere, mediumData);
+            util::HitsResult sphereHits = GetHits(currentSphere.sphere, rayToSphere, mediumData);
 
             auto rayEntersVolume = [](util::HitsType type) -> bool {
                 return type == util::InsideOneHit || type == util::OutsideTwoHits;
@@ -396,25 +394,19 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
                 continue;
             }
 
-            if (mediumHits.type == util::OutsideTwoHits)
-                mediumHits.intersections[0].intr.SkipIntersection(&ray, startEnd.startT);
-
-            float rayTotal = 0;
-            for (int i = 0; i < config.edgeTransmittanceIterations; ++i) {
-                samplerClone.StartPixelSample({xCoor, yCoor}, i);
-
-                if (SampleScatterNearPoint(ray, toPoint, sphereRadius, startEnd.endT, samplerClone, mediumData))
-                    rayTotal += 1;
+            if (mediumHits.type == util::OutsideTwoHits) {
+                mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
+                startEnd.SkipForward(startEnd.startT);
             }
 
-            float distInSphereNormalizer = 1.f / (startEnd.endScatterT - startEnd.startScatterT);
-            averageDenoiser.AddValue(rayTotal * distInSphereNormalizer / static_cast<float>(config.edgeTransmittanceIterations));
-
+            transmittanceTotal += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
+                config.edgeTransmittanceIterations, curIndex);
             progress.Update(config.edgeTransmittanceIterations);
         }
+        transmittanceTotal /= spherePoints.size();
 
         graph.AddEdge(edge.from, edge.to, EdgeData{
-            averageDenoiser.GetAverage(),
+            transmittanceTotal,
             -1,
             static_cast<float>(numRaysPerEdge)
         });

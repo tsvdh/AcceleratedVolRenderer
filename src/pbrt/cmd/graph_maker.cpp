@@ -25,6 +25,8 @@ Graph making options:
 }
 
 void main(int argc, char* argv[]) {
+    static_assert(sizeof(double) * CHAR_BIT == 64, "Double must be 64 bits");
+
     std::vector<std::string> args = GetCommandLineArguments(argv);
 
     std::vector<std::string> fileNames;
