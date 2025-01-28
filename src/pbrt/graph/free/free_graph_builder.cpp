@@ -86,7 +86,6 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         }
 
         Point3f newPoint = optNewInteraction->p();
-        // ReSharper disable once CppTooWideScope
         std::optional<nanoflann::ResultItem<int, float>> optResult = GetClosestInRadius(newPoint);
 
         const Vertex* newVertex;

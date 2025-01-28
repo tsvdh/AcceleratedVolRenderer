@@ -1066,6 +1066,20 @@ add_sanitizers(graph_maker)
 set_property(TARGET graph_maker PROPERTY FOLDER "cmd")
 
 ######################
+# Sphere benchmark
+add_executable(sphere_bench src/pbrt/cmd/sphere_bench.cpp)
+add_executable(pbrt::sphere_bench ALIAS sphere_bench)
+
+target_compile_definitions(sphere_bench PRIVATE ${PBRT_DEFINITIONS})
+target_compile_options(sphere_bench PRIVATE ${PBRT_CXX_FLAGS})
+target_include_directories(sphere_bench PRIVATE src src/ext)
+target_link_libraries(sphere_bench PRIVATE ${ALL_PBRT_LIBS} pbrt_opt pbrt_warnings)
+
+add_sanitizers(sphere_bench)
+
+set_property(TARGET sphere_bench PROPERTY FOLDER "cmd")
+
+######################
 # imgtool
 
 add_executable (imgtool src/pbrt/cmd/imgtool.cpp)

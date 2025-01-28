@@ -14,22 +14,16 @@ FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumD
 }
 
 SparseVec FreeLightingCalculator::GetLightVector() {
-    int numEntryVertices = 0;
-    for (auto& pair : graph.GetVertices()) {
-        if (pair.second.data.type == entry)
-            ++numEntryVertices;
-    }
+    int64_t numVertices = static_cast<int64_t>(graph.GetVertices().size());
 
     std::unordered_map<int, float> lightMap;
-    std::vector<int> entryVertexIds;
-    lightMap.reserve(numEntryVertices);
-    entryVertexIds.reserve(numEntryVertices);
+    std::vector<int> vertexIds;
+    lightMap.reserve(numVertices);
+    vertexIds.reserve(numVertices);
 
     for (auto& [id, vertex] : graph.GetVertices()) {
-        if (vertex.data.type == entry) {
-            lightMap[id] = 0; // allocate space for concurrent access
-            entryVertexIds.push_back(id);
-        }
+        lightMap[id] = 0; // allocate space for concurrent access
+        vertexIds.push_back(id);
     }
 
     ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
@@ -38,14 +32,14 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     float sphereRadius = freeGraph->GetVertexRadius().value();
     util::SphereMaker sphereMaker(sphereRadius);
 
-    int64_t workNeeded = static_cast<int64_t>(numEntryVertices) * config.lightRayIterations * util::GetDiskPointsSize(config.pointsOnRadius);
+    int64_t workNeeded = numVertices * config.lightRayIterations * util::GetDiskPointsSize(config.pointsOnRadius);
     ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
-    ParallelFor(0, numEntryVertices, config.runInParallel, [&](int listIndex) {
+    ParallelFor(0, numVertices, config.runInParallel, [&](int listIndex) {
         Sampler& samplerClone = samplers.Get();
         ScratchBuffer& buffer = scratchBuffers.Get();
 
-        int vertexId = entryVertexIds[listIndex];
+        int vertexId = vertexIds[listIndex];
         Vertex& vertex = graph.GetVertex(vertexId)->get();
 
         SphereContainer currentSphere = sphereMaker.GetSphereFor(vertex.point);
@@ -58,7 +52,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             uint64_t curIndex = startIndex + pointIndex;
 
             Point3f diskPoint = diskPoints[pointIndex];
-            RayDifferential rayToSphere(diskPoint, inDirection);
+            RayDifferential rayToSphere(diskPoint, inDirection, 0, mediumData.medium);
 
             util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, rayToSphere, mediumData);
             util::HitsResult sphereHits = GetHits(currentSphere.sphere, rayToSphere, mediumData);

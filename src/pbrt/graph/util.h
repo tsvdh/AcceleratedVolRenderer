@@ -40,7 +40,7 @@ struct PrimitiveData {
     Primitive primitive;
     Bounds3f bounds;
     Point3f boundsCenter;
-    float maxDistToCenter;
+    float maxDistToCenter = 0;
 
     PrimitiveData() = default;
 
@@ -666,7 +666,7 @@ inline float ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, co
     if (amountCaptured == 0.f || IsNaN(amountCaptured))
         return 0;
 
-    amountCaptured /= iterations;
+    amountCaptured /= static_cast<float>(iterations);
 
     // amountCaptured *= GetSigmaMajUnitDistNormalizer(rayInSphere, rayInSphereEndT, mediumData, buffer);
 
