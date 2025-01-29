@@ -99,23 +99,24 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             ++numNewVertices;
         }
 
-        path.push_back(newVertex->id);
-        int pathSize = static_cast<int>(path.size());
+        if (path.empty()) {
+            path.push_back(newVertex->id);
+        }
+        else if (newVertex->id != path[path.size() - 1]) {
+            path.push_back(newVertex->id);
+            int pathSize = static_cast<int>(path.size());
 
-        if (pathSize == 1)
-            graph.GetVertex(path[0])->get().data.type = entry;
-        else {
-            // path > 1
+            // pathSize >= 2
             int from = path[pathSize - 2];
             int to = path[pathSize - 1];
 
             Vertex& fromVertex = graph.GetVertex(from)->get();
-            if (from != to && fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
+            if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
                 graph.AddEdge(from, to, EdgeData{});
         }
 
         // terminate if max depth reached
-        if (pathSize == maxDepth)
+        if (path.size() == maxDepth)
             return numNewVertices;
 
         // Sample new direction at real-scattering event
@@ -268,11 +269,7 @@ inline void MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph
 }
 
 inline void MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
-    if (vertexToMove.data.type == entry)
-        targetVertex.data.type = entry;
-
     MoveEdgeReferences(vertexToMove, targetVertex, graph);
-
     graph.RemoveVertex(vertexToMove.id);
 }
 
@@ -366,6 +363,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
         std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(fromPoint);
 
         float transmittanceTotal = 0;
+        float contributingRays = 0;
 
         uint64_t startIndex = listIndex * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
@@ -400,9 +398,11 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
 
             transmittanceTotal += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
                 config.edgeTransmittanceIterations, curIndex);
+
+            ++contributingRays;
             progress.Update(config.edgeTransmittanceIterations);
         }
-        transmittanceTotal /= spherePoints.size();
+        transmittanceTotal /= contributingRays != 0.f ? contributingRays : 1;
 
         graph.AddEdge(edge.from, edge.to, EdgeData{
             transmittanceTotal,

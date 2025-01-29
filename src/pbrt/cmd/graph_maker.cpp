@@ -135,8 +135,11 @@ void main(int argc, char* argv[]) {
 
     Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
+    std::cout << GetSameSpotRadius(mediumData) * config.graphBuilder.radiusModifier << std::endl;
+
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.TracePaths();
+    std::cout << graph.GetVertices().size() << " " << graph.GetEdges().size() << std::endl;
     graphBuilder.ComputeTransmittance(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
@@ -149,6 +152,13 @@ void main(int argc, char* argv[]) {
 
     // graph is in incorrect state after this
     graph.GetEdges().clear();
+
+    float totalLight = 0;
+    for (auto& [id, v] : graph.GetVertices()) {
+        totalLight += v.data.lightScalar;
+    }
+    totalLight /= static_cast<float>(graph.GetVertices().size());
+    std::cout << totalLight << std::endl;
 
     std::string graphFileName = std::regex_replace(configName.value(), std::regex("\\.json"), ".txt");
     graph.WriteToDisk(graphFileName, graph::basic,

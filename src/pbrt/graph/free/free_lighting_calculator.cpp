@@ -47,6 +47,8 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         Point3f origin = vertex.point - inDirection * mediumData.primitiveData.maxDistToCenter * 2;
         std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadius, inDirection);
 
+        float contributingRays = 0;
+
         uint64_t startIndex = listIndex * diskPoints.size();
         for (int pointIndex = 0; pointIndex < diskPoints.size(); ++pointIndex) {
             uint64_t curIndex = startIndex + pointIndex;
@@ -74,9 +76,11 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 
             lightMap[vertexId] += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
                 config.lightRayIterations, curIndex);
+
+            ++contributingRays;
             progress.Update(config.lightRayIterations);
         }
-        lightMap[vertexId] /= static_cast<float>(diskPoints.size());
+        lightMap[vertexId] /= contributingRays != 0.f ? contributingRays : 1;
     });
     progress.Done();
 

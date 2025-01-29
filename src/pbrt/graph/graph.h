@@ -40,7 +40,6 @@ enum RayVertexType {
     absorb,
     scatter,
     null,
-    entry,
     scatter_final
 };
 
