@@ -487,9 +487,9 @@ inline StartEndT GetStartEndT(const HitsResult& mediumHits, const HitsResult& sp
     return startEnd;
 }
 
-class AverageDenoiser {
+class Averager {
 public:
-    explicit AverageDenoiser(int numValues) {
+    explicit Averager(int numValues) {
         values.reserve(numValues);
     }
 
@@ -503,12 +503,23 @@ public:
             average += value;
         average /= static_cast<float>(values.size());
 
+        return average;
+    }
+
+    std::tuple<float, float> GetStd() {
+        float average = GetAverage();
+
         float variance = 0;
         for (float value : values)
             variance += Sqr(value - average);
         variance /= static_cast<float>(values.size());
 
         float std = std::sqrt(variance);
+        return {average, std};
+    }
+
+    float GetDenoisedAverage() {
+        auto [average, std] = GetStd();
 
         float denoisedAverage = 0;
         float numRemaining = 0;

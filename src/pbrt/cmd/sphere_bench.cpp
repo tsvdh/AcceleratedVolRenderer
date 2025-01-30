@@ -118,9 +118,9 @@ void main(int argc, char* argv[]) {
 
     InitPBRT(PBRTOptions());
 
-    std::vector dimensionSteps = {5, 10};
-    std::vector iterationsPerStep = {10, 50, 100};
-    std::vector radiusModifier = {5, 10, 20, 50};
+    std::vector dimensionSteps {5, 10};
+    std::vector iterationsPerStep {10, 50, 100};
+    std::vector radiusModifier {5, 10, 20, 50};
 
     for (int a = 0; a < dimensionSteps.size(); a++) {
         for (int b = 0; b < iterationsPerStep.size(); b++) {

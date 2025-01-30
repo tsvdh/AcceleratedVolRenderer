@@ -1080,6 +1080,20 @@ add_sanitizers(sphere_bench)
 set_property(TARGET sphere_bench PROPERTY FOLDER "cmd")
 
 ######################
+# Sphere benchmark
+add_executable(transmittance_bench src/pbrt/cmd/transmittance_bench.cpp)
+add_executable(pbrt::transmittance_bench ALIAS transmittance_bench)
+
+target_compile_definitions(transmittance_bench PRIVATE ${PBRT_DEFINITIONS})
+target_compile_options(transmittance_bench PRIVATE ${PBRT_CXX_FLAGS})
+target_include_directories(transmittance_bench PRIVATE src src/ext)
+target_link_libraries(transmittance_bench PRIVATE ${ALL_PBRT_LIBS} pbrt_opt pbrt_warnings)
+
+add_sanitizers(transmittance_bench)
+
+set_property(TARGET transmittance_bench PROPERTY FOLDER "cmd")
+
+######################
 # imgtool
 
 add_executable (imgtool src/pbrt/cmd/imgtool.cpp)
