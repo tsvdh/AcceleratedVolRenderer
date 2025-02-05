@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="transmittance_test" type="CMakeRunConfiguration" factoryName="Application" folderName="quick_access" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="PBRT-V4" TARGET_NAME="transmittance_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="PBRT-V4" RUN_TARGET_NAME="transmittance_test">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

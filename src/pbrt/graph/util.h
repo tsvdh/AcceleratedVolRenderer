@@ -489,13 +489,15 @@ inline StartEndT GetStartEndT(const HitsResult& mediumHits, const HitsResult& sp
 
 class Averager {
 public:
-    explicit Averager(int numValues) {
+    explicit Averager(int numValues = 0) {
         values.reserve(numValues);
     }
 
     void AddValue(float value) {
         values.push_back(value);
     }
+
+    const std::vector<float>& GetValues() { return values; }
 
     float GetAverage() {
         float average = 0;

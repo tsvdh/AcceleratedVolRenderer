@@ -1080,7 +1080,7 @@ add_sanitizers(sphere_bench)
 set_property(TARGET sphere_bench PROPERTY FOLDER "cmd")
 
 ######################
-# Sphere benchmark
+# Transmittance benchmark
 add_executable(transmittance_bench src/pbrt/cmd/transmittance_bench.cpp)
 add_executable(pbrt::transmittance_bench ALIAS transmittance_bench)
 
@@ -1092,6 +1092,20 @@ target_link_libraries(transmittance_bench PRIVATE ${ALL_PBRT_LIBS} pbrt_opt pbrt
 add_sanitizers(transmittance_bench)
 
 set_property(TARGET transmittance_bench PROPERTY FOLDER "cmd")
+
+######################
+# Transmittance test
+add_executable(transmittance_test src/pbrt/cmd/transmittance_test.cpp)
+add_executable(pbrt::transmittance_test ALIAS transmittance_test)
+
+target_compile_definitions(transmittance_test PRIVATE ${PBRT_DEFINITIONS})
+target_compile_options(transmittance_test PRIVATE ${PBRT_CXX_FLAGS})
+target_include_directories(transmittance_test PRIVATE src src/ext)
+target_link_libraries(transmittance_test PRIVATE ${ALL_PBRT_LIBS} pbrt_opt pbrt_warnings)
+
+add_sanitizers(transmittance_test)
+
+set_property(TARGET transmittance_test PROPERTY FOLDER "cmd")
 
 ######################
 # imgtool
