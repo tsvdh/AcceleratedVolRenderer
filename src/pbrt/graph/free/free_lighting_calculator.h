@@ -12,7 +12,6 @@ public:
     
 private:
     [[nodiscard]] SparseMat GetGMatrix() const override;
-    [[nodiscard]] SparseMat GetTransmittanceMatrix() const override;
 
     FreeGraph* freeGraph;
 };

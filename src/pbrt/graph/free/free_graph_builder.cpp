@@ -41,8 +41,10 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         }
         else {
             pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
-            if (!optIntersection)
+            if (!optIntersection) {
+                // pathLengths.push_back(path.size());
                 return numNewVertices;
+            }
 
             tMax = optIntersection.value().tHit;
         }
@@ -82,6 +84,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         // Handle terminated, scattered, and unscattered medium rays
         // if no new interaction then path is done
         if (!optNewInteraction) {
+            // pathLengths.push_back(path.size());
             return numNewVertices;
         }
 
@@ -113,11 +116,16 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             Vertex& fromVertex = graph.GetVertex(from)->get();
             if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
                 graph.AddEdge(from, to, EdgeData{});
+        } else {
+            ++scattersIgnored;
         }
+        ++ totalScatters;
 
         // terminate if max depth reached
-        if (path.size() == maxDepth)
+        if (path.size() == maxDepth) {
+            // pathLengths.push_back(path.size());
             return numNewVertices;
+        }
 
         // Sample new direction at real-scattering event
         Point2f u = sampler.Get2D();
@@ -209,6 +217,19 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     tracingProgress.Done();
 
     OrderVertexIds(graph);
+
+    // util::Averager averager;
+    // for (int pathLength : pathLengths) {
+    //     if (pathLength > 1)
+    //         averager.AddValue(pathLength);
+    // }
+    //
+    // auto [average, std] = averager.GetStd();
+    // std::cout << averager.GetValues().size() << " " << average << " " << std << std::endl;
+
+    // std::cout << scattersIgnored << " " << totalScatters << std::endl;
+    // exit(0);
+
     return graph;
 }
 

@@ -36,17 +36,32 @@ void LightingCalculator::ComputeFinalLight() {
 }
 
 void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
+    int numVertices = static_cast<int>(graph.GetVertices().size());
+
     SparseVec finalLight(light);
+    SparseVec finalWeights(numVertices);
+    for (int i = 0; i < numVertices; ++i)
+        finalWeights.coeffRef(i) = 1.f;
 
     if (config.transmittanceMatrixIterations > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
         SparseVec curLight = finalLight;
+        SparseVec curWeights = finalWeights;
 
         ProgressReporter progress(config.transmittanceMatrixIterations, "Computing final lighting", quiet);
 
-        for (int i = 0; i < config.transmittanceMatrixIterations; ++i) {
+        for (int iteration = 0; iteration < config.transmittanceMatrixIterations; ++iteration) {
             curLight = transmittance * curLight;
-            finalLight += curLight;
+            curWeights = transmittance * curWeights;
+
+            SparseVec invCurWeights(numVertices);
+            for (int i = 0; i < numVertices; ++i) {
+                float weight = curWeights.coeff(i);
+                invCurWeights.coeffRef(i) = weight == 0.f ? 0.f : 1.f / weight;
+            }
+
+            finalLight += curLight.cwiseProduct(invCurWeights);
+
             progress.Update();
         }
         progress.Done();

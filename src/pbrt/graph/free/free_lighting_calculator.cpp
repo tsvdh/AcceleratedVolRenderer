@@ -109,22 +109,4 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
     return gMatrix;
 }
 
-SparseMat FreeLightingCalculator::GetTransmittanceMatrix() const {
-    std::vector<Eigen::Triplet<float>> weightEntries;
-    weightEntries.reserve(numVertices);
-
-    for (int i = 0; i < numVertices; ++i) {
-        int numEdges = static_cast<int>(graph.GetVertex(i)->get().inEdges.size());
-        float weight = 1 / static_cast<float>(numEdges);
-
-        if (numEdges > 0)
-            weightEntries.emplace_back(i, i, weight);
-    }
-
-    SparseMat weightMatrix(numVertices, numVertices);
-    weightMatrix.setFromTriplets(weightEntries.begin(), weightEntries.end());
-
-    return weightMatrix * LightingCalculator::GetTransmittanceMatrix();
-}
-
 }
