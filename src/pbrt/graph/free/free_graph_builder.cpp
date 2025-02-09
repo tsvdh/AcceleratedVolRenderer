@@ -191,7 +191,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 continue;
             float firstRayTHit = shapeExit.value().tHit;
 
-            uint64_t startIndex = ((x - 1) + (y - 1) * config.dimensionSteps) * config.iterationsPerStep;
+            uint64_t startIndex = ((y - 1) + (x - 1) * config.dimensionSteps) * config.iterationsPerStep;
             for (int i = 0; i < config.iterationsPerStep; ++i) {
                 uint64_t curIndex = startIndex + i;
                 int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);

@@ -212,6 +212,7 @@ public:
     using Graph::AddVertex;
 
     std::optional<float> GetVertexRadius() { return vertexRadius; }
+    void SetVertexRadius(float vertexRadius) { this->vertexRadius = vertexRadius;}
 
     [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 

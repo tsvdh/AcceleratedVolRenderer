@@ -208,7 +208,7 @@ static std::vector<Point3f> GetSphereVolumePoints(float radius, int numPointsOnR
     float stepSize = radius / static_cast<float>(numPointsOnRadius + 1);
 
     std::vector<Point3f> points;
-    points.reserve(4.f / 3.f * Pi * std::pow(numPointsOnRadius, 3));
+    points.reserve(static_cast<uint64_t>(4.f / 3.f * Pi * std::pow(numPointsOnRadius, 3)));
 
     for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
         for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {
@@ -679,7 +679,7 @@ inline float ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, co
         scatterInSphereMaj += Tr_maj;
     }
 
-    float amountCaptured = transmittanceToSphere; // * scatterInSphere / scatterInSphereMaj;
+    float amountCaptured = transmittanceToSphere * scatterInSphere; // / scatterInSphereMaj;
     if (amountCaptured == 0.f || IsNaN(amountCaptured))
         return 0;
 

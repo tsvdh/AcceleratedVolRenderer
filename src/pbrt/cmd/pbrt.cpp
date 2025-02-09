@@ -98,9 +98,7 @@ Reformatting options:
   --upgrade                     Upgrade a pbrt-v3 file to pbrt-v4's format.
 
 Graph integrator options:
-  --graph-debug                 Shows light values of voxels
-  --graph-disable-MT            Disable multi threading
-  --graph-render-radius-mod     Specify rendering search radius modifier
+  --graph-debug                 Shows light values of voxels (Deprecated)
   --graph-config                Path to config file
 )",
             NSpectrumSamples);
@@ -209,8 +207,6 @@ int main(int argc, char *argv[]) {
                      &options.writePartialImages, onError) ||
             ParseArg(&iter, args.end(), "upgrade", &options.upgrade, onError) ||
             ParseArg(&iter, args.end(), "graph-debug", &options.graph.debug, onError) ||
-            ParseArg(&iter, args.end(), "graph-disable-MT", &options.graph.disableMT, onError) ||
-            ParseArg(&iter, args.end(), "graph-render-radius-mod", &options.graph.renderRadiusModifier, onError) ||
             ParseArg(&iter, args.end(), "graph-config", &options.graph.configFile, onError)) {
             // success
         } else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {

@@ -19,21 +19,32 @@ using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
 class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
-    GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
-        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate),
-                        lights), maxDepth(maxDepth) {
+    GraphIntegrator(Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights,
+            int stepIterations, int renderRadiusMod)
+        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
+          stepIterations(stepIterations) {
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
+        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * renderRadiusMod);
 
-        if (!Options->graph.renderRadiusModifier)
-            ErrorExit("Render search radius modifier must be specified");
-        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
+        if (!camera.Is<PerspectiveCamera>())
+            ErrorExit("Only Perspective camera allowed");
+
+        Initialize();
+
+        if (uniformGraph)
+            ErrorExit("Uniform graph no longer supported");
+
+        if (!freeGraph)
+            ErrorExit("Free graph is required");
+
+        freeGraph->SetVertexRadius(std::sqrt(squaredSearchRadius));
     }
 
-    void Render() override;
+    void Initialize();
 
     void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
                              ScratchBuffer &scratchBuffer) override;
@@ -42,18 +53,15 @@ public:
                        ScratchBuffer &scratchBuffer,
                        VisibleSurface *visibleSurface) const override;
 
+    [[nodiscard]] float Li(RayDifferential ray, Sampler sampler);
+
     static std::unique_ptr<GraphIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
             Primitive aggregate, std::vector<Light> lights);
 
-    [[nodiscard]] float SampleDirectLight(const MediumInteraction &interaction, Sampler sampler) const;
-
-    [[nodiscard]] float ConnectToGraph(Point3f searchPoint) const;
-
     [[nodiscard]] std::string ToString() const override { return "Graph Integrator"; }
 
 private:
-    int maxDepth;
     DistantLight* light;
     Transform worldFromRender;
     Transform renderFromWorld;
@@ -67,6 +75,7 @@ private:
     std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
     float squaredSearchRadius;
+    int stepIterations;
 };
 
 }
