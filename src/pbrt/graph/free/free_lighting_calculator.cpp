@@ -47,7 +47,8 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         Point3f origin = vertex.point - inDirection * mediumData.primitiveData.maxDistToCenter * 2;
         std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadius, inDirection);
 
-        float contributingRays = 0;
+        util::Averager transmittanceToSphereAverager;
+        util::Averager scatterInSphereAverager;
 
         uint64_t startIndex = listIndex * diskPoints.size();
         for (int pointIndex = 0; pointIndex < diskPoints.size(); ++pointIndex) {
@@ -74,13 +75,16 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
             startEnd.SkipForward(startEnd.startT);
 
-            lightMap[vertexId] += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
+            std::tuple<float, float> tr = ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
                 config.lightRayIterations, curIndex);
 
-            ++contributingRays;
+            transmittanceToSphereAverager.AddValue(std::get<0>(tr));
+            scatterInSphereAverager.AddValue(std::get<1>(tr));
+
             progress.Update(config.lightRayIterations);
         }
-        lightMap[vertexId] /= contributingRays != 0.f ? contributingRays : 1;
+
+        lightMap[vertexId] = transmittanceToSphereAverager.GetAverage() * scatterInSphereAverager.GetAverage();
     });
     progress.Done();
 

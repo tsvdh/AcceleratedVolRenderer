@@ -383,8 +383,8 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
         SphereContainer currentSphere = sphereMaker.GetSphereFor(toPoint);
         std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(fromPoint);
 
-        float transmittanceTotal = 0;
-        float contributingRays = 0;
+        util::Averager transmittanceToSphereAverager;
+        util::Averager scatterInSphereAverager;
 
         uint64_t startIndex = listIndex * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
@@ -417,16 +417,18 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
                 startEnd.SkipForward(startEnd.startT);
             }
 
-            transmittanceTotal += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
+            std::tuple<float, float> tr = ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
                 config.edgeTransmittanceIterations, curIndex);
 
-            ++contributingRays;
+            transmittanceToSphereAverager.AddValue(std::get<0>(tr));
+            scatterInSphereAverager.AddValue(std::get<1>(tr));
+
             progress.Update(config.edgeTransmittanceIterations);
         }
-        transmittanceTotal /= contributingRays != 0.f ? contributingRays : 1;
 
+        float transmittance = transmittanceToSphereAverager.GetAverage() * scatterInSphereAverager.GetAverage();
         graph.AddEdge(edge.from, edge.to, EdgeData{
-            transmittanceTotal,
+            transmittance,
             -1,
             static_cast<float>(numRaysPerEdge)
         });

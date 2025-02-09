@@ -491,24 +491,40 @@ class Averager {
 public:
     explicit Averager(int numValues = 0) {
         values.reserve(numValues);
+        weights.reserve(numValues);
     }
 
-    void AddValue(float value) {
+    void AddValue(float value, float weight = 1) {
         values.push_back(value);
+        weights.push_back(weight);
     }
 
     const std::vector<float>& GetValues() { return values; }
 
-    float GetAverage() {
-        float average = 0;
-        for (float value : values)
-            average += value;
-        average /= static_cast<float>(values.size());
+    float GetAverage(bool useWeights = true) {
+        if (values.size() == 0)
+            return 0;
 
+        float average = 0;
+        float totalWeight = 0;
+
+        for (int i = 0; i < values.size(); ++i) {
+            float weight = useWeights ? weights[i] : 1;
+            average += values[i] * weight;
+            totalWeight += weight;
+        }
+
+        if (totalWeight == 0)
+            return 0;
+
+        average /= totalWeight;
         return average;
     }
 
     std::tuple<float, float> GetStd() {
+        if (values.size() == 0)
+            return {0, 0};
+
         float average = GetAverage();
 
         float variance = 0;
@@ -521,6 +537,9 @@ public:
     }
 
     float GetDenoisedAverage() {
+        if (values.size() == 0)
+            return 0;
+
         auto [average, std] = GetStd();
 
         float denoisedAverage = 0;
@@ -540,6 +559,7 @@ public:
 
 private:
     std::vector<float> values;
+    std::vector<float> weights;
 };
 
 }
@@ -659,7 +679,7 @@ inline float GetSigmaMajUnitDistNormalizer(const Ray& ray, float tMax, const uti
     return 1 - FastExp(-sigmaMaj);
 }
 
-inline float ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
+inline std::tuple<float, float> ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
                                           Sampler sampler, ScratchBuffer& buffer, int iterations, uint64_t samplingIndex) {
     int yCoor = static_cast<int>(samplingIndex / Options->graph.samplingResolution->x);
     int xCoor = static_cast<int>(samplingIndex - yCoor * Options->graph.samplingResolution->x);
@@ -669,25 +689,18 @@ inline float ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, co
 
     float transmittanceToSphere = 0;
     float scatterInSphere = 0;
-    float scatterInSphereMaj = 0;
     for (int i = 0; i < iterations; ++i) {
         sampler.StartPixelSample({xCoor, yCoor}, i);
 
         transmittanceToSphere += SampleTransmittance(rayToSphere, startEnd.startScatterT, sampler, mediumData);
-        auto [Tr, Tr_maj] = SampleScatter(rayInSphere, rayInSphereEndT, sampler, mediumData);
+        auto [Tr, _] = SampleScatter(rayInSphere, rayInSphereEndT, sampler, mediumData);
         scatterInSphere += Tr;
-        scatterInSphereMaj += Tr_maj;
     }
 
-    float amountCaptured = transmittanceToSphere * scatterInSphere; // / scatterInSphereMaj;
-    if (amountCaptured == 0.f || IsNaN(amountCaptured))
-        return 0;
+    transmittanceToSphere /= static_cast<float>(iterations);
+    scatterInSphere /= static_cast<float>(iterations);
 
-    amountCaptured /= static_cast<float>(iterations);
-
-    // amountCaptured *= GetSigmaMajUnitDistNormalizer(rayInSphere, rayInSphereEndT, mediumData, buffer);
-
-    return amountCaptured;
+    return {transmittanceToSphere, scatterInSphere};
 }
 
 }

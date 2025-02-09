@@ -124,99 +124,15 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
     }
 }
 
-float GraphIntegrator::Li(RayDifferential ray, Sampler sampler) {
+float GraphIntegrator::Li(RayDifferential ray, const Sampler& sampler) {
     util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
 
-    float distInMedium;
-    switch (mediumHits.type) {
-        case util::OutsideZeroHits:
-            [[fallthrough]];
-        case util::OutsideOneHit:
-            return 0;
-        case util::OutsideTwoHits:
-            distInMedium = mediumHits.tHits[1] - mediumHits.tHits[0];
-            break;
-        case util::InsideOneHit:
-            distInMedium = mediumHits.tHits[0];
-            break;
-        default:
-            ErrorExit("Forgot an enum case");
-    }
+    if (mediumHits.type == util::OutsideZeroHits || mediumHits.type == util::OutsideOneHit)
+        return 0;
 
-    float mediumEntry = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[0] : 0;
     float mediumExit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] : mediumHits.tHits[0];
 
-    float sphereRadius = freeGraph->GetVertexRadius().value();
-    float distBetweenPoints = 2 * sphereRadius;
-
-    int numSearchPoints = std::ceil(distInMedium / distBetweenPoints);
-
-    std::vector<Point3f> searchPoints;
-    searchPoints.reserve(numSearchPoints);
-
-    if (distBetweenPoints / 2 > distInMedium) {
-        searchPoints.push_back(ray(mediumEntry));
-    } else {
-        float curDist = mediumHits.tHits[0] - distBetweenPoints / 2;
-        for (int i = 0; i < numSearchPoints; ++i) {
-            curDist += distBetweenPoints;
-            searchPoints.push_back(ray(curDist));
-        }
-    }
-
-    float squaredNearbyDistance = Sqr(sphereRadius * Sqrt2);
-    std::vector<RefConst<Vertex>> closeVertices;
-
-    for (Point3f searchPoint : searchPoints) {
-        searchPoint = worldFromRender(searchPoint);
-        Float searchPointArray[3] = {searchPoint.x, searchPoint.y, searchPoint.z};
-
-        std::vector<nanoflann::ResultItem<int, float>> resultItems;
-
-        searchTree->radiusSearch(searchPointArray, squaredNearbyDistance, resultItems);
-
-        for (auto resultItem : resultItems) {
-            RefConst<Vertex> foundVertex =  freeGraph->GetVertexConst(vHolder.GetListConst()[resultItem.first].first).value();
-            closeVertices.push_back(foundVertex);
-        }
-    }
-
-    struct LightDistance {
-        float entry, exit;
-        float light;
-
-        LightDistance(float entry, float exit, float light) : entry(entry), exit(exit), light(light) {}
-    };
-
-    util::SphereMaker sphereMaker(sphereRadius);
-    std::vector<LightDistance> lightDistances;
-    lightDistances.reserve(closeVertices.size());
-
-    for (RefConst<Vertex> vertex : closeVertices) {
-        Point3f renderSpacePoint = renderFromWorld(vertex.get().point);
-        SphereContainer currentSphere = sphereMaker.GetSphereFor(renderSpacePoint);
-
-        float light = vertex.get().data.lightScalar;
-        util::HitsResult sphereHits = GetHits(currentSphere.sphere, ray, mediumData);
-
-        switch (sphereHits.type) {
-            case util::OutsideZeroHits:
-                [[fallthrough]];
-            case util::OutsideOneHit:
-                break;
-            case util::OutsideTwoHits:
-                lightDistances.emplace_back(sphereHits.tHits[0], sphereHits.tHits[1], light);
-                break;
-            case util::InsideOneHit:
-                lightDistances.emplace_back(0, sphereHits.tHits[0], light);
-                break;
-            default:
-                ErrorExit("Forgot an enum case");
-        }
-    }
-
-    std::sort(lightDistances.begin(), lightDistances.end(),
-        [](const LightDistance& a, const LightDistance& b) { return a.entry < b.entry; });
+    float distBetweenPoints = 2 * graphRadius;
 
     float L = 0;
     float curTr = 1;
@@ -229,25 +145,51 @@ float GraphIntegrator::Li(RayDifferential ray, Sampler sampler) {
         curT = mediumHits.tHits[0];
     }
 
-    for (const LightDistance& lightDistance : lightDistances) {
-        if ((lightDistance.entry < mediumEntry && lightDistance.exit < mediumEntry) || lightDistance.entry > mediumExit)
-            continue;
+    auto GetNearPointContribution = [&](Point3f searchPoint) -> float {
+        searchPoint = worldFromRender(searchPoint);
+        Float searchPointArray[3] = {searchPoint.x, searchPoint.y, searchPoint.z};
 
-        float stepDist = std::max(0.f, lightDistance.entry - curT);
+        std::vector<nanoflann::ResultItem<int, float>> resultItems;
 
-        if (stepDist > 0) {
-            float stepTr = 0;
-            for (int i = 0; i < stepIterations; ++i)
-                stepTr += SampleTransmittance(ray, stepDist, sampler, mediumData);
+        searchTree->radiusSearch(searchPointArray, squaredRenderRadius, resultItems);
 
-            stepTr /= static_cast<float>(stepIterations);
-            curTr *= stepTr;
+        util::Averager averager;
+        for (auto resultItem : resultItems) {
+            RefConst<Vertex> foundVertex =  freeGraph->GetVertexConst(vHolder.GetListConst()[resultItem.first].first).value();
+            averager.AddValue(foundVertex.get().data.lightScalar); // , 1.f / DistanceSquared(foundVertex.get().point, searchPoint));
+        }
+        return averager.GetAverage();
+    };
 
-            ray.o = ray(stepDist);
-            curT += stepDist;
+    auto GetStepTransmittance = [&]() -> float {
+        float stepTr = 0;
+        for (int i = 0; i < stepIterations; ++i)
+            stepTr += SampleTransmittance(ray, distBetweenPoints, sampler, mediumData);
+
+        stepTr /= static_cast<float>(stepIterations);
+        return stepTr;
+    };
+
+    while (true) {
+        bool stop = false;
+        float stepLight = curTr * GetNearPointContribution(ray.o);
+
+        float distRemaining = mediumExit - curT;
+        if (distRemaining > distBetweenPoints) {
+
+            curTr *= GetStepTransmittance();
+            ray.o = ray(distBetweenPoints);
+            curT += distBetweenPoints;
+        }
+        else {
+            float stepSizeMultiplier = distRemaining / distBetweenPoints;
+            stepLight *= stepSizeMultiplier;
+            stop = true;
         }
 
-        L += lightDistance.light;
+        L += stepLight;
+        if (stop)
+            break;
     }
 
     L *= Inv4Pi;
@@ -266,9 +208,10 @@ std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
         Primitive aggregate, std::vector<Light> lights)
 {
     int stepIterations = parameters.GetOneInt("stepIterations", 20);
-    int renderRadiusMod = parameters.GetOneInt("renderRadiusMod", 10);
+    int graphRadiusMod = parameters.GetOneInt("graphRadiusMod", 10);
+    int renderRadiusMod = parameters.GetOneInt("renderRadiusMod", 20);
     return std::make_unique<GraphIntegrator>(std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights),
-        stepIterations, renderRadiusMod);
+        stepIterations, graphRadiusMod, renderRadiusMod);
 }
 
 }

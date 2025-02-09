@@ -20,7 +20,7 @@ class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
     GraphIntegrator(Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights,
-            int stepIterations, int renderRadiusMod)
+            int stepIterations, int graphRadiusMod, int renderRadiusMod)
         : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
           stepIterations(stepIterations) {
         light = util::GetLight(lights);
@@ -28,7 +28,8 @@ public:
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
-        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * renderRadiusMod);
+        graphRadius = GetSameSpotRadius(mediumData) * graphRadiusMod;
+        squaredRenderRadius = Sqr(GetSameSpotRadius(mediumData) * renderRadiusMod);
 
         if (!camera.Is<PerspectiveCamera>())
             ErrorExit("Only Perspective camera allowed");
@@ -40,8 +41,6 @@ public:
 
         if (!freeGraph)
             ErrorExit("Free graph is required");
-
-        freeGraph->SetVertexRadius(std::sqrt(squaredSearchRadius));
     }
 
     void Initialize();
@@ -53,7 +52,7 @@ public:
                        ScratchBuffer &scratchBuffer,
                        VisibleSurface *visibleSurface) const override;
 
-    [[nodiscard]] float Li(RayDifferential ray, Sampler sampler);
+    [[nodiscard]] float Li(RayDifferential ray, const Sampler& sampler);
 
     static std::unique_ptr<GraphIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
@@ -74,7 +73,8 @@ private:
     std::optional<FreeGraph> freeGraph;
     std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
-    float squaredSearchRadius;
+    float graphRadius;
+    float squaredRenderRadius;
     int stepIterations;
 };
 
