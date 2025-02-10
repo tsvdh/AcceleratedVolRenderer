@@ -20,9 +20,8 @@ class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
     GraphIntegrator(Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights,
-            int stepIterations, int graphRadiusMod, int renderRadiusMod)
-        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights),
-          stepIterations(stepIterations) {
+            float graphRadiusMod, float renderRadiusMod)
+        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights) {
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
@@ -30,6 +29,8 @@ public:
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
         graphRadius = GetSameSpotRadius(mediumData) * graphRadiusMod;
         squaredRenderRadius = Sqr(GetSameSpotRadius(mediumData) * renderRadiusMod);
+
+        Options->disablePixelJitter = true;
 
         if (!camera.Is<PerspectiveCamera>())
             ErrorExit("Only Perspective camera allowed");
@@ -52,7 +53,7 @@ public:
                        ScratchBuffer &scratchBuffer,
                        VisibleSurface *visibleSurface) const override;
 
-    [[nodiscard]] float Li(RayDifferential ray, const Sampler& sampler);
+    [[nodiscard]] float Li(RayDifferential ray, Point2i pixel, const Sampler& sampler);
 
     static std::unique_ptr<GraphIntegrator> Create(
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
@@ -75,7 +76,7 @@ private:
     util::VerticesHolder vHolder;
     float graphRadius;
     float squaredRenderRadius;
-    int stepIterations;
+    std::unordered_map<Point2i, std::vector<float>, util::PointHash> contributionCache;
 };
 
 }

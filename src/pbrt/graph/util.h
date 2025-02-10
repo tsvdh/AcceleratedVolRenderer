@@ -23,6 +23,13 @@ struct PointHash {
 
         return std::hash<std::string>()(stringP);
     }
+
+    std::size_t operator()(Point2i p) const {
+        std::string stringP = std::to_string(p.x)
+                           + std::to_string(p.y);
+
+        return std::hash<std::string>()(stringP);
+    }
 };
 
 inline std::string FileNameToPath(const std::string& fileName) {
@@ -182,7 +189,7 @@ static std::vector<Point3f> GetDiskPoints(Point3f center, float radius, int numP
     yVector *= stepSize;
 
     std::vector<Point3f> points;
-    points.reserve(Pi * Sqr(numPointsOnRadius));
+    points.reserve(std::ceil(Pi * static_cast<float>(Sqr(numPointsOnRadius))));
 
     for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
         for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {
@@ -426,16 +433,16 @@ static HitsResult GetHits(const Primitive& primitive, RayDifferential ray, const
 
     pstd::optional<ShapeIntersection> intersectFromFar = primitive.Intersect(rayOutside, Infinity);
     if (!intersectFromFar) {
-        Warning("Rare case of same ray not hitting primitive");
+        // Warning("Rare case of same ray not hitting primitive");
         return {{}, {}, OutsideZeroHits};
     }
 
     float adjustedFromFarTHit = intersectFromFar->tHit - distBack;
     float tHitDiff = std::abs(firstIntersect->tHit - adjustedFromFarTHit);
 
-    HitsType type = tHitDiff < std::pow(10, -6) ? OutsideOneHit : InsideOneHit;
+    HitsType type = tHitDiff < std::pow(10, -3) ? OutsideOneHit : InsideOneHit;
     if (type == OutsideOneHit) {
-        Warning("Rare case of outside ray hitting primitive once");
+        // Warning("Rare case of outside ray hitting primitive once");
         return {{}, {}, OutsideZeroHits};
     }
 
@@ -502,7 +509,7 @@ public:
     const std::vector<float>& GetValues() { return values; }
 
     float GetAverage(bool useWeights = true) {
-        if (values.size() == 0)
+        if (values.empty())
             return 0;
 
         float average = 0;
@@ -522,7 +529,7 @@ public:
     }
 
     std::tuple<float, float> GetStd() {
-        if (values.size() == 0)
+        if (values.empty())
             return {0, 0};
 
         float average = GetAverage();
@@ -537,7 +544,7 @@ public:
     }
 
     float GetDenoisedAverage() {
-        if (values.size() == 0)
+        if (values.empty())
             return 0;
 
         auto [average, std] = GetStd();

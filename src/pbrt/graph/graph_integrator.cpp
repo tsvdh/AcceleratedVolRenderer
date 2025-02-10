@@ -61,6 +61,9 @@ void GraphIntegrator::Initialize() {
         vHolder = freeGraph->GetVerticesList();
         searchTree = std::make_unique<StaticTreeType>(3, vHolder);
         std::cout << "done" << std::endl;
+
+        for (Point2i pixel : camera.GetFilm().PixelBounds())
+            contributionCache[pixel] = {};
     }
 }
 
@@ -89,7 +92,7 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
 
         ++nCameraRays;
         // Evaluate radiance along camera ray
-        lightScalar = Li(cameraRay->ray, sampler);
+        lightScalar = Li(cameraRay->ray, pPixel, sampler);
 
         // Issue warning if unexpected radiance value is returned
         if (IsNaN(lightScalar)) {
@@ -124,18 +127,18 @@ void GraphIntegrator::EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampl
     }
 }
 
-float GraphIntegrator::Li(RayDifferential ray, const Sampler& sampler) {
+float GraphIntegrator::Li(RayDifferential ray, Point2i pixel, const Sampler& sampler) {
     util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
 
     if (mediumHits.type == util::OutsideZeroHits || mediumHits.type == util::OutsideOneHit)
         return 0;
 
+    float mediumEntry = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[0] : 0;
     float mediumExit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] : mediumHits.tHits[0];
 
     float distBetweenPoints = 2 * graphRadius;
 
     float L = 0;
-    float curTr = 1;
     float curT = 0;
 
     if (mediumHits.type == util::OutsideTwoHits) {
@@ -161,24 +164,21 @@ float GraphIntegrator::Li(RayDifferential ray, const Sampler& sampler) {
         return averager.GetAverage();
     };
 
-    auto GetStepTransmittance = [&]() -> float {
-        float stepTr = 0;
-        for (int i = 0; i < stepIterations; ++i)
-            stepTr += SampleTransmittance(ray, distBetweenPoints, sampler, mediumData);
+    bool cacheFilled = !contributionCache[pixel].empty();
+    std::vector<float>& cache = contributionCache[pixel];
 
-        stepTr /= static_cast<float>(stepIterations);
-        return stepTr;
-    };
-
+    int i = 0;
     while (true) {
         bool stop = false;
-        float stepLight = curTr * GetNearPointContribution(ray.o);
+        float curDistance = std::max(0.f, curT - mediumEntry);
+
+        if (!cacheFilled)
+            cache.push_back(GetNearPointContribution(ray(curDistance)));
+
+        float stepLight = SampleTransmittance(ray, curDistance, sampler, mediumData) * cache[i];
 
         float distRemaining = mediumExit - curT;
         if (distRemaining > distBetweenPoints) {
-
-            curTr *= GetStepTransmittance();
-            ray.o = ray(distBetweenPoints);
             curT += distBetweenPoints;
         }
         else {
@@ -188,6 +188,7 @@ float GraphIntegrator::Li(RayDifferential ray, const Sampler& sampler) {
         }
 
         L += stepLight;
+        ++i;
         if (stop)
             break;
     }
@@ -207,11 +208,10 @@ std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
         const ParameterDictionary& parameters, Camera camera, Sampler sampler,
         Primitive aggregate, std::vector<Light> lights)
 {
-    int stepIterations = parameters.GetOneInt("stepIterations", 20);
-    int graphRadiusMod = parameters.GetOneInt("graphRadiusMod", 10);
-    int renderRadiusMod = parameters.GetOneInt("renderRadiusMod", 20);
+    float graphRadiusMod = parameters.GetOneFloat("graphRadiusMod", 10);
+    float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 20);
     return std::make_unique<GraphIntegrator>(std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights),
-        stepIterations, graphRadiusMod, renderRadiusMod);
+        graphRadiusMod, renderRadiusMod);
 }
 
 }
