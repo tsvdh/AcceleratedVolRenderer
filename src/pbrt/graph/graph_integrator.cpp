@@ -26,12 +26,10 @@ STAT_COUNTER("Integrator/Camera rays traced", nCameraRays)
 // GraphIntegrator Method Definitions
 
 void GraphIntegrator::Initialize() {
-    std::string graphName;
-    if (Options->graph.configFile) {
-        graphName = std::regex_replace(Options->graph.configFile.value(), std::regex("\\.json"), ".txt");
-    } else {
-        graphName = std::regex_replace(Options->graph.sceneFile, std::regex("\\.pbrt"), ".txt");
-    }
+    std::string graphName = Options->graph.dataFile.has_value()
+        ? Options->graph.dataFile.value()
+        : std::regex_replace(Options->graph.sceneFile, std::regex("\\.pbrt"), ".txt");
+
     std::ifstream file(util::FileNameToPath(graphName));
     std::string description, name;
     file >> description >> name;

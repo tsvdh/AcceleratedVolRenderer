@@ -39,7 +39,7 @@ struct GraphOptions {
     std::string sceneFile;
     bool debug = false;
     pstd::optional<Point2i> samplingResolution;
-    pstd::optional<std::string> configFile;
+    pstd::optional<std::string> dataFile;
 
 };
 

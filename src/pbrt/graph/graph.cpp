@@ -247,50 +247,60 @@ inline EdgeData ReadEdgeData(std::istream& in, StreamFlags flags) {
     return EdgeData{throughput, weightedThroughput, numSamples};
 }
 
-void Graph::WriteToStream(std::ostream& out, StreamFlags flags) const {
+void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
     out << (flags.useCoors ? "True" : "False") << SEP
         << (flags.useThroughput ? "True" : "False") << SEP
         << (flags.useRayVertexTypes ? "True" : "False") << SEP
         << (flags.useLighting ? "True" : "False") << NEW;
 
+    size_t numVertices = options.writeVertices ? vertices.size() : 0;
+    size_t numEdges = options.writeEdges ? edges.size() : 0;
+    size_t numPaths = options.writePaths ? paths.size() : 0;
+
     out << curVertexId << SEP
         << curEdgeId << SEP
         << curPathId << SEP
-        << vertices.size() << SEP
-        << edges.size() << SEP
-        << paths.size() << NEW;
+        << numVertices << SEP
+        << numEdges << SEP
+        << numPaths << NEW;
 
-    int totalWork = static_cast<int>(vertices.size() + edges.size() + paths.size());
+    int totalWork = static_cast<int>(numVertices + numEdges + numPaths);
     ProgressReporter progress(totalWork, "Writing graph to stream", false);
 
-    for (auto& [id, vertex] : vertices) {
-        out << vertex.id << SEP << vertex.point;
+    if (options.writeVertices) {
+        for (auto& [id, vertex] : vertices) {
+            out << vertex.id << SEP << vertex.point;
 
-        if (flags.useCoors)
-            out << vertex.coors.value();
+            if (flags.useCoors)
+                out << vertex.coors.value();
 
-        WriteVertexData(out, vertex.data, flags);
+            WriteVertexData(out, vertex.data, flags);
 
-        out << NEW;
+            out << NEW;
 
-        progress.Update();
+            progress.Update();
+        }
     }
 
-    for (auto& [id, edge] : edges) {
-        out << edge.id << SEP << edge.from << SEP << edge.to << SEP;
-        WriteEdgeData(out, edge.data, flags);
-        out << NEW;
+    if (options.writeEdges) {
+        for (auto& [id, edge] : edges) {
+            out << edge.id << SEP << edge.from << SEP << edge.to << SEP;
+            WriteEdgeData(out, edge.data, flags);
+            out << NEW;
 
-        progress.Update();
+            progress.Update();
+        }
     }
 
-    for (auto& [id, path] : paths) {
-        out << path.id << SEP << path.vertices.size() << SEP;
-        for (int vertexId : path.vertices)
-            out << vertexId << SEP;
-        out << NEW;
+    if (options.writePaths) {
+        for (auto& [id, path] : paths) {
+            out << path.id << SEP << path.vertices.size() << SEP;
+            for (int vertexId : path.vertices)
+                out << vertexId << SEP;
+            out << NEW;
 
-        progress.Update();
+            progress.Update();
+        }
     }
 
     progress.Done();
@@ -365,7 +375,7 @@ void Graph::ReadFromStream(std::istream& in) {
     progress.Done();
 }
 
-void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags) {
+void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags, StreamOptions options) {
     std::string fullPath = util::FileNameToPath(fileName);
     std::string parentPath = fullPath.substr(0, fullPath.find_last_of('/'));
     std::filesystem::create_directories(parentPath);
@@ -376,15 +386,15 @@ void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, St
     auto asUniform = dynamic_cast<UniformGraph*>(this);
     auto asFree = dynamic_cast<FreeGraph*>(this);
     if (asUniform)
-        asUniform->WriteToStream(file, flags);
+        asUniform->WriteToStream(file, flags, options);
     if (asFree)
-        asFree->WriteToStream(file, flags);
+        asFree->WriteToStream(file, flags, options);
 
     file.close();
 }
 
-void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags) {
-    WriteToDisk(fileName, GetDescriptionName(desc), flags);
+void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags, StreamOptions options) {
+    WriteToDisk(fileName, GetDescriptionName(desc), flags, options);
 }
 
 util::VerticesHolder Graph::GetVerticesList() const {
@@ -483,10 +493,10 @@ Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data, b
     return newVertex;
 }
 
-void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags) const {
+void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
     out << "uniform" << SEP << spacing << NEW;
 
-    Graph::WriteToStream(out, flags);
+    Graph::WriteToStream(out, flags, options);
 }
 
 void UniformGraph::ReadFromStream(std::istream& in) {
@@ -549,10 +559,10 @@ UniformGraph FreeGraph::ToUniform(float spacing) const {
     return uniform;
 }
 
-void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags) const {
+void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
     out << "free" << NEW;
 
-    Graph::WriteToStream(out, flags);
+    Graph::WriteToStream(out, flags, options);
 }
 
 void FreeGraph::ReadFromStream(std::istream& in) {

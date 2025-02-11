@@ -92,20 +92,16 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 }
 
 SparseMat FreeLightingCalculator::GetGMatrix() const {
-    auto& vertices = graph.GetVerticesConst();
     auto& edges = graph.GetEdgesConst();
 
     std::vector<Eigen::Triplet<float>> gEntries;
     gEntries.reserve(edges.size());
 
-    for (auto& edge : edges) {
-        const Vertex& from = vertices.at(edge.second.from);
-        const Vertex& to = vertices.at(edge.second.to);
-
-        float T = edge.second.data.throughput;
+    for (auto& [id, edge] : edges) {
+        float T = edge.data.throughput;
         // float G = std::max(std::min(1 / LengthSquared(from.point - to.point), 100.f), 1.f);
 
-        gEntries.emplace_back(to.id, from.id, T);
+        gEntries.emplace_back(edge.to, edge.from, T);
     }
 
     SparseMat gMatrix(numVertices, numVertices);

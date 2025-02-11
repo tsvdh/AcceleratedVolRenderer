@@ -103,6 +103,12 @@ struct StreamFlags {
     bool useLighting = false;
 };
 
+struct StreamOptions {
+    bool writeVertices = true;
+    bool writeEdges = true;
+    bool writePaths = true;
+};
+
 static int curGraphId = -1;
 
 class Graph {
@@ -139,8 +145,8 @@ public:
 
     bool AddVertexToPath(int vertexId, int pathId);
 
-    void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags);
-    void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags);
+    void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags, StreamOptions options);
+    void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags, StreamOptions options);
 
     [[nodiscard]] util::VerticesHolder GetVerticesList() const;
     [[nodiscard]] util::VerticesHolder GetPathEndsList() const;
@@ -154,7 +160,7 @@ protected:
     virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) = 0;
     OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data, bool incrId);
 
-    virtual void WriteToStream(std::ostream& out, StreamFlags flags) const;
+    virtual void WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const;
     virtual void ReadFromStream(std::istream& in);
 
     std::unordered_map<int, Vertex> vertices; // ID, object
@@ -192,7 +198,7 @@ public:
 
     static UniformGraph ReadFromDisk(const std::string& fileName);
 
-    void WriteToStream(std::ostream& out, StreamFlags flags) const override;
+    void WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const override;
     void ReadFromStream(std::istream& in) override;
 
 protected:
@@ -218,7 +224,7 @@ public:
 
     static FreeGraph ReadFromDisk(const std::string& fileName);
 
-    void WriteToStream(std::ostream& out, StreamFlags flags) const override;
+    void WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const override;
     void ReadFromStream(std::istream& in) override;
 
 protected:

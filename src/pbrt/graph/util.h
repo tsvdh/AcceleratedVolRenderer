@@ -619,7 +619,7 @@ struct GraphBuilderConfig {
 struct LightingCalculatorConfig {
     int lightRayIterations;
     int pointsOnRadius;
-    int transmittanceMatrixIterations;
+    std::vector<int> bounces;
     bool runInParallel;
 };
 
@@ -651,7 +651,7 @@ inline void from_json(const json& jsonObject, LightingCalculatorConfig& lighting
     auto lightingCalculator = jsonObject.at("lightingCalculator");
     lightingCalculator.at("lightRayIterations").get_to(lightingCalculatorConfig.lightRayIterations);
     lightingCalculator.at("pointsOnRadius").get_to(lightingCalculatorConfig.pointsOnRadius);
-    lightingCalculator.at("transmittanceMatrixIterations").get_to(lightingCalculatorConfig.transmittanceMatrixIterations);
+    lightingCalculator.at("bounces").get_to(lightingCalculatorConfig.bounces);
     lightingCalculator.at("runInParallel").get_to(lightingCalculatorConfig.runInParallel);
 }
 
