@@ -36,6 +36,19 @@ void LightingCalculator::ComputeFinalLight() {
 }
 
 void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
+    auto& edges = graph.GetEdgesConst();
+
+    std::vector<Eigen::Triplet<float>> connectionEntries;
+    connectionEntries.reserve(edges.size());
+
+    for (auto& edge : edges) {
+        connectionEntries.emplace_back(edge.second.to, edge.second.from, 1);
+    }
+
+    SparseMat connectionMatrix(numVertices, numVertices);
+    connectionMatrix.setFromTriplets(connectionEntries.begin(), connectionEntries.end());
+
+
     int numVertices = static_cast<int>(graph.GetVertices().size());
 
     SparseVec finalLight(light);
@@ -52,7 +65,7 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
 
         for (int iteration = 0; iteration < config.transmittanceMatrixIterations; ++iteration) {
             curLight = transmittance * curLight;
-            curWeights = transmittance * curWeights;
+            curWeights = connectionMatrix * curWeights;
 
             SparseVec invCurWeights(numVertices);
             for (int i = 0; i < numVertices; ++i) {
