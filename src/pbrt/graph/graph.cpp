@@ -23,6 +23,24 @@ std::istream& operator>>(std::istream& in, Point3<T>& p) {
     return in;
 }
 
+void VertexData::AddTerminationSample(bool pathContinued) {
+    AddTerminationSamples(pathContinued, 1);
+}
+
+void VertexData::AddTerminationSamples(float pathContinuePDF, float numSamples) {
+    this->pathContinuePDF *= this->numSamples;
+    this->pathContinuePDF += pathContinuePDF * numSamples;
+    this->numSamples += numSamples;
+    this->pathContinuePDF /= this->numSamples;
+}
+
+void VertexData::MergeWithDataFrom(const VertexData& otherData) {
+    if (type != none || lightScalar != -1)
+        ErrorExit(StringPrintf("Cannot merge data: {type: %s, lightScalar: %s}", type, lightScalar).c_str());
+
+    this->AddTerminationSamples(otherData.pathContinuePDF, otherData.numSamples);
+}
+
 void Vertex::AddPathIndex(int pathId, int index) {
     if (paths.find(pathId) == paths.end())
         paths[pathId] = {};

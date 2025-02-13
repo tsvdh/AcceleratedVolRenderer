@@ -87,7 +87,7 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
 }
 
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
-    return GetGMatrix();
+    return GetGMatrix() * GetPathContinueMatrix();
 }
 
 SparseMat LightingCalculator::GetConnectionMatrix() const {
@@ -104,6 +104,19 @@ SparseMat LightingCalculator::GetConnectionMatrix() const {
     return connectionMatrix;
 }
 
+SparseMat LightingCalculator::GetPathContinueMatrix() const {
+    auto& vertices = graph.GetVerticesConst();
+
+    std::vector<Eigen::Triplet<float>> pathContinueEntries;
+    pathContinueEntries.reserve(vertices.size());
+
+    for (auto& [id, vertex] : vertices)
+        pathContinueEntries.emplace_back(id, id, vertex.data.pathContinuePDF);
+
+    SparseMat pathContinueMatrix(numVertices, numVertices);
+    pathContinueMatrix.setFromTriplets(pathContinueEntries.begin(), pathContinueEntries.end());
+    return pathContinueMatrix;
+}
 
 SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, float>& lightMap) const {
     std::vector<std::pair<int, float>> lightPairs(lightMap.begin(), lightMap.end());

@@ -26,6 +26,13 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
     std::vector<int> path;
     bool usedTHit = false;
 
+    auto HandlePotentialPathEnd = [&](bool pathContinues) {
+        if (!path.empty()) {
+            Vertex& lastVertex = graph.GetVertex(path.back())->get();
+            lastVertex.data.AddTerminationSample(pathContinues);
+        }
+    };
+
     while (true) {
         // Initialize _RNG_ for sampling the majorant transmittance
         uint64_t hash0 = Hash(sampler.Get1D());
@@ -41,7 +48,9 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         }
         else {
             pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
+
             if (!optIntersection) {
+                HandlePotentialPathEnd(false);
                 // pathLengths.push_back(path.size());
                 return numNewVertices;
             }
@@ -82,7 +91,8 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             });
 
         // Handle terminated, scattered, and unscattered medium rays
-        // if no new interaction then path is done
+        HandlePotentialPathEnd(optNewInteraction.has_value());
+
         if (!optNewInteraction) {
             // pathLengths.push_back(path.size());
             return numNewVertices;
@@ -117,9 +127,10 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
                 graph.AddEdge(from, to, EdgeData{});
         } else {
-            ++scattersIgnored;
+            // TODO: remove path continue sample
+            ++scattersInSameSphere;
         }
-        ++ totalScatters;
+        ++totalScatters;
 
         // terminate if max depth reached
         if (path.size() == maxDepth) {
@@ -227,7 +238,17 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     // auto [average, std] = averager.GetStd();
     // std::cout << averager.GetValues().size() << " " << average << " " << std << std::endl;
 
-    // std::cout << scattersIgnored << " " << totalScatters << std::endl;
+    // std::cout << StringPrintf("Scattered in same sphere: %s, scattered total %s, (%s)",
+    //     scattersInSameSphere, totalScatters, static_cast<float>(scattersInSameSphere) / static_cast<float>(totalScatters)) << std::endl;
+    //
+    // util::Averager pathContinuePDFAverager;
+    // for (auto& [id, v] : graph.GetVertices()) {
+    //     pathContinuePDFAverager.AddValue(v.data.pathContinuePDF);
+    //     if (v.data.pathContinuePDF == -1)
+    //         ErrorExit("Negative PDF");
+    // }
+    // std::cout << "Average path continue PDF: " << pathContinuePDFAverager.GetAverage() << std::endl;
+
     // exit(0);
 
     return graph;
@@ -244,7 +265,7 @@ std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInR
     return resultItems.size() <= 1 ? std::nullopt : std::make_optional(resultItems[1]);
 }
 
-inline void MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
+inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
     struct TempEdge {
         TempEdge(int id, int from, int to)
             : id(id), from(from), to(to) {
@@ -253,32 +274,36 @@ inline void MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph
         int id, from, to;
     };
 
+    int count = 0;
+
     std::vector<TempEdge> edgesToAdd;
     std::vector<int> edgesToRemove;
 
     for (auto& [fromId, edgeId] : toMoveVertex.inEdges) {
         Vertex& fromVertex = graph.GetVertex(fromId)->get();
 
-        if (fromVertex.id == targetVertex.id)
+        if (fromVertex.id == targetVertex.id) {
             edgesToRemove.push_back(edgeId);
-        else if (targetVertex.inEdges.find(fromVertex.id) == targetVertex.inEdges.end()) {
+            // TODO: remove path continue sample
+            ++count;
+        } else if (targetVertex.inEdges.find(fromVertex.id) == targetVertex.inEdges.end()) {
             edgesToAdd.emplace_back(edgeId, fromVertex.id, targetVertex.id);
             edgesToRemove.push_back(edgeId);
-        }
-        else
+        } else
             edgesToRemove.push_back(edgeId);
     }
 
     for (auto& [toId, edgeId] : toMoveVertex.outEdges) {
         Vertex& toVertex = graph.GetVertex(toId)->get();
 
-        if (toVertex.id == targetVertex.id)
+        if (toVertex.id == targetVertex.id) {
             edgesToRemove.push_back(edgeId);
-        else if (targetVertex.outEdges.find(toVertex.id) == targetVertex.outEdges.end()) {
+            // TODO: remove path continue sample
+            ++count;
+        } else if (targetVertex.outEdges.find(toVertex.id) == targetVertex.outEdges.end()) {
             edgesToAdd.emplace_back(edgeId, targetVertex.id, toVertex.id);
             edgesToRemove.push_back(edgeId);
-        }
-        else
+        } else
             edgesToRemove.push_back(edgeId);
     }
 
@@ -287,11 +312,15 @@ inline void MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph
 
     for (TempEdge toAdd : edgesToAdd)
         graph.AddEdge(toAdd.id, toAdd.from, toAdd.to, EdgeData{});
+
+    return count;
 }
 
-inline void MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
-    MoveEdgeReferences(vertexToMove, targetVertex, graph);
+inline int MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
+    targetVertex.data.MergeWithDataFrom(vertexToMove.data);
+    int count = MoveEdgeReferences(vertexToMove, targetVertex, graph);
     graph.RemoveVertex(vertexToMove.id);
+    return count;
 }
 
 void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
@@ -304,7 +333,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();
             Vertex& targetVertex = graph.GetVertex(resultItem->first)->get();
 
-            MoveVertexToTarget(vertexToMove, targetVertex, graph);
+            scattersInSameSphere += MoveVertexToTarget(vertexToMove, targetVertex, graph);
 
             searchTree->removePoint(curId);
         }

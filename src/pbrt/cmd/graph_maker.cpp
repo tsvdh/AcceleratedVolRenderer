@@ -130,16 +130,15 @@ void main(int argc, char* argv[]) {
 
     util::MediumData mediumData(accel, scene.GetCamera().GetFilm().SampleWavelengths(0));
     light->Preprocess(mediumData.primitiveData.bounds);
+    Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
+
+    std::cout << "Vertex radius: " << GetSameSpotRadius(mediumData) * config.graphBuilder.radiusModifier << std::endl;
 
     Sampler sampler = scene.GetSampler();
 
-    Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
-
-    std::cout << GetSameSpotRadius(mediumData) * config.graphBuilder.radiusModifier << std::endl;
-
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.TracePaths();
-    std::cout << graph.GetVertices().size() << " " << graph.GetEdges().size() << std::endl;
+    std::cout << StringPrintf("Vertices: %s, Edges %s", graph.GetVertices().size(), graph.GetEdges().size()) << std::endl;
     graphBuilder.ComputeTransmittance(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);

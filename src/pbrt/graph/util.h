@@ -426,16 +426,16 @@ static HitsResult GetHits(const Primitive& primitive, RayDifferential ray, const
 
     pstd::optional<ShapeIntersection> intersectFromFar = primitive.Intersect(rayOutside, Infinity);
     if (!intersectFromFar) {
-        Warning("Rare case of same ray not hitting primitive");
+        // Warning("Rare case of same ray not hitting primitive");
         return {{}, {}, OutsideZeroHits};
     }
 
     float adjustedFromFarTHit = intersectFromFar->tHit - distBack;
     float tHitDiff = std::abs(firstIntersect->tHit - adjustedFromFarTHit);
 
-    HitsType type = tHitDiff < std::pow(10, -6) ? OutsideOneHit : InsideOneHit;
+    HitsType type = tHitDiff < std::pow(10, -3) ? OutsideOneHit : InsideOneHit;
     if (type == OutsideOneHit) {
-        Warning("Rare case of outside ray hitting primitive once");
+        // Warning("Rare case of outside ray hitting primitive once");
         return {{}, {}, OutsideZeroHits};
     }
 

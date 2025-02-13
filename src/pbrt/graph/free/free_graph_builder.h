@@ -33,7 +33,7 @@ private:
     int sampleIndexOffset;
 
     std::vector<int> pathLengths;
-    int scattersIgnored = 0;
+    int scattersInSameSphere = 0;
     int totalScatters = 0;
 };
 }
