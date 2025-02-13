@@ -208,7 +208,7 @@ static std::vector<Point3f> GetSphereVolumePoints(float radius, int numPointsOnR
     float stepSize = radius / static_cast<float>(numPointsOnRadius + 1);
 
     std::vector<Point3f> points;
-    points.reserve(4.f / 3.f * Pi * std::pow(numPointsOnRadius, 3));
+    points.reserve(static_cast<uint64_t>(4.f / 3.f * Pi * std::pow(numPointsOnRadius, 3)));
 
     for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
         for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {
@@ -491,24 +491,43 @@ class Averager {
 public:
     explicit Averager(int numValues = 0) {
         values.reserve(numValues);
+        weights.reserve(numValues);
     }
 
-    void AddValue(float value) {
+    void AddValue(float value, float weight = 1) {
         values.push_back(value);
+        weights.push_back(weight);
     }
 
     const std::vector<float>& GetValues() { return values; }
 
     float GetAverage() {
-        float average = 0;
-        for (float value : values)
-            average += value;
-        average /= static_cast<float>(values.size());
+        return GetAverage(true);
+    }
 
+    float GetAverage(bool useWeights) {
+        if (values.empty())
+            return 0;
+
+        float average = 0;
+        float totalWeight = 0;
+        for (int i = 0; i < values.size(); ++i) {
+            float weight = useWeights ? weights[i] : 1;
+            average += values[i] * weight;
+            totalWeight += weight;
+        }
+
+        if (totalWeight == 0)
+            return 0;
+
+        average /= totalWeight;
         return average;
     }
 
     std::tuple<float, float> GetStd() {
+        if (values.empty())
+            return {0, 0};
+
         float average = GetAverage();
 
         float variance = 0;
@@ -521,6 +540,9 @@ public:
     }
 
     float GetDenoisedAverage() {
+        if (values.empty())
+            return 0;
+
         auto [average, std] = GetStd();
 
         float denoisedAverage = 0;
@@ -540,6 +562,7 @@ public:
 
 private:
     std::vector<float> values;
+    std::vector<float> weights;
 };
 
 }
@@ -592,7 +615,7 @@ struct GraphBuilderConfig {
 struct LightingCalculatorConfig {
     int lightRayIterations;
     int pointsOnRadius;
-    int transmittanceMatrixIterations;
+    std::vector<int> bounces;
     bool runInParallel;
 };
 
@@ -624,7 +647,7 @@ inline void from_json(const json& jsonObject, LightingCalculatorConfig& lighting
     auto lightingCalculator = jsonObject.at("lightingCalculator");
     lightingCalculator.at("lightRayIterations").get_to(lightingCalculatorConfig.lightRayIterations);
     lightingCalculator.at("pointsOnRadius").get_to(lightingCalculatorConfig.pointsOnRadius);
-    lightingCalculator.at("transmittanceMatrixIterations").get_to(lightingCalculatorConfig.transmittanceMatrixIterations);
+    lightingCalculator.at("bounces").get_to(lightingCalculatorConfig.bounces);
     lightingCalculator.at("runInParallel").get_to(lightingCalculatorConfig.runInParallel);
 }
 

@@ -191,7 +191,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 continue;
             float firstRayTHit = shapeExit.value().tHit;
 
-            uint64_t startIndex = ((x - 1) + (y - 1) * config.dimensionSteps) * config.iterationsPerStep;
+            uint64_t startIndex = ((y - 1) + (x - 1) * config.dimensionSteps) * config.iterationsPerStep;
             for (int i = 0; i < config.iterationsPerStep; ++i) {
                 uint64_t curIndex = startIndex + i;
                 int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
@@ -383,8 +383,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
         SphereContainer currentSphere = sphereMaker.GetSphereFor(toPoint);
         std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(fromPoint);
 
-        float transmittanceTotal = 0;
-        float contributingRays = 0;
+        util::Averager transmittanceAverager;
 
         uint64_t startIndex = listIndex * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
@@ -417,18 +416,16 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
                 startEnd.SkipForward(startEnd.startT);
             }
 
-            transmittanceTotal += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
-                config.edgeTransmittanceIterations, curIndex);
+            transmittanceAverager.AddValue(ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
+                config.edgeTransmittanceIterations, curIndex));
 
-            ++contributingRays;
             progress.Update(config.edgeTransmittanceIterations);
         }
-        transmittanceTotal /= contributingRays != 0.f ? contributingRays : 1;
 
         graph.AddEdge(edge.from, edge.to, EdgeData{
-            transmittanceTotal,
+            transmittanceAverager.GetAverage(),
             -1,
-            static_cast<float>(numRaysPerEdge)
+            static_cast<float>(transmittanceAverager.GetValues().size())
         });
     });
     progress.Done();

@@ -19,7 +19,7 @@ using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
 class GraphIntegrator final : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
-    GraphIntegrator(int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
+    GraphIntegrator(float renderRadiusMod, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
         : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate),
                         lights), maxDepth(maxDepth) {
         light = util::GetLight(lights);
@@ -28,15 +28,12 @@ public:
         lightSpectrum = light->GetLEmit();
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
 
-        if (!Options->graph.renderRadiusModifier)
-            ErrorExit("Render search radius modifier must be specified");
-        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * Options->graph.renderRadiusModifier.value());
+        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * renderRadiusMod);
+
+        Initialize();
     }
 
-    void Render() override;
-
-    void EvaluatePixelSample(Point2i pPixel, int sampleIndex, Sampler sampler,
-                             ScratchBuffer &scratchBuffer) override;
+    void Initialize();
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,

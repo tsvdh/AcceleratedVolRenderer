@@ -47,7 +47,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         Point3f origin = vertex.point - inDirection * mediumData.primitiveData.maxDistToCenter * 2;
         std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadius, inDirection);
 
-        float contributingRays = 0;
+        util::Averager transmittanceAverager;
 
         uint64_t startIndex = listIndex * diskPoints.size();
         for (int pointIndex = 0; pointIndex < diskPoints.size(); ++pointIndex) {
@@ -74,13 +74,13 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
             startEnd.SkipForward(startEnd.startT);
 
-            lightMap[vertexId] += ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
-                config.lightRayIterations, curIndex);
+            transmittanceAverager.AddValue(ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
+                config.lightRayIterations, curIndex));
 
-            ++contributingRays;
             progress.Update(config.lightRayIterations);
         }
-        lightMap[vertexId] /= contributingRays != 0.f ? contributingRays : 1;
+
+        lightMap[vertexId] = transmittanceAverager.GetAverage();
     });
     progress.Done();
 
@@ -88,20 +88,14 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 }
 
 SparseMat FreeLightingCalculator::GetGMatrix() const {
-    auto& vertices = graph.GetVerticesConst();
     auto& edges = graph.GetEdgesConst();
 
     std::vector<Eigen::Triplet<float>> gEntries;
     gEntries.reserve(edges.size());
 
-    for (auto& edge : edges) {
-        const Vertex& from = vertices.at(edge.second.from);
-        const Vertex& to = vertices.at(edge.second.to);
-
-        float T = edge.second.data.throughput;
-        // float G = std::max(std::min(1 / LengthSquared(from.point - to.point), 100.f), 1.f);
-
-        gEntries.emplace_back(to.id, from.id, T);
+    for (auto& [id, edge] : edges) {
+        float T = edge.data.throughput;
+        gEntries.emplace_back(edge.to, edge.from, T);
     }
 
     SparseMat gMatrix(numVertices, numVertices);

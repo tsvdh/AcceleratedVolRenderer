@@ -148,21 +148,25 @@ void main(int argc, char* argv[]) {
     graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, config.subdivider);
     subdivider.ComputeSubdivisionEffect(lightVec);
 
-    lighting.ComputeFinalLight(lightVec);
+    for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
+        int bounces = config.lightingCalculator.bounces[bouncesIndex];
+        int depth = bounces + 1;
+        std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bounces) << std::endl;
 
-    // graph is in incorrect state after this
-    graph.GetEdges().clear();
+        lighting.ComputeFinalLight(lightVec, bouncesIndex);
 
-    float totalLight = 0;
-    for (auto& [id, v] : graph.GetVertices()) {
-        totalLight += v.data.lightScalar;
+        float averageLight = 0;
+        for (auto& [id, v] : graph.GetVertices())
+            averageLight += v.data.lightScalar;
+        averageLight /= static_cast<float>(graph.GetVertices().size());
+        std::cout << "Average light: " << averageLight << std::endl;
+
+        std::string graphFileName = std::regex_replace(configName.value(),
+            std::regex("\\.json"), StringPrintf("_d%s.txt", depth));
+        graph.WriteToDisk(graphFileName, graph::basic,
+                          graph::StreamFlags{false, false, false, true},
+                          graph::StreamOptions{true, false, false});
     }
-    totalLight /= static_cast<float>(graph.GetVertices().size());
-    std::cout << totalLight << std::endl;
-
-    std::string graphFileName = std::regex_replace(configName.value(), std::regex("\\.json"), ".txt");
-    graph.WriteToDisk(graphFileName, graph::basic,
-                      graph::StreamFlags{false, false, false, true});
 
     CleanupPBRT();
     exit(0);

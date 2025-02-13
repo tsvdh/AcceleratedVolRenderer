@@ -30,42 +30,32 @@ void LightingCalculator::CheckSequentialIds() const {
     }
 }
 
-void LightingCalculator::ComputeFinalLight() {
+void LightingCalculator::ComputeFinalLight(int bouncesIndex) {
     SparseVec initialLight = GetLightVector();
-    ComputeFinalLight(initialLight);
+    ComputeFinalLight(initialLight, bouncesIndex);
 }
 
-void LightingCalculator::ComputeFinalLight(const SparseVec& light) {
-    auto& edges = graph.GetEdgesConst();
-
-    std::vector<Eigen::Triplet<float>> connectionEntries;
-    connectionEntries.reserve(edges.size());
-
-    for (auto& edge : edges) {
-        connectionEntries.emplace_back(edge.second.to, edge.second.from, 1);
-    }
-
-    SparseMat connectionMatrix(numVertices, numVertices);
-    connectionMatrix.setFromTriplets(connectionEntries.begin(), connectionEntries.end());
-
-
+void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIndex) {
     int numVertices = static_cast<int>(graph.GetVertices().size());
+    int bounces = config.bounces[bouncesIndex];
 
     SparseVec finalLight(light);
     SparseVec finalWeights(numVertices);
     for (int i = 0; i < numVertices; ++i)
         finalWeights.coeffRef(i) = 1.f;
 
-    if (config.transmittanceMatrixIterations > 0) {
+    if (bounces > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
+        SparseMat connections = GetConnectionMatrix();
+
         SparseVec curLight = finalLight;
         SparseVec curWeights = finalWeights;
 
-        ProgressReporter progress(config.transmittanceMatrixIterations, "Computing final lighting", quiet);
+        ProgressReporter progress(bounces, "Computing final lighting", quiet);
 
-        for (int iteration = 0; iteration < config.transmittanceMatrixIterations; ++iteration) {
+        for (int iteration = 0; iteration < bounces; ++iteration) {
             curLight = transmittance * curLight;
-            curWeights = connectionMatrix * curWeights;
+            curWeights = connections * curWeights;
 
             SparseVec invCurWeights(numVertices);
             for (int i = 0; i < numVertices; ++i) {
@@ -99,6 +89,21 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
     return GetGMatrix();
 }
+
+SparseMat LightingCalculator::GetConnectionMatrix() const {
+    auto& edges = graph.GetEdgesConst();
+
+    std::vector<Eigen::Triplet<float>> connectionEntries;
+    connectionEntries.reserve(edges.size());
+
+    for (auto& edge : edges)
+        connectionEntries.emplace_back(edge.second.to, edge.second.from, 1);
+
+    SparseMat connectionMatrix(numVertices, numVertices);
+    connectionMatrix.setFromTriplets(connectionEntries.begin(), connectionEntries.end());
+    return connectionMatrix;
+}
+
 
 SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, float>& lightMap) const {
     std::vector<std::pair<int, float>> lightPairs(lightMap.begin(), lightMap.end());
