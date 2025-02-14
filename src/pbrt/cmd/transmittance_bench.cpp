@@ -66,8 +66,8 @@ void main(int argc, int* argv[]) {
                     rayIterations[b], iterationsCurIndex));
             }
 
-            auto [average, std] = averager.GetStd();
-            std::cout << "(" << distances[a] << " " << rayIterations[b] << ") " << average << ", " << std << std::endl;
+            auto [average, std, variance] = averager.GetInfo();
+            std::cout << StringPrintf("(%s %s), %s %s", distances[a], rayIterations[b], average, std) << std::endl;
         }
     }
 }

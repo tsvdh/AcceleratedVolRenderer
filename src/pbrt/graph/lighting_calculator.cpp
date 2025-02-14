@@ -110,8 +110,11 @@ SparseMat LightingCalculator::GetPathContinueMatrix() const {
     std::vector<Eigen::Triplet<float>> pathContinueEntries;
     pathContinueEntries.reserve(vertices.size());
 
-    for (auto& [id, vertex] : vertices)
+    for (auto& [id, vertex] : vertices) {
+        if (vertex.data.pathContinuePDF == -1 && !vertex.outEdges.empty())
+            ErrorExit("No continue PDF for outgoing edges");
         pathContinueEntries.emplace_back(id, id, vertex.data.pathContinuePDF);
+    }
 
     SparseMat pathContinueMatrix(numVertices, numVertices);
     pathContinueMatrix.setFromTriplets(pathContinueEntries.begin(), pathContinueEntries.end());

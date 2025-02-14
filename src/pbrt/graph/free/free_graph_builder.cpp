@@ -23,13 +23,14 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f 
 
 int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit) {
     int numNewVertices = 0;
-    std::vector<int> path;
+    Path& pathHolder = graph.AddPath();
+    std::vector<int>& path = pathHolder.vertices;
     bool usedTHit = false;
 
     auto HandlePotentialPathEnd = [&](bool pathContinues) {
         if (!path.empty()) {
             Vertex& lastVertex = graph.GetVertex(path.back())->get();
-            lastVertex.data.AddTerminationSample(pathContinues);
+            lastVertex.data.AddContinueSample(pathContinues);
         }
     };
 
@@ -80,7 +81,6 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
                 }
                 if (mode == 1) {
                     // Handle scattering along ray path
-
                     optNewInteraction = MediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
                     return false;
                 }
@@ -92,7 +92,6 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
 
         // Handle terminated, scattered, and unscattered medium rays
         HandlePotentialPathEnd(optNewInteraction.has_value());
-
         if (!optNewInteraction) {
             // pathLengths.push_back(path.size());
             return numNewVertices;
@@ -100,10 +99,14 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
 
         Point3f newPoint = optNewInteraction->p();
         std::optional<nanoflann::ResultItem<int, float>> optResult = GetClosestInRadius(newPoint);
+        std::optional<Point3f> prevPoint = path.empty() ? std::nullopt : std::make_optional(graph.GetVertex(path.back())->get().point);
 
-        const Vertex* newVertex;
+        Vertex* newVertex;
         if (optResult) {
             newVertex = &graph.GetVertex(vHolder.GetList()[optResult->first].first)->get();
+        }
+        else if (prevPoint && DistanceSquared(prevPoint.value(), newPoint) <= squaredSearchRadius) {
+            newVertex = &graph.GetVertex(path.back())->get();
         }
         else {
             newVertex = &graph.AddVertex(newPoint, VertexData{});
@@ -112,23 +115,20 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             ++numNewVertices;
         }
 
-        if (path.empty()) {
-            path.push_back(newVertex->id);
-        }
-        else if (newVertex->id != path[path.size() - 1]) {
-            path.push_back(newVertex->id);
-            int pathSize = static_cast<int>(path.size());
+        graph.AddVertexToPath(newVertex->id, pathHolder.id);
 
-            // pathSize >= 2
+        if (path.size() >= 2) {
+            int pathSize = pathHolder.Length();
+
             int from = path[pathSize - 2];
             int to = path[pathSize - 1];
 
-            Vertex& fromVertex = graph.GetVertex(from)->get();
-            if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
-                graph.AddEdge(from, to, EdgeData{});
-        } else {
-            // TODO: remove path continue sample
-            ++scattersInSameSphere;
+            if (from != to) {
+                Vertex& fromVertex = graph.GetVertex(from)->get();
+                if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
+                    graph.AddEdge(from, to, EdgeData{});
+            } else
+                ++scattersInSameSphere;
         }
         ++totalScatters;
 
@@ -228,28 +228,30 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     tracingProgress.Done();
 
     OrderVertexIds(graph);
+    scattersInSameSphereCorrected = UsePathInfo(graph);
 
-    // util::Averager averager;
-    // for (int pathLength : pathLengths) {
-    //     if (pathLength > 1)
-    //         averager.AddValue(pathLength);
-    // }
-    //
-    // auto [average, std] = averager.GetStd();
-    // std::cout << averager.GetValues().size() << " " << average << " " << std << std::endl;
+    util::Averager pathRemainLengthAverager;
+    for (auto& [id, vertex] : graph.GetVertices())
+        pathRemainLengthAverager.AddValue(vertex.data.averagePathRemainLength);
 
-    // std::cout << StringPrintf("Scattered in same sphere: %s, scattered total %s, (%s)",
-    //     scattersInSameSphere, totalScatters, static_cast<float>(scattersInSameSphere) / static_cast<float>(totalScatters)) << std::endl;
-    //
-    // util::Averager pathContinuePDFAverager;
-    // for (auto& [id, v] : graph.GetVertices()) {
-    //     pathContinuePDFAverager.AddValue(v.data.pathContinuePDF);
-    //     if (v.data.pathContinuePDF == -1)
-    //         ErrorExit("Negative PDF");
-    // }
-    // std::cout << "Average path continue PDF: " << pathContinuePDFAverager.GetAverage() << std::endl;
+    auto [average, std, variance] = pathRemainLengthAverager.GetInfo();
+    std::cout << StringPrintf("Path remain length: average %s, std %s, variance %s", average, std, variance) << std::endl;
 
-    // exit(0);
+    std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
+        scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
+        static_cast<float>(scattersInSameSphereCorrected) / static_cast<float>(totalScatters)) << std::endl;
+
+    util::Averager pathContinuePDFAverager;
+    for (auto& [id, vertex] : graph.GetVertices()) {
+        if (vertex.data.pathContinuePDF == -1 && !vertex.outEdges.empty())
+            ErrorExit("No continue PDF for outgoing edges");
+
+        if (vertex.data.pathContinuePDF != -1)
+            pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF);
+    }
+    std::cout << "Average path continue PDF: " << pathContinuePDFAverager.GetAverage() << std::endl;
+
+    exit(0);
 
     return graph;
 }
@@ -270,7 +272,6 @@ inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph&
         TempEdge(int id, int from, int to)
             : id(id), from(from), to(to) {
         }
-
         int id, from, to;
     };
 
@@ -284,7 +285,6 @@ inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph&
 
         if (fromVertex.id == targetVertex.id) {
             edgesToRemove.push_back(edgeId);
-            // TODO: remove path continue sample
             ++count;
         } else if (targetVertex.inEdges.find(fromVertex.id) == targetVertex.inEdges.end()) {
             edgesToAdd.emplace_back(edgeId, fromVertex.id, targetVertex.id);
@@ -298,7 +298,6 @@ inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph&
 
         if (toVertex.id == targetVertex.id) {
             edgesToRemove.push_back(edgeId);
-            // TODO: remove path continue sample
             ++count;
         } else if (targetVertex.outEdges.find(toVertex.id) == targetVertex.outEdges.end()) {
             edgesToAdd.emplace_back(edgeId, targetVertex.id, toVertex.id);
@@ -316,9 +315,21 @@ inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph&
     return count;
 }
 
+inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
+    for (auto& [pathId, indicesInPath] : toMoveVertex.paths) {
+        Path& path = graph.GetPath(pathId)->get();
+        for (int indexInPath : indicesInPath) {
+            path.vertices[indexInPath] = targetVertex.id;
+        }
+        targetVertex.AddPathIndices(pathId, indicesInPath);
+    }
+    toMoveVertex.paths.clear();
+}
+
 inline int MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
     targetVertex.data.MergeWithDataFrom(vertexToMove.data);
     int count = MoveEdgeReferences(vertexToMove, targetVertex, graph);
+    MovePathReferences(vertexToMove, targetVertex, graph);
     graph.RemoveVertex(vertexToMove.id);
     return count;
 }
@@ -374,7 +385,47 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
     if (!quiet)
-        std::cout << "done (" << duration << "s)" << std::endl;
+        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
+}
+
+int FreeGraphBuilder::UsePathInfo(Graph& graph) const {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    if (!quiet)
+        std::cout << "Using path info... ";
+
+    int count = 0;
+
+    for (auto& [vertexId, vertex] : graph.GetVertices()) {
+
+        util::Averager pathRemainLengthAverager;
+
+        for (auto& [pathId, pathIndices] : vertex.paths) {
+            if (pathIndices.empty())
+                continue;
+
+            float pathRemainLength = 1;
+
+            for (int i = 1; i < pathIndices.size(); ++i) {
+                if (pathIndices[i - 1] == pathIndices[i] - 1) {
+                    vertex.data.RemoveContinueSample(true);
+                    ++count;
+                    ++pathRemainLength;
+                } else {
+                    pathRemainLengthAverager.AddValue(pathRemainLength);
+                    pathRemainLength = 1;
+                }
+            }
+            pathRemainLengthAverager.AddValue(pathRemainLength);
+        }
+        vertex.data.averagePathRemainLength = pathRemainLengthAverager.GetAverage();
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
+    if (!quiet)
+        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
+
+    return count;
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {

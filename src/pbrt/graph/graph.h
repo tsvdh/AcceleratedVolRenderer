@@ -46,12 +46,15 @@ enum RayVertexType {
 struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
+    float averagePathRemainLength = -1;
 
     float pathContinuePDF = -1; // average of samples
     float numSamples = 0;
 
-    void AddTerminationSample(bool pathContinued);
-    void AddTerminationSamples(float pathContinuePDF, float numSamples);
+    void AddContinueSample(bool pathContinued);
+    void AddContinueSamples(float pathContinuePDF, float numSamples);
+    void RemoveContinueSample(bool pathContinued);
+
     void MergeWithDataFrom(const VertexData& otherData);
 };
 

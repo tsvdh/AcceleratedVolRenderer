@@ -524,9 +524,9 @@ public:
         return average;
     }
 
-    std::tuple<float, float> GetStd() {
+    std::tuple<float, float, float> GetInfo() {
         if (values.empty())
-            return {0, 0};
+            return {0, 0, 0};
 
         float average = GetAverage();
 
@@ -536,14 +536,14 @@ public:
         variance /= static_cast<float>(values.size());
 
         float std = std::sqrt(variance);
-        return {average, std};
+        return {average, std, variance};
     }
 
     float GetDenoisedAverage() {
         if (values.empty())
             return 0;
 
-        auto [average, std] = GetStd();
+        auto [average, std, variance] = GetInfo();
 
         float denoisedAverage = 0;
         float numRemaining = 0;

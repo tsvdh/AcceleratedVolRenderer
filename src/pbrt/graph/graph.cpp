@@ -23,22 +23,26 @@ std::istream& operator>>(std::istream& in, Point3<T>& p) {
     return in;
 }
 
-void VertexData::AddTerminationSample(bool pathContinued) {
-    AddTerminationSamples(pathContinued, 1);
+void VertexData::AddContinueSample(bool pathContinued) {
+    AddContinueSamples(pathContinued, 1);
 }
 
-void VertexData::AddTerminationSamples(float pathContinuePDF, float numSamples) {
+void VertexData::AddContinueSamples(float pathContinuePDF, float numSamples) {
     this->pathContinuePDF *= this->numSamples;
     this->pathContinuePDF += pathContinuePDF * numSamples;
     this->numSamples += numSamples;
-    this->pathContinuePDF /= this->numSamples;
+    this->pathContinuePDF /= this->numSamples != 0 ? this->numSamples : -1;
+}
+
+void VertexData::RemoveContinueSample(bool pathContinued) {
+    AddContinueSamples(pathContinued, -1);
 }
 
 void VertexData::MergeWithDataFrom(const VertexData& otherData) {
     if (type != none || lightScalar != -1)
         ErrorExit(StringPrintf("Cannot merge data: {type: %s, lightScalar: %s}", type, lightScalar).c_str());
 
-    this->AddTerminationSamples(otherData.pathContinuePDF, otherData.numSamples);
+    this->AddContinueSamples(otherData.pathContinuePDF, otherData.numSamples);
 }
 
 void Vertex::AddPathIndex(int pathId, int index) {
@@ -68,8 +72,8 @@ void EdgeData::AddSample(const EdgeData& sample) {
 
     numSamples += sample.numSamples;
 
-    throughput /= numSamples;
-    weightedThroughput /= numSamples;
+    throughput /= numSamples != 0 ? numSamples : -1;
+    weightedThroughput /= numSamples != 0 ? numSamples : -1;
 }
 
 // Graph implementations

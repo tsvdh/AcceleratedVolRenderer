@@ -21,6 +21,7 @@ private:
     std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef);
     void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId);
     void OrderVertexIds(Graph& graph) const;
+    int UsePathInfo(Graph& graph) const;
 
     const util::MediumData& mediumData;
     Vector3f inDirection;
@@ -32,8 +33,8 @@ private:
     float squaredSearchRadius;
     int sampleIndexOffset;
 
-    std::vector<int> pathLengths;
     int scattersInSameSphere = 0;
+    int scattersInSameSphereCorrected = 0;
     int totalScatters = 0;
 };
 }
