@@ -230,12 +230,15 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     OrderVertexIds(graph);
     scattersInSameSphereCorrected = UsePathInfo(graph);
 
+    std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
+        graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
+
     util::Averager pathRemainLengthAverager;
     for (auto& [id, vertex] : graph.GetVertices())
         pathRemainLengthAverager.AddValue(vertex.data.averagePathRemainLength);
 
-    auto [average, std, variance] = pathRemainLengthAverager.GetInfo();
-    std::cout << StringPrintf("Path remain length: average %s, std %s, variance %s", average, std, variance) << std::endl;
+    auto [lengthAvg, lengthStd, lengthVar] = pathRemainLengthAverager.GetInfo();
+    std::cout << StringPrintf("Path remain length: average %s, std %s, variance %s", lengthAvg, lengthStd, lengthVar) << std::endl;
 
     std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
         scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
@@ -249,9 +252,10 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         if (vertex.data.pathContinuePDF != -1)
             pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF);
     }
-    std::cout << "Average path continue PDF: " << pathContinuePDFAverager.GetAverage() << std::endl;
+    auto [continueAvg, continueStd, continueVar] = pathContinuePDFAverager.GetInfo();
+    std::cout << StringPrintf("Path continue PDF: average %s, std %s, variance %s", continueAvg, continueStd, continueVar) << std::endl;
 
-    exit(0);
+    // exit(0);
 
     return graph;
 }

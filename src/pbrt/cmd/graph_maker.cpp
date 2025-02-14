@@ -138,7 +138,6 @@ void main(int argc, char* argv[]) {
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.TracePaths();
-    std::cout << StringPrintf("Vertices: %s, Edges %s", graph.GetVertices().size(), graph.GetEdges().size()) << std::endl;
     graphBuilder.ComputeTransmittance(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
