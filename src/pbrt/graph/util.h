@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "deps/json.hpp"
+#include "deps/nanoflann.hpp"
 #include "pbrt/media.h"
 #include "pbrt/options.h"
 #include "pbrt/shapes.h"
@@ -182,7 +183,7 @@ static std::vector<Point3f> GetDiskPoints(Point3f center, float radius, int numP
     yVector *= stepSize;
 
     std::vector<Point3f> points;
-    points.reserve(Pi * Sqr(numPointsOnRadius));
+    points.reserve(static_cast<int>(Pi * Sqr(numPointsOnRadius)));
 
     for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
         for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {
@@ -539,6 +540,11 @@ public:
         return {average, std, variance};
     }
 
+    std::string PrintInfo() {
+        auto [avg, std, var] = GetInfo();
+        return StringPrintf("average: %s, std: %s, var: %s", avg, std, var);
+    }
+
     float GetDenoisedAverage() {
         if (values.empty())
             return 0;
@@ -609,6 +615,7 @@ struct GraphBuilderConfig {
     int edgeTransmittanceIterations;
     int pointsOnRadius;
     float radiusModifier;
+    bool addExtraEdges;
     bool runInParallel;
 };
 
@@ -640,6 +647,7 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     graphBuilder.at("edgeTransmittanceIterations").get_to(graphBuilderConfig.edgeTransmittanceIterations);
     graphBuilder.at("pointsOnRadius").get_to(graphBuilderConfig.pointsOnRadius);
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
+    graphBuilder.at("addExtraEdges").get_to(graphBuilderConfig.addExtraEdges);
     graphBuilder.at("runInParallel").get_to(graphBuilderConfig.runInParallel);
 }
 
@@ -662,7 +670,7 @@ inline void from_json(const json& jsonObject, SubDividerConfig& subDividerConfig
 inline void from_json(const json& jsonObject, Config& config) {
     from_json(jsonObject, config.graphBuilder);
     from_json(jsonObject, config.lightingCalculator);
-    from_json(jsonObject, config.subdivider);
+    // from_json(jsonObject, config.subdivider);
 }
 
 using namespace pbrt;

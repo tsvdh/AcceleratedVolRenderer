@@ -43,8 +43,6 @@ public:
             const ParameterDictionary &parameters, Camera camera, Sampler sampler,
             Primitive aggregate, std::vector<Light> lights);
 
-    [[nodiscard]] float SampleDirectLight(const MediumInteraction &interaction, Sampler sampler) const;
-
     [[nodiscard]] float ConnectToGraph(Point3f searchPoint) const;
 
     [[nodiscard]] std::string ToString() const override { return "Graph Integrator"; }

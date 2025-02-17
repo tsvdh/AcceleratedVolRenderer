@@ -5,7 +5,7 @@
 
 namespace graph {
 LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-                                       LightingCalculatorConfig config, bool quiet, int sampleIndexOffset)
+                                       const LightingCalculatorConfig& config, bool quiet, int sampleIndexOffset)
     : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
       sampleIndexOffset(sampleIndexOffset) {
     if (config.lightRayIterations <= 0)
@@ -39,6 +39,10 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIn
     int numVertices = static_cast<int>(graph.GetVertices().size());
     int bounces = config.bounces[bouncesIndex];
 
+
+
+    // exit(0);
+
     SparseVec finalLight(light);
     SparseVec finalWeights(numVertices);
     for (int i = 0; i < numVertices; ++i)
@@ -47,6 +51,9 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIn
     if (bounces > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
         SparseMat connections = GetConnectionMatrix();
+        SparseVec pathContinuePDFVector = GetPathContinueVector();
+        transmittance *= GetPathContinueMatrix();
+        // connections *= GetPathContinueMatrix();
 
         SparseVec curLight = finalLight;
         SparseVec curWeights = finalWeights;
@@ -57,12 +64,13 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIn
             curLight = transmittance * curLight;
             curWeights = connections * curWeights;
 
+            // curLight = curLight.cwiseProduct(GetPathContinueVector());
+
             SparseVec invCurWeights(numVertices);
             for (int i = 0; i < numVertices; ++i) {
                 float weight = curWeights.coeff(i);
                 invCurWeights.coeffRef(i) = weight == 0.f ? 0.f : 1.f / weight;
             }
-
             finalLight += curLight.cwiseProduct(invCurWeights);
 
             progress.Update();
@@ -87,21 +95,32 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
 }
 
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
-    return GetGMatrix() * GetPathContinueMatrix();
+    return GetGMatrix();
 }
 
 SparseMat LightingCalculator::GetConnectionMatrix() const {
-    auto& edges = graph.GetEdgesConst();
-
     std::vector<Eigen::Triplet<float>> connectionEntries;
-    connectionEntries.reserve(edges.size());
+    connectionEntries.reserve(graph.GetEdges().size());
 
-    for (auto& edge : edges)
-        connectionEntries.emplace_back(edge.second.to, edge.second.from, 1);
+    for (auto& [id, edge] : graph.GetEdges())
+        connectionEntries.emplace_back(edge.to, edge.from, 1);
 
     SparseMat connectionMatrix(numVertices, numVertices);
     connectionMatrix.setFromTriplets(connectionEntries.begin(), connectionEntries.end());
     return connectionMatrix;
+}
+
+SparseVec LightingCalculator::GetPathContinueVector() const {
+    SparseVec pathContinueVector(numVertices);
+
+    for (auto& [id, vertex] : graph.GetVerticesConst()) {
+        // if (vertex.inEdges.size() != vertex.outEdges.size())
+        //     ErrorExit("Uneven in-out edges");
+        if (vertex.data.pathContinuePDF == -1 && !vertex.outEdges.empty())
+            ErrorExit("No continue PDF, but has edges");
+        pathContinueVector.coeffRef(id) = vertex.data.pathContinuePDF;
+    }
+    return pathContinueVector;
 }
 
 SparseMat LightingCalculator::GetPathContinueMatrix() const {

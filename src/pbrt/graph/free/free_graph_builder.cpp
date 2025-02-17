@@ -228,10 +228,69 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     tracingProgress.Done();
 
     OrderVertexIds(graph);
-    scattersInSameSphereCorrected = UsePathInfo(graph);
+    if (config.addExtraEdges)
+        AddExtraEdges(graph);
+    UsePathInfo(graph);
+
+    // for (auto& [id, v] : graph.GetVertices()) {
+    //     v.data.lightScalar = v.data.pathContinuePDF;
+    // }
+    // graph.WriteToDisk("pdfTest", basic,
+    //     StreamFlags{false, false, false, true},
+    //     StreamOptions{true, false, false});
+
+    std::vector<float> coors = {0.99, 0.9, 0.8, 0.7, 0.6, 0.5};
+    for (auto coor : coors) {
+        Point3f searchPoint = {0, coor, 0};
+        float closestDist = 100;
+        std::optional<Point3f> closestPoint;
+        int closestId = -1;
+
+        for (auto& [id, vertex] : graph.GetVertices()) {
+            float curDist = Distance(vertex.point, searchPoint);
+            if (!closestPoint) {
+                closestId = id;
+                closestPoint = vertex.point;
+                closestDist = curDist;
+            } else if (curDist < closestDist) {
+                closestId = id;
+                closestPoint = vertex.point;
+                closestDist = curDist;
+            }
+        }
+        Options->graph.vertexIds.insert(closestId);
+    }
+
+    for (auto& [thisId, v] : graph.GetVertices()) {
+        if (Options->graph.vertexIds.find(thisId) != Options->graph.vertexIds.end()) {
+            std::cout << thisId << " " << v.point << std::endl;
+            std::cout << "out pdf: " << v.data.pathContinuePDF << std::endl;
+
+            util::Averager twoWayAverager;
+            util::Averager allAverager;
+            int noEdgeBackCount = 0;
+
+            for (auto& [otherId, edgeId] : v.inEdges) {
+                Vertex& otherVertex = graph.GetVertex(otherId)->get();
+
+                if (otherVertex.inEdges.find(thisId) == otherVertex.inEdges.end())
+                    ++noEdgeBackCount;
+                else
+                    twoWayAverager.AddValue(otherVertex.data.pathContinuePDF);
+
+                allAverager.AddValue(otherVertex.data.pathContinuePDF);
+            }
+
+            std::cout << "in pdf (two way) " << twoWayAverager.PrintInfo() << std::endl;
+            std::cout << "in pdf (all) " << allAverager.PrintInfo() << std::endl;
+
+            std::cout << "out vs in " << v.inEdges.size() << " " << noEdgeBackCount << std::endl;
+        }
+    }
 
     std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
         graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
+    std::cout << StringPrintf("Edges added: %s", edgesAdded) << std::endl;
 
     util::Averager pathRemainLengthAverager;
     for (auto& [id, vertex] : graph.GetVertices())
@@ -246,9 +305,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
     util::Averager pathContinuePDFAverager;
     for (auto& [id, vertex] : graph.GetVertices()) {
-        if (vertex.data.pathContinuePDF == -1 && !vertex.outEdges.empty())
-            ErrorExit("No continue PDF for outgoing edges");
-
+        // TODO: check if -1 is allowed
         if (vertex.data.pathContinuePDF != -1)
             pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF);
     }
@@ -346,7 +403,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
 
         if (resultItem.has_value()) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();
-            Vertex& targetVertex = graph.GetVertex(resultItem->first)->get();
+            Vertex& targetVertex = graph.GetVertex(vHolder.GetList()[resultItem->first].first)->get();
 
             scattersInSameSphere += MoveVertexToTarget(vertexToMove, targetVertex, graph);
 
@@ -355,7 +412,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     }
 }
 
-void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
+void FreeGraphBuilder::OrderVertexIds(Graph& graph) {
     auto GetLargestTakenId = [&](int currentLargestId) {
         for (int i = currentLargestId; i >= 0; --i)
             if (graph.GetVertex(i).has_value())
@@ -392,15 +449,10 @@ void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
         std::cout << StringPrintf("done (%ss)", duration) << std::endl;
 }
 
-int FreeGraphBuilder::UsePathInfo(Graph& graph) const {
-    auto startTime = std::chrono::high_resolution_clock::now();
-    if (!quiet)
-        std::cout << "Using path info... ";
-
-    int count = 0;
+void FreeGraphBuilder::UsePathInfo(Graph& graph) {
+    ProgressReporter progress(graph.GetVertices().size(), "Using path info", quiet);
 
     for (auto& [vertexId, vertex] : graph.GetVertices()) {
-
         util::Averager pathRemainLengthAverager;
 
         for (auto& [pathId, pathIndices] : vertex.paths) {
@@ -412,7 +464,7 @@ int FreeGraphBuilder::UsePathInfo(Graph& graph) const {
             for (int i = 1; i < pathIndices.size(); ++i) {
                 if (pathIndices[i - 1] == pathIndices[i] - 1) {
                     vertex.data.RemoveContinueSample(true);
-                    ++count;
+                    ++scattersInSameSphereCorrected;
                     ++pathRemainLength;
                 } else {
                     pathRemainLengthAverager.AddValue(pathRemainLength);
@@ -422,14 +474,26 @@ int FreeGraphBuilder::UsePathInfo(Graph& graph) const {
             pathRemainLengthAverager.AddValue(pathRemainLength);
         }
         vertex.data.averagePathRemainLength = pathRemainLengthAverager.GetAverage();
+
+        progress.Update();
     }
+    progress.Done();
+}
 
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
-    if (!quiet)
-        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
+void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
+    ProgressReporter progress(graph.GetVertices().size(), "Adding extra edges", quiet);
 
-    return count;
+    for (auto& [thisVertexId, thisVertex] : graph.GetVertices()) {
+        for (auto [otherVertexId, edgeId] : thisVertex.outEdges) {
+            Vertex& otherVertex = graph.GetVertex(otherVertexId)->get();
+            if (otherVertex.outEdges.find(thisVertexId) == otherVertex.outEdges.end()) {
+                graph.AddEdge(otherVertexId, thisVertexId, EdgeData{});
+                ++edgesAdded;
+            }
+        }
+        progress.Update();
+    }
+    progress.Done();
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
@@ -459,6 +523,9 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
 
         int edgeId = edgeIds[listIndex];
         Edge& edge = graph.GetEdge(edgeId)->get();
+
+        // if (!(edge.from == 44133 || edge.to == 44133 || edge.from == 92250 || edge.to == 92250))
+        //     return;
 
         Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
         Point3f toPoint = graph.GetVertex(edge.to)->get().point;

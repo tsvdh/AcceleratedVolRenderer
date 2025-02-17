@@ -15,7 +15,7 @@ public:
     virtual ~LightingCalculator() = default;
 
     LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet, int sampleIndexOffset);
+        const LightingCalculatorConfig& config, bool quiet, int sampleIndexOffset);
 
     [[nodiscard]] virtual SparseVec GetLightVector() = 0;
     void ComputeFinalLight(int bouncesIndex = 0);
@@ -27,6 +27,7 @@ protected:
     [[nodiscard]] virtual SparseMat GetTransmittanceMatrix() const;
     [[nodiscard]] virtual SparseMat GetGMatrix() const = 0;
     [[nodiscard]] SparseMat GetConnectionMatrix() const;
+    [[nodiscard]] SparseVec GetPathContinueVector() const;
     [[nodiscard]] SparseMat GetPathContinueMatrix() const;
     [[nodiscard]] SparseMat GetPhaseMatrix() const;
     [[nodiscard]] SparseVec LightMapToVector(const std::unordered_map<int, float>& lightMap) const;

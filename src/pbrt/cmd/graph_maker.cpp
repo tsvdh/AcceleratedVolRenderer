@@ -146,12 +146,54 @@ void main(int argc, char* argv[]) {
     // graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, config.subdivider);
     // subdivider.ComputeSubdivisionEffect(lightVec);
 
+    for (auto& [thisId, thisVertex] : graph.GetVertices()) {
+        if (Options->graph.vertexIds.find(thisId) != Options->graph.vertexIds.end()) {
+
+            util::Averager lightAverager;
+            util::Averager lightOtherPDFAverager;
+            util::Averager lightThisPDFAverager;
+            util::Averager invLightAverager;
+            util::Averager invLightOtherPDFAverager;
+            util::Averager invLightThisPDFAverager;
+
+            for (auto& [otherId, edgeId] : thisVertex.inEdges) {
+                graph::Vertex& otherVertex = graph.GetVertex(otherId)->get();
+                graph::Edge& edge = graph.GetEdge(edgeId)->get();
+
+                lightAverager.AddValue(lightVec.coeff(otherId) * edge.data.throughput);
+                lightOtherPDFAverager.AddValue(lightVec.coeff(otherId) * edge.data.throughput * otherVertex.data.pathContinuePDF);
+                lightThisPDFAverager.AddValue(lightVec.coeff(otherId) * edge.data.throughput * thisVertex.data.pathContinuePDF);
+            }
+            for (auto& [otherId, edgeId] : thisVertex.outEdges) {
+                graph::Vertex& otherVertex = graph.GetVertex(otherId)->get();
+                graph::Edge& edge = graph.GetEdge(edgeId)->get();
+
+                invLightAverager.AddValue(lightVec.coeff(otherId) * edge.data.throughput);
+                invLightOtherPDFAverager.AddValue(lightVec.coeff(otherId) * edge.data.throughput * otherVertex.data.pathContinuePDF);
+                invLightThisPDFAverager.AddValue(lightVec.coeff(otherId) * edge.data.throughput * thisVertex.data.pathContinuePDF);
+            }
+
+            std::cout << thisId << std::endl;
+            std::cout << lightVec.coeff(thisId) << " " << graph.GetVertex(thisId)->get().point << std::endl;
+            std::cout << "light " << lightAverager.PrintInfo() << std::endl;
+            std::cout << "light other pdf " << lightOtherPDFAverager.PrintInfo() << std::endl;
+            std::cout << "light this pdf " << lightThisPDFAverager.PrintInfo() << std::endl;
+            std::cout << "light inv " << invLightAverager.PrintInfo() << std::endl;
+            std::cout << "light inv other pdf " << invLightOtherPDFAverager.PrintInfo() << std::endl;
+            std::cout << "light inv this pdf" << invLightThisPDFAverager.PrintInfo() << std::endl;
+        }
+    }
+
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
         int bounces = config.lightingCalculator.bounces[bouncesIndex];
         int depth = bounces + 1;
         std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bounces) << std::endl;
 
         lighting.ComputeFinalLight(lightVec, bouncesIndex);
+
+        for (auto vertexId : Options->graph.vertexIds) {
+            std::cout << vertexId << " " << graph.GetVertex(vertexId)->get().data.lightScalar << std::endl;
+        }
 
         float averageLight = 0;
         for (auto& [id, v] : graph.GetVertices())
