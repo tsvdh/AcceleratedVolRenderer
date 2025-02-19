@@ -542,7 +542,7 @@ public:
 
     std::string PrintInfo() {
         auto [avg, std, var] = GetInfo();
-        return StringPrintf("average: %s, std: %s, var: %s", avg, std, var);
+        return StringPrintf("average %s, std %s, var %s", avg, std, var);
     }
 
     float GetDenoisedAverage() {

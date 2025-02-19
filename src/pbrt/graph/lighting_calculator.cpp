@@ -36,12 +36,7 @@ void LightingCalculator::ComputeFinalLight(int bouncesIndex) {
 }
 
 void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIndex) {
-    int numVertices = static_cast<int>(graph.GetVertices().size());
     int bounces = config.bounces[bouncesIndex];
-
-
-
-    // exit(0);
 
     SparseVec finalLight(light);
     SparseVec finalWeights(numVertices);
@@ -91,31 +86,6 @@ SparseMat LightingCalculator::GetPhaseMatrix() const {
 
 SparseMat LightingCalculator::GetTransmittanceMatrix() const {
     return GetGMatrix();
-}
-
-SparseMat LightingCalculator::GetConnectionMatrix() const {
-    std::vector<Eigen::Triplet<float>> connectionEntries;
-    connectionEntries.reserve(graph.GetEdges().size());
-
-    for (auto& [id, edge] : graph.GetEdges())
-        connectionEntries.emplace_back(edge.to, edge.from, 1);
-
-    SparseMat connectionMatrix(numVertices, numVertices);
-    connectionMatrix.setFromTriplets(connectionEntries.begin(), connectionEntries.end());
-    return connectionMatrix;
-}
-
-SparseVec LightingCalculator::GetPathContinueVector() const {
-    SparseVec pathContinueVector(numVertices);
-
-    for (auto& [id, vertex] : graph.GetVerticesConst()) {
-        // if (vertex.inEdges.size() != vertex.outEdges.size())
-        //     ErrorExit("Uneven in-out edges");
-        if (vertex.data.pathContinuePDF == -1 && !vertex.outEdges.empty())
-            ErrorExit("No continue PDF, but has edges");
-        pathContinueVector.coeffRef(id) = vertex.data.pathContinuePDF;
-    }
-    return pathContinueVector;
 }
 
 SparseMat LightingCalculator::GetPathContinueMatrix() const {

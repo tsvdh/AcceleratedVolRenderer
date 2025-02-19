@@ -41,7 +41,6 @@ struct GraphOptions {
     bool debug = false;
     pstd::optional<Point2i> samplingResolution;
     pstd::optional<std::string> dataFile;
-    std::unordered_set<int> vertexIds;
 };
 
 // PBRTOptions Definition

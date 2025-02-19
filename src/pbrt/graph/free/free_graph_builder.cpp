@@ -232,62 +232,6 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         AddExtraEdges(graph);
     UsePathInfo(graph);
 
-    // for (auto& [id, v] : graph.GetVertices()) {
-    //     v.data.lightScalar = v.data.pathContinuePDF;
-    // }
-    // graph.WriteToDisk("pdfTest", basic,
-    //     StreamFlags{false, false, false, true},
-    //     StreamOptions{true, false, false});
-
-    std::vector<float> coors = {0.99, 0.9, 0.8, 0.7, 0.6, 0.5};
-    for (auto coor : coors) {
-        Point3f searchPoint = {0, coor, 0};
-        float closestDist = 100;
-        std::optional<Point3f> closestPoint;
-        int closestId = -1;
-
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            float curDist = Distance(vertex.point, searchPoint);
-            if (!closestPoint) {
-                closestId = id;
-                closestPoint = vertex.point;
-                closestDist = curDist;
-            } else if (curDist < closestDist) {
-                closestId = id;
-                closestPoint = vertex.point;
-                closestDist = curDist;
-            }
-        }
-        Options->graph.vertexIds.insert(closestId);
-    }
-
-    for (auto& [thisId, v] : graph.GetVertices()) {
-        if (Options->graph.vertexIds.find(thisId) != Options->graph.vertexIds.end()) {
-            std::cout << thisId << " " << v.point << std::endl;
-            std::cout << "out pdf: " << v.data.pathContinuePDF << std::endl;
-
-            util::Averager twoWayAverager;
-            util::Averager allAverager;
-            int noEdgeBackCount = 0;
-
-            for (auto& [otherId, edgeId] : v.inEdges) {
-                Vertex& otherVertex = graph.GetVertex(otherId)->get();
-
-                if (otherVertex.inEdges.find(thisId) == otherVertex.inEdges.end())
-                    ++noEdgeBackCount;
-                else
-                    twoWayAverager.AddValue(otherVertex.data.pathContinuePDF);
-
-                allAverager.AddValue(otherVertex.data.pathContinuePDF);
-            }
-
-            std::cout << "in pdf (two way) " << twoWayAverager.PrintInfo() << std::endl;
-            std::cout << "in pdf (all) " << allAverager.PrintInfo() << std::endl;
-
-            std::cout << "out vs in " << v.inEdges.size() << " " << noEdgeBackCount << std::endl;
-        }
-    }
-
     std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
         graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
     std::cout << StringPrintf("Edges added: %s", edgesAdded) << std::endl;
@@ -296,8 +240,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     for (auto& [id, vertex] : graph.GetVertices())
         pathRemainLengthAverager.AddValue(vertex.data.averagePathRemainLength);
 
-    auto [lengthAvg, lengthStd, lengthVar] = pathRemainLengthAverager.GetInfo();
-    std::cout << StringPrintf("Path remain length: average %s, std %s, variance %s", lengthAvg, lengthStd, lengthVar) << std::endl;
+    std::cout << StringPrintf("Path remain length: ", pathRemainLengthAverager.PrintInfo()) << std::endl;
 
     std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
         scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
@@ -309,10 +252,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         if (vertex.data.pathContinuePDF != -1)
             pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF);
     }
-    auto [continueAvg, continueStd, continueVar] = pathContinuePDFAverager.GetInfo();
-    std::cout << StringPrintf("Path continue PDF: average %s, std %s, variance %s", continueAvg, continueStd, continueVar) << std::endl;
-
-    // exit(0);
+    std::cout << StringPrintf("Path continue PDF: ", pathContinuePDFAverager.PrintInfo()) << std::endl;
 
     return graph;
 }
@@ -523,9 +463,6 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
 
         int edgeId = edgeIds[listIndex];
         Edge& edge = graph.GetEdge(edgeId)->get();
-
-        // if (!(edge.from == 44133 || edge.to == 44133 || edge.from == 92250 || edge.to == 92250))
-        //     return;
 
         Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
         Point3f toPoint = graph.GetVertex(edge.to)->get().point;
