@@ -240,7 +240,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     for (auto& [id, vertex] : graph.GetVertices())
         pathRemainLengthAverager.AddValue(vertex.data.averagePathRemainLength);
 
-    std::cout << StringPrintf("Path remain length: ", pathRemainLengthAverager.PrintInfo()) << std::endl;
+    std::cout << StringPrintf("Path remain length: %s", pathRemainLengthAverager.PrintInfo()) << std::endl;
 
     std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
         scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
@@ -252,7 +252,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         if (vertex.data.pathContinuePDF != -1)
             pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF);
     }
-    std::cout << StringPrintf("Path continue PDF: ", pathContinuePDFAverager.PrintInfo()) << std::endl;
+    std::cout << StringPrintf("Path continue PDF: %s", pathContinuePDFAverager.PrintInfo()) << std::endl;
 
     return graph;
 }
@@ -438,7 +438,6 @@ void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
-    ThreadLocal<ScratchBuffer> scratchBuffers([] { return ScratchBuffer(); });
 
     float sphereRadius = graph.GetVertexRadius().value();
     util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadius);
@@ -459,7 +458,6 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
 
     ParallelFor(0, numEdges, config.runInParallel, [&](int listIndex) {
         Sampler& samplerClone = samplers.Get();
-        ScratchBuffer& buffer = scratchBuffers.Get();
 
         int edgeId = edgeIds[listIndex];
         Edge& edge = graph.GetEdge(edgeId)->get();
@@ -504,8 +502,8 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
                 startEnd.SkipForward(startEnd.startT);
             }
 
-            transmittanceAverager.AddValue(ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
-                config.edgeTransmittanceIterations, curIndex));
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.edgeTransmittanceIterations,
+                curIndex));
 
             progress.Update(config.edgeTransmittanceIterations);
         }

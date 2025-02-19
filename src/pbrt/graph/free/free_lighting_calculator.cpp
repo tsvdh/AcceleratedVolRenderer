@@ -7,7 +7,7 @@
 namespace graph {
 
 FreeLightingCalculator::FreeLightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-        LightingCalculatorConfig config, bool quiet, int sampleIndexOffset)
+        const LightingCalculatorConfig& config, bool quiet, int sampleIndexOffset)
     : LightingCalculator(graph, mediumData, inDirection, std::move(sampler), config, quiet, sampleIndexOffset) {
 
     freeGraph = dynamic_cast<FreeGraph*>(&graph);
@@ -27,7 +27,6 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     }
 
     ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
-    ThreadLocal<ScratchBuffer> scratchBuffers([] { return ScratchBuffer(); });
 
     float sphereRadius = freeGraph->GetVertexRadius().value();
     util::SphereMaker sphereMaker(sphereRadius);
@@ -37,7 +36,6 @@ SparseVec FreeLightingCalculator::GetLightVector() {
 
     ParallelFor(0, numVertices, config.runInParallel, [&](int listIndex) {
         Sampler& samplerClone = samplers.Get();
-        ScratchBuffer& buffer = scratchBuffers.Get();
 
         int vertexId = vertexIds[listIndex];
         Vertex& vertex = graph.GetVertex(vertexId)->get();
@@ -74,8 +72,8 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
             startEnd.SkipForward(startEnd.startT);
 
-            transmittanceAverager.AddValue(ComputeRaysScatteredInSphere(rayToSphere, startEnd, mediumData, samplerClone, buffer,
-                config.lightRayIterations, curIndex));
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.lightRayIterations,
+                curIndex));
 
             progress.Update(config.lightRayIterations);
         }

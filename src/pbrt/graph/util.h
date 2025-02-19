@@ -690,35 +690,23 @@ inline float GetSigmaMajUnitDistNormalizer(const Ray& ray, float tMax, const uti
     return 1 - FastExp(-sigmaMaj);
 }
 
-inline float ComputeRaysScatteredInSphere(const RayDifferential& rayToSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
-                                          Sampler sampler, ScratchBuffer& buffer, int iterations, uint64_t samplingIndex) {
+inline float ComputeRaysToSphere(const RayDifferential& rayToSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
+                                          Sampler sampler, int iterations, uint64_t samplingIndex) {
     int yCoor = static_cast<int>(samplingIndex / Options->graph.samplingResolution->x);
     int xCoor = static_cast<int>(samplingIndex - yCoor * Options->graph.samplingResolution->x);
 
-    RayDifferential rayInSphere(rayToSphere(startEnd.startScatterT), rayToSphere.d, 0, mediumData.medium);
-    float rayInSphereEndT = startEnd.endScatterT - startEnd.startScatterT;
+    float distInSphere = startEnd.endScatterT - startEnd.startScatterT;
 
     float transmittanceToSphere = 0;
-    float scatterInSphere = 0;
-    float scatterInSphereMaj = 0;
     for (int i = 0; i < iterations; ++i) {
         sampler.StartPixelSample({xCoor, yCoor}, i);
 
-        transmittanceToSphere += SampleTransmittance(rayToSphere, startEnd.startScatterT, sampler, mediumData);
-        auto [Tr, Tr_maj] = SampleScatter(rayInSphere, rayInSphereEndT, sampler, mediumData);
-        scatterInSphere += Tr;
-        scatterInSphereMaj += Tr_maj;
+        float curDistInSphere = distInSphere * sampler.Get1D();
+        float curTotalDist = startEnd.startScatterT + curDistInSphere;
+        transmittanceToSphere += SampleTransmittance(rayToSphere, curTotalDist, sampler, mediumData);
     }
 
-    float amountCaptured = transmittanceToSphere; // * scatterInSphere / scatterInSphereMaj;
-    if (amountCaptured == 0.f || IsNaN(amountCaptured))
-        return 0;
-
-    amountCaptured /= static_cast<float>(iterations);
-
-    // amountCaptured *= GetSigmaMajUnitDistNormalizer(rayInSphere, rayInSphereEndT, mediumData, buffer);
-
-    return amountCaptured;
+    return transmittanceToSphere / static_cast<float>(iterations);
 }
 
 }
