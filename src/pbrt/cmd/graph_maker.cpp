@@ -147,11 +147,10 @@ void main(int argc, char* argv[]) {
     // subdivider.ComputeSubdivisionEffect(lightVec);
 
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
-        int bounces = config.lightingCalculator.bounces[bouncesIndex];
-        int depth = bounces + 1;
-        std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bounces) << std::endl;
+        int bouncesComputed = lighting.ComputeFinalLight(lightVec, bouncesIndex);
 
-        lighting.ComputeFinalLight(lightVec, bouncesIndex);
+        int depth = bouncesComputed + 1;
+        std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bouncesComputed) << std::endl;
 
         float averageLight = 0;
         for (auto& [id, v] : graph.GetVertices())
@@ -164,6 +163,12 @@ void main(int argc, char* argv[]) {
         graph.WriteToDisk(graphFileName, graph::basic,
                           graph::StreamFlags{false, false, false, true},
                           graph::StreamOptions{true, false, false});
+
+        int bounces = config.lightingCalculator.bounces[bouncesIndex];
+        if (bounces != bouncesComputed) {
+            std::cout << StringPrintf("Numerical limits reached with %s bounces, %s bounces not possible", bouncesComputed, bounces) << std::endl;
+            break;
+        }
     }
 
     CleanupPBRT();

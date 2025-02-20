@@ -30,18 +30,20 @@ void LightingCalculator::CheckSequentialIds() const {
     }
 }
 
-void LightingCalculator::ComputeFinalLight(int bouncesIndex) {
+int LightingCalculator::ComputeFinalLight(int bouncesIndex) {
     SparseVec initialLight = GetLightVector();
-    ComputeFinalLight(initialLight, bouncesIndex);
+    return ComputeFinalLight(initialLight, bouncesIndex);
 }
 
-void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIndex) {
+int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIndex) {
     int bounces = config.bounces[bouncesIndex];
 
     SparseVec finalLight(light);
     SparseVec finalWeights(numVertices);
     for (int i = 0; i < numVertices; ++i)
         finalWeights.coeffRef(i) = 1.f;
+
+    int curIteration = 0;
 
     if (bounces > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
@@ -52,9 +54,20 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIn
 
         ProgressReporter progress(bounces, "Computing final lighting", quiet);
 
-        for (int iteration = 0; iteration < bounces; ++iteration) {
+        for (; curIteration < bounces; ++curIteration) {
             curLight = weightedTransmittance * curLight;
             curWeights = transmittance * curWeights;
+
+            bool invalidNumbers = false;
+            for (int i = 0; i < numVertices; ++i) {
+                if (IsNaN(curLight.coeff(i)) || IsInf(curLight.coeff(i))
+                    || IsNaN(curWeights.coeff(i)) || IsInf(curWeights.coeff(i))) {
+                    invalidNumbers = true;
+                    break;
+                }
+            }
+            if (invalidNumbers)
+                break;
 
             SparseVec invCurWeights(numVertices);
             for (int i = 0; i < numVertices; ++i) {
@@ -70,6 +83,8 @@ void LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIn
 
     for (auto& [id, vertex] : graph.GetVertices())
         vertex.data.lightScalar = finalLight.coeff(id);
+
+    return curIteration;
 }
 
 SparseMat LightingCalculator::GetPhaseMatrix() const {

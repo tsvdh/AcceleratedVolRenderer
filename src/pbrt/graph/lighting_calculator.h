@@ -18,8 +18,8 @@ public:
         const LightingCalculatorConfig& config, bool quiet, int sampleIndexOffset);
 
     [[nodiscard]] virtual SparseVec GetLightVector() = 0;
-    void ComputeFinalLight(int bouncesIndex = 0);
-    void ComputeFinalLight(const SparseVec& light, int bouncesIndex = 0);
+    int ComputeFinalLight(int bouncesIndex = 0);
+    int ComputeFinalLight(const SparseVec& light, int bouncesIndex = 0);
 
 protected:
     void CheckSequentialIds() const;
