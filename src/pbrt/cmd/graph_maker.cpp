@@ -139,6 +139,7 @@ void main(int argc, char* argv[]) {
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.TracePaths();
     graphBuilder.ComputeTransmittance(graph);
+    graphBuilder.PruneAndClean(graph);
 
     graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
@@ -147,26 +148,61 @@ void main(int argc, char* argv[]) {
     // subdivider.ComputeSubdivisionEffect(lightVec);
 
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
+        int bounces = config.lightingCalculator.bounces[bouncesIndex];
+        int depth = bounces + 1;
+        std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bounces) << std::endl;
+
         int bouncesComputed = lighting.ComputeFinalLight(lightVec, bouncesIndex);
+        int depthComputed = bouncesComputed + 1;
 
-        int depth = bouncesComputed + 1;
-        std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bouncesComputed) << std::endl;
-
-        float averageLight = 0;
+        util::Averager lightAverager(static_cast<int>(graph.GetVertices().size()));
         for (auto& [id, v] : graph.GetVertices())
-            averageLight += v.data.lightScalar;
-        averageLight /= static_cast<float>(graph.GetVertices().size());
-        std::cout << "Average light: " << averageLight << std::endl;
+            lightAverager.AddValue(v.data.lightScalar);
+
+        // int weirdId = -1;
+        // float biggestLight = 0;
+        // for (auto& [id, v] : graph.GetVertices()) {
+        //     if (v.point.y < 6 && v.point.y > 4 && v.data.lightScalar > biggestLight) {
+        //         weirdId = id;
+        //         biggestLight = v.data.lightScalar;
+        //     }
+        // }
+        //
+        // if (graph.GetVertex(weirdId).has_value()) {
+        //     graph::Vertex& lowestVertex = graph.GetVertex(weirdId)->get();
+        //     std::cout << weirdId << " " << lowestVertex.point.y << " " << lowestVertex.data.lightScalar << std::endl;
+        //
+        //     for (auto& [otherId, edgeId] : lowestVertex.inEdges) {
+        //         graph::Vertex& otherVertex = graph.GetVertex(otherId)->get();
+        //         graph::Edge& edge = graph.GetEdge(edgeId)->get();
+        //         std::cout << edge.data.throughput << " " << otherVertex.data.pathContinuePDF << " " << otherVertex.data.lightScalar << std::endl;
+        //     }
+        //
+        //     util::Averager avg1;
+        //     util::Averager avg2;
+        //     for (auto& [id, v] : graph.GetVertices()) {
+        //         if (std::abs(v.point.y - lowestVertex.point.y) < 0.01) {
+        //             avg1.AddValue(v.data.lightScalar);
+        //         }
+        //         if (std::abs(v.point.y - lowestVertex.point.y) < 0.05) {
+        //             avg2.AddValue(v.data.lightScalar);
+        //         }
+        //     }
+        //
+        //     std::cout << avg1.PrintInfo() << " " << avg1.GetValues().size() << std::endl;
+        //     std::cout << avg2.PrintInfo() << " " << avg2.GetValues().size() << std::endl;
+        // }
+
+        std::cout << StringPrintf("Light: %s", lightAverager.PrintInfo()) << std::endl;
 
         std::string graphFileName = std::regex_replace(configName.value(),
-            std::regex("\\.json"), StringPrintf("_d%s.txt", depth));
+            std::regex("\\.json"), StringPrintf("_d%s.txt", depthComputed));
         graph.WriteToDisk(graphFileName, graph::basic,
                           graph::StreamFlags{false, false, false, true},
                           graph::StreamOptions{true, false, false});
 
-        int bounces = config.lightingCalculator.bounces[bouncesIndex];
-        if (bounces != bouncesComputed) {
-            std::cout << StringPrintf("Numerical limits reached with %s bounces, %s bounces not possible", bouncesComputed, bounces) << std::endl;
+        if (depth != depthComputed) {
+            std::cout << StringPrintf("Numerical limits reached with depth %s, depth %s not possible", depthComputed, depth) << std::endl;
             break;
         }
     }

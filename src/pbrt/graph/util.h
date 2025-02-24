@@ -170,6 +170,7 @@ static std::vector<Point3f> GetSphereSurfacePoints(Point3f center, float radius,
     return points;
 }
 
+// ReSharper disable once CppDFAConstantParameter
 static std::vector<Point3f> GetDiskPoints(Point3f center, float radius, int numPointsOnRadius, Vector3f direction) {
     if (numPointsOnRadius == 0)
         return {center};
@@ -183,7 +184,7 @@ static std::vector<Point3f> GetDiskPoints(Point3f center, float radius, int numP
     yVector *= stepSize;
 
     std::vector<Point3f> points;
-    points.reserve(static_cast<int>(Pi * Sqr(numPointsOnRadius)));
+    points.reserve(static_cast<int>(Pi * static_cast<float>(Sqr(numPointsOnRadius))));
 
     for (int x = -numPointsOnRadius; x <= numPointsOnRadius; ++x) {
         for (int y = -numPointsOnRadius; y <= numPointsOnRadius; ++y) {

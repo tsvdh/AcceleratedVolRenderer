@@ -366,8 +366,7 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
                             MediumInteraction intr(p, -ray.d, ray.time, ray.medium,
                                                    mp.phase);
 
-                            if (depth == 2)
-                                L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
+                            L += SampleLd(intr, nullptr, lambda, sampler, beta, r_u);
 
                             // Sample new direction at real-scattering event
                             Point2f u = sampler.Get2D();
@@ -738,7 +737,9 @@ std::unique_ptr<VolPathCustomIntegrator> VolPathCustomIntegrator::Create(
         const ParameterDictionary& parameters, Camera camera, Sampler sampler,
         Primitive aggregate, std::vector<Light> lights)
 {
-    int maxDepth = parameters.GetOneInt("maxdepth", 5);
+    int maxDepthFromFile = parameters.GetOneInt("maxdepth", 5); // suppress PBRT warning
+    int maxDepth = Options->maxdepth ? Options->maxdepth.value() : maxDepthFromFile;
+
     std::string lightStrategy = parameters.GetOneString("lightsampler", "bvh");
     bool regularize = parameters.GetOneBool("regularize", false);
 

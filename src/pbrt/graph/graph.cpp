@@ -117,15 +117,23 @@ bool Graph::RemoveVertex(int id) {
     if (result == vertices.end())
         return false;
 
+    std::vector<int> edgesToRemove;
+    std::vector<int> pathsToRemove;
+
     for (auto [_, edgeId] : result->second.inEdges)
-        RemoveEdge(edgeId);
+        edgesToRemove.push_back(edgeId);
 
     for (auto [_, edgeId] : result->second.outEdges)
+        edgesToRemove.push_back(edgeId);
+
+    for (auto& [pathId, index] : result->second.paths)
+        pathsToRemove.push_back(pathId);
+
+    for (int edgeId : edgesToRemove)
         RemoveEdge(edgeId);
 
-    for (auto& [pathId, index] : result->second.paths) {
-        paths.erase(pathId);
-    }
+    for (int pathId : pathsToRemove)
+        RemovePath(pathId);
 
     vertices.erase(id);
     return true;
@@ -170,7 +178,12 @@ bool Graph::RemovePath(int id) {
     if (result == paths.end())
         return false;
 
-    //TODO: maybe remove contents of path
+    // TODO: maybe remove contents of path
+
+    for (int vertexId : result->second.vertices) {
+        Vertex& vertex = GetVertex(vertexId)->get();
+        vertex.paths.erase(id);
+    }
 
     paths.erase(id);
     return true;
@@ -231,7 +244,7 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
     return newEdge;
 }
 
-inline void WriteVertexData(std::ostream& out, VertexData data, StreamFlags flags) {
+inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFlags flags) {
     if (flags.useRayVertexTypes)
         out << data.type << SEP;
 

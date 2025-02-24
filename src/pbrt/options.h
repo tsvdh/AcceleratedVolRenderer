@@ -45,6 +45,7 @@ struct GraphOptions {
 
 // PBRTOptions Definition
 struct PBRTOptions : BasicPBRTOptions {
+    pstd::optional<int> maxdepth;
     int nThreads = 0;
     LogLevel logLevel = LogLevel::Error;
     std::string logFile;
