@@ -451,7 +451,7 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
 
     std::vector<int> edgesToRemove;
     for (auto& [id, edge] : graph.GetEdges()) {
-        if (edge.data.throughput < 0.05)
+        if (edge.data.throughput < config.pruneEdgeMinimum)
             edgesToRemove.push_back(id);
     }
     for (int edgeId : edgesToRemove)
@@ -463,7 +463,7 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
         std::vector<int> verticesToRemove;
 
         for (auto& [id, vertex] : graph.GetVertices()) {
-            if (vertex.inEdges.size() <= 3) {
+            if (vertex.inEdges.size() < config.pruneVertexMinimum) {
                 verticesToRemove.push_back(id);
             }
         }

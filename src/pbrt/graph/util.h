@@ -617,6 +617,8 @@ struct GraphBuilderConfig {
     int pointsOnRadius;
     float radiusModifier;
     bool addExtraEdges;
+    float pruneEdgeMinimum;
+    int pruneVertexMinimum;
     bool runInParallel;
 };
 
@@ -649,6 +651,8 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     graphBuilder.at("pointsOnRadius").get_to(graphBuilderConfig.pointsOnRadius);
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
     graphBuilder.at("addExtraEdges").get_to(graphBuilderConfig.addExtraEdges);
+    graphBuilder.at("pruneEdgeMinimum").get_to(graphBuilderConfig.pruneEdgeMinimum);
+    graphBuilder.at("pruneVertexMinimum").get_to(graphBuilderConfig.pruneVertexMinimum);
     graphBuilder.at("runInParallel").get_to(graphBuilderConfig.runInParallel);
 }
 
