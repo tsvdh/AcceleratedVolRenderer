@@ -27,6 +27,7 @@ protected:
     [[nodiscard]] virtual SparseMat GetTransmittanceMatrix() const;
     [[nodiscard]] virtual SparseMat GetGMatrix() const = 0;
     [[nodiscard]] SparseMat GetPathContinueMatrix() const;
+    [[nodiscard]] SparseVec GetPathContinueVector() const;
     [[nodiscard]] SparseMat GetPhaseMatrix() const;
     [[nodiscard]] SparseVec LightMapToVector(const std::unordered_map<int, float>& lightMap) const;
 

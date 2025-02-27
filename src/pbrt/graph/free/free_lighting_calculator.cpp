@@ -98,6 +98,7 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
 
     SparseMat gMatrix(numVertices, numVertices);
     gMatrix.setFromTriplets(gEntries.begin(), gEntries.end());
+    gMatrix = gMatrix.transpose();
     return gMatrix;
 }
 

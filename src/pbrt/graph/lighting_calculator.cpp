@@ -47,7 +47,8 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
 
     if (bounces > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
-        SparseMat weightedTransmittance = transmittance * GetPathContinueMatrix();
+        // SparseMat weightedTransmittance = transmittance * GetPathContinueMatrix();
+        SparseVec pathContinueVector = GetPathContinueVector();
 
         SparseVec curLight = finalLight;
         SparseVec curWeights = finalWeights;
@@ -55,7 +56,7 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
         ProgressReporter progress(bounces, "Computing final lighting", quiet);
 
         for (; curIteration < bounces; ++curIteration) {
-            curLight = weightedTransmittance * curLight;
+            curLight = (transmittance * curLight).cwiseProduct(pathContinueVector);
             curWeights = transmittance * curWeights;
 
             bool invalidNumbers = false;
@@ -118,6 +119,15 @@ SparseMat LightingCalculator::GetPathContinueMatrix() const {
     SparseMat pathContinueMatrix(numVertices, numVertices);
     pathContinueMatrix.setFromTriplets(pathContinueEntries.begin(), pathContinueEntries.end());
     return pathContinueMatrix;
+}
+
+SparseVec LightingCalculator::GetPathContinueVector() const {
+    SparseVec pathContinueVector(numVertices);
+
+    for (int i = 0; i < graph.GetVertices().size(); ++i)
+        pathContinueVector.coeffRef(i) = graph.GetVertex(i)->get().data.pathContinuePDF;
+
+    return pathContinueVector;
 }
 
 SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, float>& lightMap) const {
