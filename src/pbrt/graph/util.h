@@ -489,6 +489,30 @@ inline StartEndT GetStartEndT(const HitsResult& mediumHits, const HitsResult& sp
     return startEnd;
 }
 
+class Averager;
+
+struct SamplesStore {
+    float value = -1;
+    float numSamples = 0;
+
+    void AddSample(float value) {
+        AddSamples({value, 1});
+    }
+
+    void AddSamples(const SamplesStore& other) {
+        this->value *= this->numSamples;
+        this->value += other.value * other.numSamples;
+        this->numSamples += other.numSamples;
+        this->value /= this->numSamples != 0 ? this->numSamples : -1;
+    }
+
+    void RemoveSample(float value) {
+        AddSamples({value, -1});
+    }
+
+    void FillWithAverager(Averager& averager);
+};
+
 class Averager {
 public:
     explicit Averager(int numValues = 0) {
@@ -502,6 +526,10 @@ public:
     }
 
     const std::vector<float>& GetValues() { return values; }
+
+    SamplesStore ToSamplesStore() {
+        return {GetAverage(), static_cast<float>(values.size())};
+    }
 
     float GetAverage() {
         return GetAverage(true);
@@ -571,6 +599,11 @@ private:
     std::vector<float> values;
     std::vector<float> weights;
 };
+
+inline void SamplesStore::FillWithAverager(Averager& averager) {
+    this->value = averager.GetAverage();
+    this->numSamples = averager.GetValues().size();
+}
 
 }
 

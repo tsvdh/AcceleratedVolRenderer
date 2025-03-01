@@ -66,7 +66,7 @@ void Subdivider::ComputeSubdivisionEffect(SparseVec& initialLight) {
 
             totalLight += light;
             ++numSubdivisions;
-            edge.data.throughput *= light;
+            edge.data.throughput.value *= light;
             progress.Update();
         }
     });

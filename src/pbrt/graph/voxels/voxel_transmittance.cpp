@@ -90,7 +90,7 @@ void VoxelTransmittance::TraceTransmittancePath(Point3f startPoint, Vector3f dir
 
         if (curVertexId != -1) {
             float Tr = util::Transmittance(curIntr, newIntr.p(), mediumData.defaultLambda, sampler);
-            grid.AddEdge(curVertexId, newVertexId, EdgeData{Tr, -1, 1});
+            grid.AddEdge(curVertexId, newVertexId, EdgeData{Tr, 1});
         }
 
         // Sample new direction at real-scattering event

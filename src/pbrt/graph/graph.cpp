@@ -23,26 +23,13 @@ std::istream& operator>>(std::istream& in, Point3<T>& p) {
     return in;
 }
 
-void VertexData::AddContinueSample(bool pathContinued) {
-    AddContinueSamples(pathContinued, 1);
-}
-
-void VertexData::AddContinueSamples(float pathContinuePDF, float numSamples) {
-    this->pathContinuePDF *= this->numSamples;
-    this->pathContinuePDF += pathContinuePDF * numSamples;
-    this->numSamples += numSamples;
-    this->pathContinuePDF /= this->numSamples != 0 ? this->numSamples : -1;
-}
-
-void VertexData::RemoveContinueSample(bool pathContinued) {
-    AddContinueSamples(pathContinued, -1);
-}
-
 void VertexData::MergeWithDataFrom(const VertexData& otherData) {
-    if (type != none || lightScalar != -1)
-        ErrorExit(StringPrintf("Cannot merge data: {type: %s, lightScalar: %s}", type, lightScalar).c_str());
+    if (type != none || otherData.type != none
+        || lightScalar != -1 || otherData.lightScalar != -1)
+        ErrorExit(StringPrintf("Cannot merge type or lightScalar").c_str());
 
-    this->AddContinueSamples(otherData.pathContinuePDF, otherData.numSamples);
+    this->pathContinuePDF.AddSamples(otherData.pathContinuePDF);
+    this->pathRemainLength.AddSamples(otherData.pathRemainLength);
 }
 
 void Vertex::AddPathIndex(int pathId, int index) {
@@ -60,20 +47,8 @@ void Vertex::AddPathIndices(int pathId, const std::vector<int>& indices) {
         paths[pathId].push_back(index);
 }
 
-void EdgeData::AddSample(const EdgeData& sample) {
-    if (sample.numSamples == 0)
-        ErrorExit("Cannot add an empty sample to existing edge");
-
-    throughput *= numSamples;
-    weightedThroughput *= numSamples;
-
-    throughput += sample.throughput * sample.numSamples;
-    weightedThroughput += sample.weightedThroughput * sample.numSamples;
-
-    numSamples += sample.numSamples;
-
-    throughput /= numSamples != 0 ? numSamples : -1;
-    weightedThroughput /= numSamples != 0 ? numSamples : -1;
+void EdgeData::MergeWithDataFrom(const EdgeData& otherData) {
+    this->throughput.AddSamples(otherData.throughput);
 }
 
 // Graph implementations
@@ -126,8 +101,26 @@ bool Graph::RemoveVertex(int id) {
     for (auto [_, edgeId] : result->second.outEdges)
         edgesToRemove.push_back(edgeId);
 
-    for (auto& [pathId, index] : result->second.paths)
+    for (auto& [pathId, indices] : result->second.paths) {
         pathsToRemove.push_back(pathId);
+
+        Path& path = GetPath(pathId)->get();
+        std::vector<int> verticesWithoutVertex = path.vertices;
+        for (int index : indices)
+            verticesWithoutVertex[index] = -1;
+
+        int newPathId = -1;
+
+        for (int i = 0; i < path.vertices.size(); ++i) {
+            if (verticesWithoutVertex[i] != -1) {
+                if (newPathId == -1)
+                    newPathId = AddPath().id;
+                AddVertexToPath(verticesWithoutVertex[i], newPathId);
+            }
+            else
+                newPathId = -1;
+        }
+    }
 
     for (int edgeId : edgesToRemove)
         RemoveEdge(edgeId);
@@ -228,7 +221,7 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
 
     if (edgeResult != to.inEdges.end() && from.outEdges.find(to.id) != from.outEdges.end()) {
         OptRef<Edge> edge = GetEdge(edgeResult->second);
-        edge->get().data.AddSample(data);
+        edge->get().data.MergeWithDataFrom(data);
         return edge;
     }
 
@@ -268,18 +261,17 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
 
 inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
     if (flags.useThroughput)
-        out << data.throughput << SEP << data.weightedThroughput << SEP << data.numSamples << SEP;
+        out << data.throughput.value << SEP << data.throughput.numSamples << SEP;
 }
 
 inline EdgeData ReadEdgeData(std::istream& in, StreamFlags flags) {
     float throughput = - 1;
-    float weightedThroughput = -1;
     float numSamples = -1;
 
     if (flags.useThroughput)
-        in >> throughput >> weightedThroughput >> numSamples;
+        in >> throughput >> numSamples;
 
-    return EdgeData{throughput, weightedThroughput, numSamples};
+    return EdgeData{throughput, numSamples};
 }
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {

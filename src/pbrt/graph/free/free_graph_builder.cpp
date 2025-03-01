@@ -30,7 +30,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
     auto HandlePotentialPathEnd = [&](bool pathContinues) {
         if (!path.empty()) {
             Vertex& lastVertex = graph.GetVertex(path.back())->get();
-            lastVertex.data.AddContinueSample(pathContinues);
+            lastVertex.data.pathContinuePDF.AddSample(pathContinues);
         }
     };
 
@@ -98,12 +98,12 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         }
 
         Point3f newPoint = optNewInteraction->p();
-        std::optional<nanoflann::ResultItem<int, float>> optResult = GetClosestInRadius(newPoint);
+        std::optional<std::tuple<int, float>> optResult = GetClosestInRadius(newPoint);
         std::optional<Point3f> prevPoint = path.empty() ? std::nullopt : std::make_optional(graph.GetVertex(path.back())->get().point);
 
         Vertex* newVertex;
         if (optResult) {
-            newVertex = &graph.GetVertex(vHolder.GetList()[optResult->first].first)->get();
+            newVertex = &graph.GetVertex(std::get<0>(optResult.value()))->get();
         }
         else if (prevPoint && DistanceSquared(prevPoint.value(), newPoint) <= squaredSearchRadius) {
             newVertex = &graph.GetVertex(path.back())->get();
@@ -239,7 +239,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
         util::Averager pathRemainLengthAverager;
         for (auto& [id, vertex] : graph.GetVertices())
-            pathRemainLengthAverager.AddValue(vertex.data.averagePathRemainLength);
+            pathRemainLengthAverager.AddValue(vertex.data.pathRemainLength.value);
 
         std::cout << StringPrintf("Path remain length: %s", pathRemainLengthAverager.PrintInfo()) << std::endl;
 
@@ -250,8 +250,8 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         util::Averager pathContinuePDFAverager;
         for (auto& [id, vertex] : graph.GetVertices()) {
             // TODO: check if -1 is allowed
-            if (vertex.data.pathContinuePDF != -1)
-                pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF);
+            if (vertex.data.pathContinuePDF.value != -1)
+                pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF.value);
         }
         std::cout << StringPrintf("Path continue PDF: %s", pathContinuePDFAverager.PrintInfo()) << std::endl;
     }
@@ -259,7 +259,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     return graph;
 }
 
-std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef) {
+std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, int vertexId) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
     nanoflann::RadiusResultSet resultSet(squaredSearchRadius, resultItems);
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
@@ -267,7 +267,12 @@ std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInR
     searchTree->findNeighbors(resultSet, point);
     resultSet.sort();
 
-    return resultItems.size() <= 1 ? std::nullopt : std::make_optional(resultItems[1]);
+    for (int i = 0; i < resultItems.size(); ++i) {
+        int id = vHolder.GetList()[resultItems[i].first].first;
+        if (id != vertexId)
+            return std::make_optional(std::tuple{id, resultItems[i].second});
+    }
+    return std::nullopt;
 }
 
 inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
@@ -324,9 +329,9 @@ inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph&
 inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
     for (auto& [pathId, indicesInPath] : toMoveVertex.paths) {
         Path& path = graph.GetPath(pathId)->get();
-        for (int indexInPath : indicesInPath) {
+        for (int indexInPath : indicesInPath)
             path.vertices[indexInPath] = targetVertex.id;
-        }
+
         targetVertex.AddPathIndices(pathId, indicesInPath);
     }
     toMoveVertex.paths.clear();
@@ -344,11 +349,11 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
 
     for (int curId = startId; curId < endId; ++curId) {
-        std::optional<nanoflann::ResultItem<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point);
+        std::optional<std::tuple<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point, curId);
 
         if (resultItem.has_value()) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();
-            Vertex& targetVertex = graph.GetVertex(vHolder.GetList()[resultItem->first].first)->get();
+            Vertex& targetVertex = graph.GetVertex(std::get<0>(resultItem.value()))->get();
 
             scattersInSameSphere += MoveVertexToTarget(vertexToMove, targetVertex, graph);
 
@@ -408,7 +413,7 @@ void FreeGraphBuilder::UsePathInfo(Graph& graph) {
 
             for (int i = 1; i < pathIndices.size(); ++i) {
                 if (pathIndices[i - 1] == pathIndices[i] - 1) {
-                    vertex.data.RemoveContinueSample(true);
+                    vertex.data.pathContinuePDF.RemoveSample(true);
                     ++scattersInSameSphereCorrected;
                     ++pathRemainLength;
                 } else {
@@ -418,7 +423,7 @@ void FreeGraphBuilder::UsePathInfo(Graph& graph) {
             }
             pathRemainLengthAverager.AddValue(pathRemainLength);
         }
-        vertex.data.averagePathRemainLength = pathRemainLengthAverager.GetAverage();
+        vertex.data.pathRemainLength.FillWithAverager(pathRemainLengthAverager);
 
         progress.Update();
     }
@@ -450,10 +455,10 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
     int edgesRemoved = 0;
 
     std::vector<int> edgesToRemove;
-    for (auto& [id, edge] : graph.GetEdges()) {
-        if (edge.data.throughput < config.pruneEdgeMinimum)
+    for (auto& [id, edge] : graph.GetEdges())
+        if (edge.data.throughput.value < config.pruneEdgeMinimum)
             edgesToRemove.push_back(id);
-    }
+
     for (int edgeId : edgesToRemove)
         graph.RemoveEdge(edgeId);
 
@@ -462,11 +467,9 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
     while (true) {
         std::vector<int> verticesToRemove;
 
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            if (vertex.inEdges.size() < config.pruneVertexMinimum) {
+        for (auto& [id, vertex] : graph.GetVertices())
+            if (vertex.inEdges.size() < config.pruneVertexMinimum)
                 verticesToRemove.push_back(id);
-            }
-        }
 
         for (int vertexId : verticesToRemove) {
             Vertex& vertex = graph.GetVertex(vertexId)->get();
@@ -561,11 +564,7 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
             progress.Update(config.edgeTransmittanceIterations);
         }
 
-        graph.AddEdge(edge.from, edge.to, EdgeData{
-            transmittanceAverager.GetAverage(),
-            -1,
-            static_cast<float>(transmittanceAverager.GetValues().size())
-        });
+        graph.AddEdge(edge.from, edge.to, EdgeData{transmittanceAverager.ToSamplesStore()});
     });
     progress.Done();
 }

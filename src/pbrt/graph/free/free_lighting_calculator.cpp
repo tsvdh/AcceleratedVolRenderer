@@ -92,7 +92,7 @@ SparseMat FreeLightingCalculator::GetGMatrix() const {
     gEntries.reserve(edges.size());
 
     for (auto& [id, edge] : edges) {
-        float T = edge.data.throughput;
+        float T = edge.data.throughput.value;
         gEntries.emplace_back(edge.to, edge.from, T);
     }
 

@@ -111,9 +111,9 @@ SparseMat LightingCalculator::GetPathContinueMatrix() const {
     pathContinueEntries.reserve(vertices.size());
 
     for (auto& [id, vertex] : vertices) {
-        if (vertex.data.pathContinuePDF == -1 && !vertex.outEdges.empty())
+        if (vertex.data.pathContinuePDF.value == -1 && !vertex.outEdges.empty())
             ErrorExit("No continue PDF for outgoing edges");
-        pathContinueEntries.emplace_back(id, id, vertex.data.pathContinuePDF);
+        pathContinueEntries.emplace_back(id, id, vertex.data.pathContinuePDF.value);
     }
 
     SparseMat pathContinueMatrix(numVertices, numVertices);
@@ -125,7 +125,7 @@ SparseVec LightingCalculator::GetPathContinueVector() const {
     SparseVec pathContinueVector(numVertices);
 
     for (int i = 0; i < graph.GetVertices().size(); ++i)
-        pathContinueVector.coeffRef(i) = graph.GetVertex(i)->get().data.pathContinuePDF;
+        pathContinueVector.coeffRef(i) = graph.GetVertex(i)->get().data.pathContinuePDF.value;
 
     return pathContinueVector;
 }

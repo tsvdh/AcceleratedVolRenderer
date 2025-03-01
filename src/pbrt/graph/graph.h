@@ -29,6 +29,8 @@ using DynamicTreeType = nanoflann::KDTreeSingleIndexDynamicAdaptor<
     nanoflann::L2_Simple_Adaptor<Float, util::VerticesHolder>,
     util::VerticesHolder, 3, int>;
 
+using util::SamplesStore;
+
 struct Vertex;
 struct VertexData;
 struct Edge;
@@ -46,14 +48,9 @@ enum RayVertexType {
 struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
-    float averagePathRemainLength = -1;
 
-    float pathContinuePDF = -1; // average of samples
-    float numSamples = 0;
-
-    void AddContinueSample(bool pathContinued);
-    void AddContinueSamples(float pathContinuePDF, float numSamples);
-    void RemoveContinueSample(bool pathContinued);
+    SamplesStore pathContinuePDF;
+    SamplesStore pathRemainLength;
 
     void MergeWithDataFrom(const VertexData& otherData);
 };
@@ -75,11 +72,9 @@ struct Vertex {
 };
 
 struct EdgeData {
-    float throughput = -1;          // average of samples
-    float weightedThroughput = -1;  // average of samples
-    float numSamples = 0;
+    SamplesStore throughput;
 
-    void AddSample(const EdgeData& sample);
+    void MergeWithDataFrom(const EdgeData& otherData);
 };
 
 struct Edge {
