@@ -231,22 +231,21 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
 
     searchTree->radiusSearch(searchPointArray, squaredSearchRadius, resultItems);
 
-    float resultScalar = 0;
-    for (auto resultItem : resultItems) {
-        const Vertex& v = freeGraph->GetVertexConst(resultItem.first)->get();
-        resultScalar += v.data.lightScalar;
-    }
-    auto numItems = static_cast<float>(resultItems.size());
-    resultScalar /= numItems > 0 ? numItems : 1;
+    util::Averager lightAverager(static_cast<int>(resultItems.size()));
 
-    return Inv4Pi * resultScalar;
+    for (nanoflann::ResultItem resultItem : resultItems) {
+        const Vertex& v = freeGraph->GetVertexConst(resultItem.first)->get();
+        lightAverager.AddValue(v.data.lightScalar);
+    }
+
+    return Inv4Pi * lightAverager.GetAverage();
 }
 
 std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
         const ParameterDictionary& parameters, Camera camera, Sampler sampler,
         Primitive aggregate, std::vector<Light> lights)
 {
-    int renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 10);
+    float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 10);
 
     return std::make_unique<GraphIntegrator>(renderRadiusMod,
         std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));

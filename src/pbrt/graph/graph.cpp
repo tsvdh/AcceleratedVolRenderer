@@ -440,6 +440,8 @@ void Graph::CheckSequentialIds() const {
 }
 
 util::VerticesHolder Graph::GetVerticesList() const {
+    CheckSequentialIds();
+
     std::vector<Point3f> vList;
     vList.reserve(vertices.size());
 
