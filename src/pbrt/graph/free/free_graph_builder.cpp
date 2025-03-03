@@ -98,7 +98,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         }
 
         Point3f newPoint = optNewInteraction->p();
-        std::optional<std::tuple<int, float>> optResult = GetClosestInRadius(newPoint);
+        std::optional<std::tuple<int, float>> optResult = GetClosestInRadius(newPoint, squaredSearchRadius);
         std::optional<Point3f> prevPoint = path.empty() ? std::nullopt : std::make_optional(graph.GetVertex(path.back())->get().point);
 
         Vertex* newVertex;
@@ -110,8 +110,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         }
         else {
             newVertex = &graph.AddVertex(newPoint, VertexData{});
-
-            vHolder.GetList().emplace_back(newVertex->id, newVertex->point);
+            vHolder.GetList().emplace_back(newVertex->point);
             ++numNewVertices;
         }
 
@@ -182,7 +181,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     FreeGraph graph(std::sqrt(squaredSearchRadius));
 
     int batchSize = 100;
-    int startingId = 0;
+    int startingId = graph.GetCurVertexId();
     int currentBatch = 0;
 
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
@@ -192,15 +191,15 @@ FreeGraph FreeGraphBuilder::TracePaths() {
             Point3f newOrigin = origin + xVector * x + yVector * y;
             RayDifferential ray(newOrigin, inDirection, 0, mediumData.medium);
 
-            pstd::optional<ShapeIntersection> shapeEntry = primitiveData.primitive.Intersect(ray, Infinity);
-            if (!shapeEntry)
-                continue;
-            shapeEntry->intr.SkipIntersection(&ray, shapeEntry->tHit);
+            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
 
-            pstd::optional<ShapeIntersection> shapeExit = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
-            if (!shapeExit)
+            if (!mediumHits.RayEntersVolume())
                 continue;
-            float firstRayTHit = shapeExit.value().tHit;
+
+            if (mediumHits.type == util::OutsideTwoHits)
+                mediumHits.intersections[0].intr.SkipIntersection(&ray, mediumHits.tHits[0]);
+
+            float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
 
             uint64_t startIndex = ((y - 1) + (x - 1) * config.dimensionSteps) * config.iterationsPerStep;
             for (int i = 0; i < config.iterationsPerStep; ++i) {
@@ -209,7 +208,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
 
                 sampler.StartPixelSample({xCoor, yCoor}, sampleIndexOffset);
-                int newVertices = TracePath(ray, graph, config.maxDepth, firstRayTHit);
+                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit);
 
                 currentBatch += newVertices;
 
@@ -219,7 +218,6 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                     startingId += currentBatch;
                     currentBatch = 0;
                 }
-
                 tracingProgress.Update();
             }
         }
@@ -227,9 +225,14 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     AddToTreeAndFit(graph, startingId, startingId + currentBatch);
     tracingProgress.Done();
 
-    OrderVertexIds(graph);
+    OrderIdsAndRebuildTree(graph);
+
+    if (config.reinforceSparseAreas)
+        ReinforceSparseAreas(graph);
+
     if (config.addExtraEdges)
         AddExtraEdges(graph);
+
     UsePathInfo(graph);
 
     if (!quiet) {
@@ -259,20 +262,27 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     return graph;
 }
 
-std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, int vertexId) {
+std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius, int vertexId) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
-    nanoflann::RadiusResultSet resultSet(squaredSearchRadius, resultItems);
+    nanoflann::RadiusResultSet resultSet(squaredRadius, resultItems);
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
 
     searchTree->findNeighbors(resultSet, point);
     resultSet.sort();
 
-    for (int i = 0; i < resultItems.size(); ++i) {
-        int id = vHolder.GetList()[resultItems[i].first].first;
-        if (id != vertexId)
-            return std::make_optional(std::tuple{id, resultItems[i].second});
+    std::vector<std::tuple<int, float>> result;
+    result.reserve(resultItems.size());
+
+    for (nanoflann::ResultItem resultItem : resultItems) {
+        if (resultItem.first != vertexId)
+            result.emplace_back(std::tuple{resultItem.first, resultItem.second});
     }
-    return std::nullopt;
+    return result;
+}
+
+std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId) {
+    std::vector<std::tuple<int, float>> result = GetInRadius(pointRef, squaredRadius, vertexId);
+    return result.empty() ? std::nullopt : std::make_optional(result[0]);
 }
 
 inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
@@ -349,7 +359,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
 
     for (int curId = startId; curId < endId; ++curId) {
-        std::optional<std::tuple<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point, curId);
+        std::optional<std::tuple<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point, squaredSearchRadius, curId);
 
         if (resultItem.has_value()) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();
@@ -360,43 +370,6 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
             searchTree->removePoint(curId);
         }
     }
-}
-
-void FreeGraphBuilder::OrderVertexIds(Graph& graph) const {
-    auto GetLargestTakenId = [&](int currentLargestId) {
-        for (int i = currentLargestId; i >= 0; --i)
-            if (graph.GetVertex(i).has_value())
-                return i;
-
-        return -1;
-    };
-
-    auto startTime = std::chrono::high_resolution_clock::now();
-    if (!quiet)
-        std::cout << "Rearranging vertex ids... ";
-
-    int currentLargestId = GetLargestTakenId(graph.GetCurVertexId());
-
-    for (int curId = 0; curId < graph.GetCurVertexId(); ++curId) {
-        if (currentLargestId <= curId)
-            break;
-
-        OptRef<Vertex> optVertex = graph.GetVertex(curId);
-
-        if (!optVertex.has_value()) {
-            Vertex& vertexToMove = graph.GetVertex(currentLargestId)->get();
-            Vertex& newVertex = graph.AddVertex(curId, vertexToMove.point, VertexData{});
-
-            MoveVertexToTarget(vertexToMove, newVertex, graph);
-
-            currentLargestId = GetLargestTakenId(currentLargestId);
-        }
-    }
-
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
-    if (!quiet)
-        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
 }
 
 void FreeGraphBuilder::UsePathInfo(Graph& graph) {
@@ -446,7 +419,7 @@ void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
     progress.Done();
 }
 
-void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
+void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) {
     if (!quiet)
         std::cout << "Pruning low PDF edges and sparse vertices... ";
 
@@ -468,7 +441,7 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
         std::vector<int> verticesToRemove;
 
         for (auto& [id, vertex] : graph.GetVertices())
-            if (vertex.inEdges.size() < config.pruneVertexMinimum)
+            if (vertex.outEdges.size() < config.pruneVertexMinimum)
                 verticesToRemove.push_back(id);
 
         for (int vertexId : verticesToRemove) {
@@ -489,18 +462,189 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) const {
                 edgesRemoved, verticesRemoved, vertexEdgesRemoved) << std::endl;
     }
 
-    OrderVertexIds(graph);
+    OrderIdsAndRebuildTree(graph);
+}
+
+void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
+    if (!quiet)
+        std::cout << "Searching for sparse areas... ";
+
+    float neighbourSquaredSearchRadius = squaredSearchRadius * config.reinforcementRadiusModifierMult;
+
+    std::vector<int> sparseVertices;
+    for (auto& [id, vertex] : graph.GetVertices()) {
+        std::vector<std::tuple<int, float>> result = GetInRadius(vertex.point, neighbourSquaredSearchRadius, id);
+
+        if (result.size() < config.neighboursForNotSparse)
+            sparseVertices.push_back(id);
+    }
+
+    if (!quiet) {
+        std::cout << "done" << std::endl;
+        std::cout << StringPrintf("%s / %s vertices found with few neighbours", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
+    }
+
+    float sphereRadius = graph.GetVertexRadius().value();
+    util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadiusReinforcement);
+
+    int64_t numSparseVertices = static_cast<int64_t>(sparseVertices.size());
+    int numRaysPerVertex = config.reinforcementIterations * util::GetSphereVolumePointsSize(config.pointsOnRadiusReinforcement);
+    int64_t workNeeded = numSparseVertices * numRaysPerVertex;
+
+    ProgressReporter progress(workNeeded, "Reinforcing sparse areas", quiet);
+    int resolutionDimensionSize = Options->graph.samplingResolution->x;
+
+    int batchSize = 100;
+    int startingId = graph.GetCurVertexId();
+    int currentBatch = 0;
+
+    for (int vertexId : sparseVertices) {
+        Vertex& vertex = graph.GetVertex(vertexId)->get();
+        std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(vertex.point);
+
+        uint64_t startIndex = vertexId * static_cast<int>(spherePoints.size());
+        for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
+            uint64_t curIndex = startIndex + pointIndex;
+            int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
+            int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
+
+            Point3f spherePoint = spherePoints[pointIndex];
+            PhaseFunction phase = mediumData.medium.SamplePoint(spherePoint, mediumData.defaultLambda).phase;
+
+            for (int i = 0; i < config.reinforcementIterations; ++i) {
+                sampler.StartPixelSample({xCoor, yCoor}, i);
+
+                Vector3f inDir(1, 0, 0);
+                Vector3f outDir = phase.Sample_p(inDir, sampler.Get2D())->wi;
+                RayDifferential ray(spherePoint, outDir, 0, mediumData.medium);
+                util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
+
+                if (!mediumHits.RayEntersVolume()) {
+                    progress.Update();
+                    continue;
+                }
+
+                if (mediumHits.type == util::OutsideTwoHits)
+                    mediumHits.intersections[0].intr.SkipIntersection(&ray, mediumHits.tHits[0]);
+
+                float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
+
+                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit);
+                currentBatch += newVertices;
+
+                if (currentBatch >= batchSize) {
+                    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+
+                    startingId += currentBatch;
+                    currentBatch = 0;
+                }
+                progress.Update();
+            }
+        }
+    }
+    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+    progress.Done();
+
+    int sparseVerticesAfter = 0;
+    for (int vertexId : sparseVertices) {
+        Vertex& vertex = graph.GetVertex(vertexId)->get();
+        std::vector<std::tuple<int, float>> result = GetInRadius(vertex.point, neighbourSquaredSearchRadius, vertexId);
+
+        if (result.size() < config.neighboursForNotSparse)
+            ++sparseVerticesAfter;
+    }
+
+    if (!quiet)
+        std::cout << StringPrintf("%s / %s sparse vertices after reinforcing", sparseVerticesAfter, numSparseVertices) << std::endl;
+
+    OrderIdsAndRebuildTree(graph);
+}
+
+void FreeGraphBuilder::OrderIdsAndRebuildTree(Graph& graph) {
+    auto GetLargestTakenId = [&](int currentLargestId) {
+        for (int i = currentLargestId; i >= 0; --i)
+            if (graph.GetVertex(i).has_value())
+                return i;
+
+        return -1;
+    };
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    if (!quiet)
+        std::cout << "Rearranging vertex ids... ";
+
+    int currentLargestId = GetLargestTakenId(graph.GetCurVertexId());
+
+    for (int curId = 0; curId < graph.GetCurVertexId(); ++curId) {
+        if (currentLargestId <= curId)
+            break;
+
+        OptRef<Vertex> optVertex = graph.GetVertex(curId);
+
+        if (!optVertex.has_value()) {
+            Vertex& vertexToMove = graph.GetVertex(currentLargestId)->get();
+            Vertex& newVertex = graph.AddVertex(curId, vertexToMove.point, VertexData{});
+
+            MoveVertexToTarget(vertexToMove, newVertex, graph);
+
+            currentLargestId = GetLargestTakenId(currentLargestId);
+        }
+    }
+
+    graph.SetCurVertexId(currentLargestId);
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
+    if (!quiet)
+        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
+
+    graph.CheckSequentialIds();
+
+    startTime = std::chrono::high_resolution_clock::now();
+    if (!quiet)
+        std::cout << "Rebuilding search tree... ";
+
+    int numVertices = static_cast<int>(graph.GetVertices().size());
+
+    std::vector<Point3f>& list = vHolder.GetList();
+    int sizeBefore = static_cast<int>(list.size());
+    list.clear();
+    list.shrink_to_fit();
+    list.reserve(numVertices);
+
+    searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
+
+    if (numVertices == 0)
+        return;
+
+    for (int id = 0; id < numVertices; ++id) {
+        Vertex& vertex = graph.GetVertex(id)->get();
+        list.push_back(vertex.point);
+    }
+    int sizeAfter = static_cast<int>(list.size());
+
+    int batchSize = 1000;
+    int lastId = numVertices - 1;
+    for (int startingId = 0; startingId < numVertices; startingId += batchSize) {
+        int endingId = std::min(startingId + batchSize - 1, lastId);
+        searchTree->addPoints(startingId, endingId);
+    }
+
+    endTime = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
+    if (!quiet)
+        std::cout << StringPrintf("done (%ss, %s to %s vertices)", duration, sizeBefore, sizeAfter) << std::endl;
 }
 
 void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
     ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
 
     float sphereRadius = graph.GetVertexRadius().value();
-    util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadius);
+    util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadiusTransmittance);
     util::SphereMaker sphereMaker(sphereRadius);
 
     int64_t numEdges = static_cast<int64_t>(graph.GetEdges().size());
-    int numRaysPerEdge = config.edgeTransmittanceIterations * util::GetSphereVolumePointsSize(config.pointsOnRadius);
+    int numRaysPerEdge = config.transmittanceIterations * util::GetSphereVolumePointsSize(config.pointsOnRadiusTransmittance);
     int64_t workNeeded = numEdges * numRaysPerEdge;
     if (workNeeded == 0)
         return;
@@ -537,19 +681,15 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
             util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, rayToSphere, mediumData);
             util::HitsResult sphereHits = GetHits(currentSphere.sphere, rayToSphere, mediumData);
 
-            auto rayEntersVolume = [](util::HitsType type) -> bool {
-                return type == util::InsideOneHit || type == util::OutsideTwoHits;
-            };
-
-            if (!rayEntersVolume(mediumHits.type) || !rayEntersVolume(sphereHits.type)) {
-                progress.Update(config.edgeTransmittanceIterations);
+            if (!mediumHits.RayEntersVolume() || !sphereHits.RayEntersVolume()) {
+                progress.Update(config.transmittanceIterations);
                 continue;
             }
 
             util::StartEndT startEnd = GetStartEndT(mediumHits, sphereHits);
 
             if (startEnd.sphereRayNotInMedium) {
-                progress.Update(config.edgeTransmittanceIterations);
+                progress.Update(config.transmittanceIterations);
                 continue;
             }
 
@@ -558,10 +698,10 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
                 startEnd.SkipForward(startEnd.startT);
             }
 
-            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.edgeTransmittanceIterations,
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.transmittanceIterations,
                 curIndex));
 
-            progress.Update(config.edgeTransmittanceIterations);
+            progress.Update(config.transmittanceIterations);
         }
 
         graph.AddEdge(edge.from, edge.to, EdgeData{transmittanceAverager.ToSamplesStore()});

@@ -31,7 +31,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
     float sphereRadius = freeGraph->GetVertexRadius().value();
     util::SphereMaker sphereMaker(sphereRadius);
 
-    int64_t workNeeded = numVertices * config.lightRayIterations * util::GetDiskPointsSize(config.pointsOnRadius);
+    int64_t workNeeded = numVertices * config.lightIterations * util::GetDiskPointsSize(config.pointsOnRadiusLight);
     ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
     ParallelFor(0, numVertices, config.runInParallel, [&](int listIndex) {
@@ -43,7 +43,7 @@ SparseVec FreeLightingCalculator::GetLightVector() {
         SphereContainer currentSphere = sphereMaker.GetSphereFor(vertex.point);
 
         Point3f origin = vertex.point - inDirection * mediumData.primitiveData.maxDistToCenter * 2;
-        std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadius, inDirection);
+        std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadiusLight, inDirection);
 
         util::Averager transmittanceAverager;
 
@@ -58,24 +58,24 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             util::HitsResult sphereHits = GetHits(currentSphere.sphere, rayToSphere, mediumData);
 
             if (mediumHits.type != util::OutsideTwoHits || sphereHits.type != util::OutsideTwoHits) {
-                progress.Update(config.lightRayIterations);
+                progress.Update(config.lightIterations);
                 continue;
             }
 
             util::StartEndT startEnd = GetStartEndT(mediumHits, sphereHits);
 
             if (startEnd.sphereRayNotInMedium) {
-                progress.Update(config.lightRayIterations);
+                progress.Update(config.lightIterations);
                 continue;
             }
 
             mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
             startEnd.SkipForward(startEnd.startT);
 
-            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.lightRayIterations,
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.lightIterations,
                 curIndex));
 
-            progress.Update(config.lightRayIterations);
+            progress.Update(config.lightIterations);
         }
 
         lightMap[vertexId] = transmittanceAverager.GetAverage();

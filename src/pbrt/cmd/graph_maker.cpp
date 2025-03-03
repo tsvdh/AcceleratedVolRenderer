@@ -80,17 +80,24 @@ void main(int argc, char* argv[]) {
                                         config.subdivider.graphBuilder.iterationsPerStep);
     int maxMaxDepth = std::max(config.graphBuilder.maxDepth,
                                config.subdivider.graphBuilder.maxDepth);
+
     int maxIterations = std::max(
-        std::max(config.graphBuilder.edgeTransmittanceIterations, config.lightingCalculator.lightRayIterations),
-        std::max(config.subdivider.graphBuilder.edgeTransmittanceIterations, config.subdivider.lightingCalculator.lightRayIterations));
+        {config.graphBuilder.transmittanceIterations,
+            config.graphBuilder.reinforcementIterations,
+            config.lightingCalculator.lightIterations,
+            config.subdivider.graphBuilder.transmittanceIterations,
+            config.subdivider.graphBuilder.reinforcementIterations,
+            config.subdivider.lightingCalculator.lightIterations});
 
     int maxDiskPoints = util::GetDiskPointsSize(std::max(
-        config.lightingCalculator.pointsOnRadius,
-        config.subdivider.lightingCalculator.pointsOnRadius));
+        config.lightingCalculator.pointsOnRadiusLight,
+        config.subdivider.lightingCalculator.pointsOnRadiusLight));
 
-    int maxSpherePoints = util::GetSphereVolumePointsSize(std::max(
-        config.graphBuilder.pointsOnRadius,
-        config.subdivider.graphBuilder.pointsOnRadius));
+    int maxSpherePoints = util::GetSphereVolumePointsSize(std::max({
+        config.graphBuilder.pointsOnRadiusTransmittance,
+        config.graphBuilder.pointsOnRadiusReinforcement,
+        config.subdivider.graphBuilder.pointsOnRadiusTransmittance,
+        config.subdivider.graphBuilder.pointsOnRadiusReinforcement}));
 
     int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
 
@@ -158,40 +165,6 @@ void main(int argc, char* argv[]) {
         util::Averager lightAverager(static_cast<int>(graph.GetVertices().size()));
         for (auto& [id, v] : graph.GetVertices())
             lightAverager.AddValue(v.data.lightScalar);
-
-        // int weirdId = -1;
-        // float biggestLight = 0;
-        // for (auto& [id, v] : graph.GetVertices()) {
-        //     if (v.point.y < 6 && v.point.y > 4 && v.data.lightScalar > biggestLight) {
-        //         weirdId = id;
-        //         biggestLight = v.data.lightScalar;
-        //     }
-        // }
-        //
-        // if (graph.GetVertex(weirdId).has_value()) {
-        //     graph::Vertex& lowestVertex = graph.GetVertex(weirdId)->get();
-        //     std::cout << weirdId << " " << lowestVertex.point.y << " " << lowestVertex.data.lightScalar << std::endl;
-        //
-        //     for (auto& [otherId, edgeId] : lowestVertex.inEdges) {
-        //         graph::Vertex& otherVertex = graph.GetVertex(otherId)->get();
-        //         graph::Edge& edge = graph.GetEdge(edgeId)->get();
-        //         std::cout << edge.data.throughput << " " << otherVertex.data.pathContinuePDF << " " << otherVertex.data.lightScalar << std::endl;
-        //     }
-        //
-        //     util::Averager avg1;
-        //     util::Averager avg2;
-        //     for (auto& [id, v] : graph.GetVertices()) {
-        //         if (std::abs(v.point.y - lowestVertex.point.y) < 0.01) {
-        //             avg1.AddValue(v.data.lightScalar);
-        //         }
-        //         if (std::abs(v.point.y - lowestVertex.point.y) < 0.05) {
-        //             avg2.AddValue(v.data.lightScalar);
-        //         }
-        //     }
-        //
-        //     std::cout << avg1.PrintInfo() << " " << avg1.GetValues().size() << std::endl;
-        //     std::cout << avg2.PrintInfo() << " " << avg2.GetValues().size() << std::endl;
-        // }
 
         std::cout << StringPrintf("Light: %s", lightAverager.PrintInfo()) << std::endl;
 

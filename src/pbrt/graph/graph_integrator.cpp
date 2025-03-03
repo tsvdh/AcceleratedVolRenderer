@@ -233,7 +233,7 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
 
     float resultScalar = 0;
     for (auto resultItem : resultItems) {
-        const Vertex& v = freeGraph->GetVertexConst(vHolder.GetListConst()[resultItem.first].first)->get();
+        const Vertex& v = freeGraph->GetVertexConst(resultItem.first)->get();
         resultScalar += v.data.lightScalar;
     }
     auto numItems = static_cast<float>(resultItems.size());

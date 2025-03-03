@@ -14,18 +14,18 @@ public:
                      int sampleIndexOffset, float squaredSearchRadius);
 
     FreeGraph TracePaths();
-    void PruneAndClean(FreeGraph& graph) const;
+    void PruneAndClean(FreeGraph& graph);
     void ComputeTransmittance(FreeGraph& graph);
-
-    util::VerticesHolder& temp() {return vHolder;}
 
 private:
     int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit);
-    std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, int vertexId = -1);
+    std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
+    std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
     void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId);
-    void OrderVertexIds(Graph& graph) const;
     void UsePathInfo(Graph& graph);
     void AddExtraEdges(Graph& graph);
+    void ReinforceSparseAreas(FreeGraph& graph);
+    void OrderIdsAndRebuildTree(Graph& graph);
 
     const util::MediumData& mediumData;
     Vector3f inDirection;

@@ -424,26 +424,30 @@ void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFla
     WriteToDisk(fileName, GetDescriptionName(desc), flags, options);
 }
 
-util::VerticesHolder Graph::GetVerticesList() const {
-    std::vector<std::pair<int, Point3f>> vList;
-    vList.reserve(vertices.size());
+void Graph::CheckSequentialIds() const {
+    std::vector<int> ids;
+    ids.reserve(vertices.size());
 
-    std::transform(vertices.begin(), vertices.end(), std::back_inserter(vList),
-        [](const std::pair<int, Vertex>& pair) {
-            return std::pair{ pair.second.id, pair.second.point };
-        });
-    return util::VerticesHolder(vList);
+    for (auto& [id, _] : vertices)
+        ids.push_back(id);
+
+    std::sort(ids.begin(), ids.end(), [](int a, int b) { return a < b; });
+
+    for (int i = 0; i < ids.size(); ++i) {
+        if (ids[i] != i)
+            ErrorExit("Graph must have sequential vertex ids");
+    }
 }
 
-util::VerticesHolder Graph::GetPathEndsList() const {
-    std::vector<std::pair<int, Point3f>> vList;
-    vList.reserve(paths.size());
+util::VerticesHolder Graph::GetVerticesList() const {
+    std::vector<Point3f> vList;
+    vList.reserve(vertices.size());
 
-    std::transform(paths.begin(), paths.end(), std::back_inserter(vList),
-        [this](const std::pair<int, Path>& pair) {
-            const Vertex& pathEnd = GetVertexConst(pair.second.vertices.back()).value();
-            return std::pair{ pathEnd.id, pathEnd.point };
-        });
+    for (int id = 0; id < vertices.size(); ++id) {
+        const Vertex& vertex = GetVertexConst(id)->get();
+        vList.push_back(vertex.point);
+    }
+
     return util::VerticesHolder(vList);
 }
 

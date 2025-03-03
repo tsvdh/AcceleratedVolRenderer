@@ -22,8 +22,6 @@ public:
     int ComputeFinalLight(const SparseVec& light, int bouncesIndex = 0);
 
 protected:
-    void CheckSequentialIds() const;
-
     [[nodiscard]] virtual SparseMat GetTransmittanceMatrix() const;
     [[nodiscard]] virtual SparseMat GetGMatrix() const = 0;
     [[nodiscard]] SparseMat GetPathContinueMatrix() const;

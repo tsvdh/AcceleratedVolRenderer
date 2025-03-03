@@ -153,10 +153,12 @@ public:
     void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags, StreamOptions options);
     void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags, StreamOptions options);
 
+    void CheckSequentialIds() const;
+
     [[nodiscard]] util::VerticesHolder GetVerticesList() const;
-    [[nodiscard]] util::VerticesHolder GetPathEndsList() const;
 
     [[nodiscard]] int GetCurVertexId() const { return curVertexId; }
+    void SetCurVertexId(int vertexId) { this->curVertexId = vertexId; }
     [[nodiscard]] int GetCurEdgeId() const { return curEdgeId; }
     [[nodiscard]] int GetCurPathId() const { return curPathId; }
     [[nodiscard]] int GetGraphId() const { return graphId; }

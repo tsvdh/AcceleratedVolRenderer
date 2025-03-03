@@ -88,10 +88,10 @@ struct MediumData {
 class VerticesHolder {
 public:
     VerticesHolder() = default;
-    explicit VerticesHolder(std::vector<std::pair<int, Point3f>> list) : verticesList(std::move(list)) {}
+    explicit VerticesHolder(std::vector<Point3f> list) : verticesList(std::move(list)) {}
 
-    [[nodiscard]] std::vector<std::pair<int, Point3f>>& GetList() { return verticesList; }
-    [[nodiscard]] const std::vector<std::pair<int, Point3f>>& GetListConst() const { return verticesList; }
+    [[nodiscard]] std::vector<Point3f>& GetList() { return verticesList; }
+    [[nodiscard]] const std::vector<Point3f>& GetListConst() const { return verticesList; }
 
     [[nodiscard]] size_t kdtree_get_point_count() const { return verticesList.size(); }
 
@@ -99,11 +99,11 @@ public:
         int _index = static_cast<int>(index);
         switch (dim) {
         case 0:
-            return verticesList[_index].second.x;
+            return verticesList[_index].x;
         case 1:
-            return verticesList[_index].second.y;
+            return verticesList[_index].y;
         case 2:
-            return verticesList[_index].second.z;
+            return verticesList[_index].z;
         default:
             ErrorExit("Impossible dimension");
         }
@@ -113,7 +113,7 @@ public:
     template <class BBOX> bool kdtree_get_bbox(BBOX& bb) const { return false; }
 
 private:
-    std::vector<std::pair<int, Point3f>> verticesList; // vertex id, point
+    std::vector<Point3f> verticesList; // vertex id, point
 };
 
 inline DistantLight* GetLight(std::vector<Light>& lights) {
@@ -401,6 +401,10 @@ struct HitsResult {
     std::vector<float> tHits;
     std::vector<ShapeIntersection> intersections;
     HitsType type;
+
+    bool RayEntersVolume() {
+        return type == InsideOneHit || type == OutsideTwoHits;
+    };
 };
 
 static HitsResult GetHits(const Primitive& primitive, RayDifferential ray, const MediumData& mediumData) {
@@ -643,21 +647,35 @@ struct GraphBuilderConfig;
 struct LightingCalculatorConfig;
 
 struct GraphBuilderConfig {
+    // general
+    float radiusModifier;
+    int maxDepth;
+    bool addExtraEdges;
+
+    // path tracing
     int dimensionSteps;
     int iterationsPerStep;
-    int maxDepth;
-    int edgeTransmittanceIterations;
-    int pointsOnRadius;
-    float radiusModifier;
-    bool addExtraEdges;
+
+    // transmittance calculation
+    int transmittanceIterations;
+    int pointsOnRadiusTransmittance;
+    bool runInParallel;
+
+    // sparse reinforcement
+    bool reinforceSparseAreas;
+    int neighboursForNotSparse;
+    float reinforcementRadiusModifierMult;
+    int reinforcementIterations;
+    int pointsOnRadiusReinforcement;
+
+    // pruning
     float pruneEdgeMinimum;
     int pruneVertexMinimum;
-    bool runInParallel;
 };
 
 struct LightingCalculatorConfig {
-    int lightRayIterations;
-    int pointsOnRadius;
+    int lightIterations;
+    int pointsOnRadiusLight;
     std::vector<int> bounces;
     bool runInParallel;
 };
@@ -677,22 +695,31 @@ struct Config {
 
 inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderConfig) {
     auto graphBuilder = jsonObject.at("graphBuilder");
+    graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
+    graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
+    graphBuilder.at("addExtraEdges").get_to(graphBuilderConfig.addExtraEdges);
+
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);
-    graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
-    graphBuilder.at("edgeTransmittanceIterations").get_to(graphBuilderConfig.edgeTransmittanceIterations);
-    graphBuilder.at("pointsOnRadius").get_to(graphBuilderConfig.pointsOnRadius);
-    graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
-    graphBuilder.at("addExtraEdges").get_to(graphBuilderConfig.addExtraEdges);
+
+    graphBuilder.at("transmittanceIterations").get_to(graphBuilderConfig.transmittanceIterations);
+    graphBuilder.at("pointsOnRadiusTransmittance").get_to(graphBuilderConfig.pointsOnRadiusTransmittance);
+    graphBuilder.at("runInParallel").get_to(graphBuilderConfig.runInParallel);
+
     graphBuilder.at("pruneEdgeMinimum").get_to(graphBuilderConfig.pruneEdgeMinimum);
     graphBuilder.at("pruneVertexMinimum").get_to(graphBuilderConfig.pruneVertexMinimum);
-    graphBuilder.at("runInParallel").get_to(graphBuilderConfig.runInParallel);
+
+    graphBuilder.at("reinforceSparseAreas").get_to(graphBuilderConfig.reinforceSparseAreas);
+    graphBuilder.at("neighboursForNotSparse").get_to(graphBuilderConfig.neighboursForNotSparse);
+    graphBuilder.at("reinforcementRadiusModifierMult").get_to(graphBuilderConfig.reinforcementRadiusModifierMult);
+    graphBuilder.at("reinforcementIterations").get_to(graphBuilderConfig.reinforcementIterations);
+    graphBuilder.at("pointsOnRadiusReinforcement").get_to(graphBuilderConfig.pointsOnRadiusReinforcement);
 }
 
 inline void from_json(const json& jsonObject, LightingCalculatorConfig& lightingCalculatorConfig) {
     auto lightingCalculator = jsonObject.at("lightingCalculator");
-    lightingCalculator.at("lightRayIterations").get_to(lightingCalculatorConfig.lightRayIterations);
-    lightingCalculator.at("pointsOnRadius").get_to(lightingCalculatorConfig.pointsOnRadius);
+    lightingCalculator.at("lightIterations").get_to(lightingCalculatorConfig.lightIterations);
+    lightingCalculator.at("pointsOnRadiusLight").get_to(lightingCalculatorConfig.pointsOnRadiusLight);
     lightingCalculator.at("bounces").get_to(lightingCalculatorConfig.bounces);
     lightingCalculator.at("runInParallel").get_to(lightingCalculatorConfig.runInParallel);
 }

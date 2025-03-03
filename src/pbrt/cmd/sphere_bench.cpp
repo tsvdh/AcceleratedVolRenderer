@@ -20,10 +20,10 @@ LightReport reportLight(graph::Config config) {
     int maxDimensionSteps = config.graphBuilder.dimensionSteps;
     int maxIterationsPerStep = config.graphBuilder.iterationsPerStep;
     int maxMaxDepth = config.graphBuilder.maxDepth;
-    int maxIterations = std::max(config.graphBuilder.edgeTransmittanceIterations, config.lightingCalculator.lightRayIterations);
+    int maxIterations = std::max(config.graphBuilder.transmittanceIterations, config.lightingCalculator.lightIterations);
 
-    int maxDiskPoints = util::GetDiskPointsSize(config.lightingCalculator.pointsOnRadius);
-    int maxSpherePoints = util::GetSphereVolumePointsSize(config.graphBuilder.pointsOnRadius);
+    int maxDiskPoints = util::GetDiskPointsSize(config.lightingCalculator.pointsOnRadiusLight);
+    int maxSpherePoints = util::GetSphereVolumePointsSize(config.graphBuilder.pointsOnRadiusTransmittance);
     int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
 
     int64_t numRays = Sqr(maxDimensionSteps);

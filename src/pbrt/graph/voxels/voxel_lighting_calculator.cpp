@@ -20,7 +20,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
     int lightRaysPerVoxelDist = 4;
 
     float L = 1;
-    L /= static_cast<float>(config.lightRayIterations)
+    L /= static_cast<float>(config.lightIterations)
        * static_cast<float>(Sqr(lightRaysPerVoxelDist))
        * uniformGraph->GetSpacing();
 
@@ -51,7 +51,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
         }
     }
 
-    int workNeeded = raysHitting * config.lightRayIterations;
+    int workNeeded = raysHitting * config.lightIterations;
     ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
     int numRaysScatteredOutsideGrid = 0;
@@ -77,7 +77,7 @@ SparseVec VoxelLightingCalculator::GetLightVector() {
 
             float tMax = shapeIsect->tHit;
 
-            for (int i = 0; i < config.lightRayIterations; ++i) {
+            for (int i = 0; i < config.lightIterations; ++i) {
                 sampler.StartPixelSample(Point2i(x, y), i);
 
                 // Initialize _RNG_ for sampling the majorant transmittance

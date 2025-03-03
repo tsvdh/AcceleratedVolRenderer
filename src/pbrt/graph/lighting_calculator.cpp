@@ -8,26 +8,11 @@ LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& med
                                        const LightingCalculatorConfig& config, bool quiet, int sampleIndexOffset)
     : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
       sampleIndexOffset(sampleIndexOffset) {
-    if (config.lightRayIterations <= 0)
+    if (config.lightIterations <= 0)
         ErrorExit("Must have at least one light ray iteration");
 
-    CheckSequentialIds();
+    graph.CheckSequentialIds();
     numVertices = static_cast<int>(graph.GetVerticesConst().size());
-}
-
-void LightingCalculator::CheckSequentialIds() const {
-    std::vector<int> ids;
-    ids.reserve(graph.GetVertices().size());
-
-    for (auto& [id, _] : graph.GetVerticesConst())
-        ids.push_back(id);
-
-    std::sort(ids.begin(), ids.end(), [](int a, int b) { return a < b; });
-
-    for (int i = 0; i < ids.size(); ++i) {
-        if (ids[i] != i)
-            ErrorExit("Graph must have sequential vertex ids for mapping to matrices");
-    }
 }
 
 int LightingCalculator::ComputeFinalLight(int bouncesIndex) {
@@ -47,7 +32,6 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
 
     if (bounces > 0) {
         SparseMat transmittance = GetTransmittanceMatrix();
-        // SparseMat weightedTransmittance = transmittance * GetPathContinueMatrix();
         SparseVec pathContinueVector = GetPathContinueVector();
 
         SparseVec curLight = finalLight;
