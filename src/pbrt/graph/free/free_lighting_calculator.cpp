@@ -72,8 +72,8 @@ SparseVec FreeLightingCalculator::GetLightVector() {
             mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
             startEnd.SkipForward(startEnd.startT);
 
-            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.lightIterations,
-                curIndex));
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, std::nullopt, startEnd, mediumData, samplerClone,
+                config.lightIterations, curIndex));
 
             progress.Update(config.lightIterations);
         }

@@ -698,8 +698,10 @@ void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
                 startEnd.SkipForward(startEnd.startT);
             }
 
-            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, startEnd, mediumData, samplerClone, config.transmittanceIterations,
-                curIndex));
+            RayDifferential rayInSphere(rayToSphere(startEnd.startScatterT), pointToPointDirection, 0, mediumData.medium);
+
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, rayInSphere, startEnd, mediumData, samplerClone,
+                config.transmittanceIterations, curIndex));
 
             progress.Update(config.transmittanceIterations);
         }

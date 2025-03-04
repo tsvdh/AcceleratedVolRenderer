@@ -344,16 +344,14 @@ inline float SampleTransmittance(const Ray& ray, float tMax, Sampler sampler, co
     return Tr;
 }
 
-inline std::tuple<float, float> SampleScatter(const Ray& ray, float tMax, Sampler sampler, const MediumData& mediumData) {
+inline bool SampleScatter(const Ray& ray, float tMax, Sampler sampler, const MediumData& mediumData) {
     // Initialize _RNG_ for sampling the majorant transmittance
     RNG rng(Hash(sampler.Get1D()), Hash(sampler.Get1D()));
 
-    float Tr = 1;
-    float Tr_maj = 1;
     bool scattered = false;
 
     // Sample new point on ray
-    SampledSpectrum T_majRemain = SampleT_maj(
+    SampleT_maj(
         ray, tMax, sampler.Get1D(), rng, mediumData.defaultLambda,
         [&](Point3f p, MediumProperties mp, SampledSpectrum sigma_maj, SampledSpectrum T_maj) {
             // Compute medium event probabilities for interaction
@@ -368,9 +366,6 @@ inline std::tuple<float, float> SampleScatter(const Ray& ray, float tMax, Sample
 
             if (mode == 0) {
                 // Handle absorption along ray path
-                Tr = 0;
-                Tr_maj = 0;
-                scattered = true;
                 return false;
             }
             if (mode == 1) {
@@ -379,18 +374,11 @@ inline std::tuple<float, float> SampleScatter(const Ray& ray, float tMax, Sample
                 return false;
             }
             else {
-                // Handle null scattering along ray path
-                SampledSpectrum sigma_n = ClampZero(sigma_maj - mp.sigma_a - mp.sigma_s);
-                Tr *= sigma_n[0] / sigma_maj[0];
-                Tr_maj *= T_maj[0];
                 return true;
             }
         });
 
-    if (scattered)
-        Tr_maj *= T_majRemain[0];
-
-    return scattered ? std::tuple{Tr, Tr_maj} : std::tuple{0, 0};
+    return scattered;
 }
 
 enum HitsType {
@@ -740,38 +728,29 @@ inline void from_json(const json& jsonObject, Config& config) {
 
 using namespace pbrt;
 
-inline float GetSigmaMajUnitDistNormalizer(const Ray& ray, float tMax, const util::MediumData& mediumData, ScratchBuffer& buffer) {
-    float sigmaMaj = 0;
-
-    RayMajorantIterator iterator = mediumData.medium.SampleRay(ray, tMax, mediumData.defaultLambda, buffer);
-    while (true) {
-        pstd::optional<RayMajorantSegment> segment = iterator.Next();
-        if (!segment)
-            break;
-
-        sigmaMaj += segment->sigma_maj[0] * (segment->tMax - segment->tMin) / tMax;
-    }
-
-    return 1 - FastExp(-sigmaMaj);
-}
-
-inline float ComputeRaysToSphere(const RayDifferential& rayToSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
+inline float ComputeRaysToSphere(const RayDifferential& rayToSphere, const std::optional<RayDifferential>& rayInSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
                                           Sampler sampler, int iterations, uint64_t samplingIndex) {
     int yCoor = static_cast<int>(samplingIndex / Options->graph.samplingResolution->x);
     int xCoor = static_cast<int>(samplingIndex - yCoor * Options->graph.samplingResolution->x);
 
     float distInSphere = startEnd.endScatterT - startEnd.startScatterT;
 
-    float transmittanceToSphere = 0;
+    util::Averager transmittanceToSphereAverager(iterations);
+    util::Averager scatterInSphereAverager(iterations);
+
     for (int i = 0; i < iterations; ++i) {
         sampler.StartPixelSample({xCoor, yCoor}, i);
 
-        float curDistInSphere = distInSphere * sampler.Get1D();
-        float curTotalDist = startEnd.startScatterT + curDistInSphere;
-        transmittanceToSphere += SampleTransmittance(rayToSphere, curTotalDist, sampler, mediumData);
+        transmittanceToSphereAverager.AddValue(SampleTransmittance(rayToSphere, startEnd.startScatterT, sampler, mediumData));
+        if (rayInSphere.has_value())
+            scatterInSphereAverager.AddValue(SampleScatter(rayInSphere.value(), distInSphere, sampler, mediumData));
     }
 
-    return transmittanceToSphere / static_cast<float>(iterations);
+    float transmittance = transmittanceToSphereAverager.GetAverage();
+    if (rayInSphere.has_value())
+        transmittance *= scatterInSphereAverager.GetAverage();
+
+    return transmittance;
 }
 
 }
