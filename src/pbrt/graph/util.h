@@ -741,7 +741,9 @@ inline float ComputeRaysToSphere(const RayDifferential& rayToSphere, const std::
     for (int i = 0; i < iterations; ++i) {
         sampler.StartPixelSample({xCoor, yCoor}, i);
 
-        transmittanceToSphereAverager.AddValue(SampleTransmittance(rayToSphere, startEnd.startScatterT, sampler, mediumData));
+        float curDistInSphere = rayInSphere.has_value() ? 0 : distInSphere * sampler.Get1D();
+        float curTransmittanceDist = startEnd.startScatterT + curDistInSphere;
+        transmittanceToSphereAverager.AddValue(SampleTransmittance(rayToSphere, curTransmittanceDist, sampler, mediumData));
         if (rayInSphere.has_value())
             scatterInSphereAverager.AddValue(SampleScatter(rayInSphere.value(), distInSphere, sampler, mediumData));
     }
