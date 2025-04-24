@@ -540,6 +540,45 @@ std::vector<std::string> Image::ChannelNames(const ImageChannelDesc &desc) const
     return names;
 }
 
+std::tuple<ImageChannelValues, ImageChannelValues, ImageChannelValues> Image::ME(const ImageChannelDesc& desc, const Image& ref, Image* errorImage) const {
+    std::vector sumErrorAbsolute(desc.size(), 0.);
+    std::vector sumErrorPositive(desc.size(), 0.);
+    std::vector sumErrorNegative(desc.size(), 0.);
+
+    ImageChannelDesc refDesc = ref.GetChannelDesc(ChannelNames(desc));
+    CHECK(static_cast<bool>(refDesc));
+    CHECK_EQ(Resolution(), ref.Resolution());
+
+    for (int y = 0; y < Resolution().y; ++y)
+        for (int x = 0; x < Resolution().x; ++x) {
+            ImageChannelValues v = GetChannels({x, y}, desc);
+            ImageChannelValues vref = ref.GetChannels({x, y}, refDesc);
+
+            for (int c = 0; c < desc.size(); ++c) {
+                double error = static_cast<double>(v[c]) - static_cast<double>(vref[c]);
+                if (IsInf(error))
+                    continue;
+
+                sumErrorAbsolute[c] += std::abs(error);
+                if (error > 0)
+                    sumErrorPositive[c] += error;
+                else
+                    sumErrorNegative[c] += error;
+            }
+        }
+
+    ImageChannelValues errorAbsolute(desc.size());
+    ImageChannelValues errorPositive(desc.size());
+    ImageChannelValues errorNegative(desc.size());
+    float numPixels = static_cast<Float>(Resolution().x) * static_cast<Float>(Resolution().y);
+    for (int c = 0; c < desc.size(); ++c) {
+        errorAbsolute[c] = static_cast<float>(sumErrorAbsolute[c]) / numPixels;
+        errorPositive[c] = static_cast<float>(sumErrorPositive[c]) / numPixels;
+        errorNegative[c] = static_cast<float>(sumErrorNegative[c]) / numPixels;
+    }
+    return std::tuple{errorAbsolute, errorPositive, errorNegative};
+}
+
 ImageChannelValues Image::MAE(const ImageChannelDesc &desc, const Image &ref,
                               Image *errorImage) const {
     std::vector<double> sumError(desc.size(), 0.);

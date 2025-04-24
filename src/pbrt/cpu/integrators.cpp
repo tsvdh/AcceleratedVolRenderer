@@ -209,11 +209,13 @@ void ImageTileIntegrator::Render() {
                 ImageMetadata filmMetadata;
                 Image filmImage =
                     camera.GetFilm().GetImage(&filmMetadata, 1.f / waveStart);
-                ImageChannelValues mse =
-                    filmImage.MSE(filmImage.AllChannelsDesc(), *referenceImage);
-                fprintf(mseOutFile, "%d, %.9g\n", waveStart, mse.Average());
+                ImageChannelValues mse =filmImage.MSE(filmImage.AllChannelsDesc(), *referenceImage);
                 metadata.MSE = mse.Average();
-                fflush(mseOutFile);
+
+                if (!Options->mseFinalOnly || waveStart == spp) {
+                    fprintf(mseOutFile, "%d, %.9g\n", waveStart, mse.Average());
+                    fflush(mseOutFile);
+                }
             }
             if (waveStart == spp || Options->writePartialImages) {
                 camera.InitMetadata(&metadata);
@@ -2324,7 +2326,6 @@ SampledSpectrum BDPTIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
         }
     }
 
-    std::cout << L << std::endl;
     return L;
 }
 
@@ -2431,8 +2432,6 @@ SampledSpectrum ConnectBDPT(const Integrator &integrator, SampledWavelengths &la
                          .c_str());
             if (L)
                 L *= G(integrator, sampler, qs, pt, lambda);
-
-            // std::cout << L[0] << " ";
         }
     }
 

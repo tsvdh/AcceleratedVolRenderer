@@ -12,6 +12,7 @@
 #endif // __HIP_PLATFORM_AMD__
 #include <pbrt/gpu/util.h>
 #endif  // PBRT_BUILD_GPU_RENDERER
+#include <fstream>
 #include <pbrt/util/args.h>
 #include <pbrt/util/check.h>
 #include <pbrt/util/color.h>
@@ -136,9 +137,10 @@ static std::map<std::string, CommandUsage> commandUsage = {
     --crop <x0,x1,y0,y1> Crop images before performing diff.
     --difftol <v>      Acceptable image difference percentage before differences
                        are reported. Default: 0
-    --metric <name>    Error metric to use. (Options: "MAE", "MSE", "MRSE", "FLIP")
+    --metric <name>    Error metric to use. (Options: "ME", "MAE", "MSE", "MRSE", "FLIP")
     --outfile <name>   Filename to use for saving an image that encodes the
                        absolute value of per-pixel differences.
+    --diffFile         Filename to use for saving the computed difference
     --reference <name> Filename for reference image
 )")}},
 #ifdef PBRT_BUILD_GPU_RENDERER
@@ -1058,7 +1060,7 @@ int error(std::vector<std::string> args) {
 }
 
 int diff(std::vector<std::string> args) {
-    std::string outFile, imageFile, referenceFile, metric = "MSE";
+    std::string outFile, diffFile, imageFile, referenceFile, metric = "MSE";
     std::string channels = "R,G,B";
     std::array<int, 4> cropWindow = {-1, 0, -1, 0};
 
@@ -1069,6 +1071,7 @@ int diff(std::vector<std::string> args) {
         };
 
         if (ParseArg(&iter, args.end(), "outfile", &outFile, onError) ||
+            ParseArg(&iter, args.end(), "diffFile", &diffFile, onError) ||
             ParseArg(&iter, args.end(), "reference", &referenceFile, onError) ||
             ParseArg(&iter, args.end(), "metric", &metric, onError) ||
             ParseArg(&iter, args.end(), "channels", &channels, onError) ||
@@ -1089,8 +1092,8 @@ int diff(std::vector<std::string> args) {
     if (referenceFile.empty())
         usage("diff", "must specify --reference image");
 
-    if (metric != "MAE" && metric != "MSE" && metric != "MRSE" && metric != "FLIP")
-        usage("diff", "%s: --metric must be \"MAE\", \"MSE\", \"MRSE\", or \"FLIP\".",
+    if (metric != "ME" && metric != "MAE" && metric != "MSE" && metric != "MRSE" && metric != "FLIP")
+        usage("diff", "%s: --metric must be \"ME\", \"MAE\", \"MSE\", \"MRSE\", or \"FLIP\".",
               metric.c_str());
 
     ImageAndMetadata refRead = Image::Read(referenceFile);
@@ -1159,7 +1162,11 @@ int diff(std::vector<std::string> args) {
 
     Image errorImage;
     ImageChannelValues error(refImage.NChannels());
-    if (metric == "MAE")
+    ImageChannelValues errorPositive(refImage.NChannels());
+    ImageChannelValues errorNegative(refImage.NChannels());
+    if (metric == "ME")
+        std::tie(error, errorPositive, errorNegative) = image.ME(image.AllChannelsDesc(), refImage, &errorImage);
+    else if (metric == "MAE")
         error = image.MAE(image.AllChannelsDesc(), refImage, &errorImage);
     else if (metric == "MSE")
         error = image.MSE(image.AllChannelsDesc(), refImage, &errorImage);
@@ -1202,9 +1209,9 @@ int diff(std::vector<std::string> args) {
             error[c] /= image.Resolution().x * image.Resolution().y;
     }
 
-    if (error.MaxValue() == 0)
-        // Same same.
-        return 0;
+    // if (error.MaxValue() == 0)
+    //     // Same same.
+    //     return 0;
 
     float delta = 100.f * (imageAverage - refAverage) / refAverage;
     std::string deltaString = StringPrintf("%f%% delta", delta);
@@ -1215,9 +1222,14 @@ int diff(std::vector<std::string> args) {
     Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), %s = %f\n", imageFile,
            referenceFile, imageAverage, refAverage, deltaString, metric, error.Average());
 
-    if (!outFile.empty()) {
-        if (!errorImage.Write(outFile, im.metadata))
-            return 1;
+    if (!outFile.empty())
+        return errorImage.Write(outFile, im.metadata);
+
+    if (!diffFile.empty()) {
+        std::ofstream file(diffFile);
+        file << StringPrintf("%s\n%s\n%s", error.Average(), errorPositive.Average(), errorNegative.Average()) << std::endl;
+        file.close();
+        return 1;
     }
 
     return 1;

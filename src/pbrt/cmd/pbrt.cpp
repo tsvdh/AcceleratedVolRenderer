@@ -60,6 +60,7 @@ Rendering options:
   --maxdepth                    Specify the maximum light path depth of the integrator
   --mse-reference-image         Filename for reference image to use for MSE computation.
   --mse-reference-out           File to write MSE error vs spp results.
+  --mse-final-only              Write only final MSE to file
   --nthreads <num>              Use specified number of threads for rendering.
   --outfile <filename>          Write the final image to the given filename.
   --pixel <x,y>                 Render just the specified pixel.
@@ -189,10 +190,9 @@ int main(int argc, char *argv[]) {
             ParseArg(&iter, args.end(), "interactive", &options.interactive, onError) ||
             ParseArg(&iter, args.end(), "fullscreen", &options.fullscreen, onError) ||
             ParseArg(&iter, args.end(), "maxdepth", &options.maxdepth, onError) ||
-            ParseArg(&iter, args.end(), "mse-reference-image", &options.mseReferenceImage,
-                     onError) ||
-            ParseArg(&iter, args.end(), "mse-reference-out", &options.mseReferenceOutput,
-                     onError) ||
+            ParseArg(&iter, args.end(), "mse-reference-image", &options.mseReferenceImage, onError) ||
+            ParseArg(&iter, args.end(), "mse-reference-out", &options.mseReferenceOutput, onError) ||
+            ParseArg(&iter, args.end(), "mse-final-only", &options.mseFinalOnly, onError) ||
             ParseArg(&iter, args.end(), "nthreads", &options.nThreads, onError) ||
             ParseArg(&iter, args.end(), "outfile", &options.imageFile, onError) ||
             ParseArg(&iter, args.end(), "pixelstats", &options.recordPixelStatistics,

@@ -466,6 +466,7 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) {
 }
 
 void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
+    auto startTime = std::chrono::high_resolution_clock::now();
     if (!quiet)
         std::cout << "Searching for sparse areas... ";
 
@@ -479,8 +480,10 @@ void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
             sparseVertices.push_back(id);
     }
 
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
     if (!quiet) {
-        std::cout << "done" << std::endl;
+        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
         std::cout << StringPrintf("%s / %s vertices found with few neighbours", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
     }
 

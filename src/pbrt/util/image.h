@@ -322,6 +322,7 @@ class Image {
     bool HasAnyInfinitePixels() const;
     bool HasAnyNaNPixels() const;
 
+    std::tuple<ImageChannelValues, ImageChannelValues, ImageChannelValues> ME(const ImageChannelDesc &desc, const Image& ref, Image* errorImage = nullptr) const;
     ImageChannelValues MAE(const ImageChannelDesc &desc, const Image &ref,
                            Image *errorImage = nullptr) const;
     ImageChannelValues MSE(const ImageChannelDesc &desc, const Image &ref,

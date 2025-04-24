@@ -183,11 +183,13 @@ void VolPathCustomIntegrator::Render() {
                 ImageMetadata filmMetadata;
                 Image filmImage =
                         camera.GetFilm().GetImage(&filmMetadata, 1.f / static_cast<float>(waveStart));
-                ImageChannelValues mse =
-                        filmImage.MSE(filmImage.AllChannelsDesc(), *referenceImage);
-                fprintf(mseOutFile, "%d, %.9g\n", waveStart, mse.Average());
+                ImageChannelValues mse =filmImage.MSE(filmImage.AllChannelsDesc(), *referenceImage);
                 metadata.MSE = mse.Average();
-                fflush(mseOutFile);
+
+                if (!Options->mseFinalOnly || waveStart == spp) {
+                    fprintf(mseOutFile, "%d, %.9g\n", waveStart, mse.Average());
+                    fflush(mseOutFile);
+                }
             }
             if (waveStart == spp || Options->writePartialImages) {
                 camera.InitMetadata(&metadata);

@@ -543,6 +543,7 @@ UniformGraph UniformGraph::ReadFromDisk(const std::string& fileName) {
     UniformGraph graph;
     std::ifstream file(util::FileNameToPath(fileName));
     graph.ReadFromStream(file);
+    file.close();
     return graph;
 }
 
@@ -609,6 +610,7 @@ FreeGraph FreeGraph::ReadFromDisk(const std::string& fileName) {
     FreeGraph graph;
     std::ifstream file(util::FileNameToPath(fileName));
     graph.ReadFromStream(file);
+    file.close();
     return graph;
 }
 
