@@ -163,6 +163,11 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
         std::vector throughput{1.f};
         std::vector<MediumInteraction> points;
 
+        // support for camera inside the volume
+        // if (pstd::optional<ShapeIntersection> shapeIntersection = Intersect(ray)) {
+        //     ray.medium = shapeIntersection->intr.mediumInterface->inside;
+        // }
+
         while (true) {
             pstd::optional<ShapeIntersection> shapeIntersection = Intersect(ray);
             if (ray.medium) {

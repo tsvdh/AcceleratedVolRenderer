@@ -294,6 +294,11 @@ SampledSpectrum VolPathCustomIntegrator::Li(RayDifferential ray, SampledWaveleng
     Float etaScale = 1;
     LightSampleContext prevIntrContext;
 
+    // support for camera inside the volume
+    // if (pstd::optional<ShapeIntersection> shapeIntersection = Intersect(ray)) {
+    //     ray.medium = shapeIntersection->intr.mediumInterface->inside;
+    // }
+
     while (true) {
         // Sample segment of volumetric scattering path
         PBRT_DBG("%s\n", StringPrintf("Path tracer depth %d, current L = %s, beta = %s\n",
