@@ -68,6 +68,7 @@ class ProgressReporter {
     std::atomic<bool> exitThread;
     std::thread updateThread;
     pstd::optional<float> finishTime;
+    std::atomic<int> printPlusStatus;
 
 #ifdef PBRT_BUILD_GPU_RENDERER
     std::vector<cudaEvent_t> gpuEvents;

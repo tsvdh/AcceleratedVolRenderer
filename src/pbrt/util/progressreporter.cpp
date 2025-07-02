@@ -39,6 +39,7 @@ ProgressReporter::ProgressReporter(int64_t totalWork, std::string title, bool qu
     : totalWork(std::max<int64_t>(1, totalWork)), title(title), quiet(quiet) {
     workDone = 0;
     exitThread = false;
+    printPlusStatus = 0;
 
 #ifdef PBRT_BUILD_GPU_RENDERER
     if (gpu) {
@@ -76,14 +77,8 @@ void ProgressReporter::printBar() {
     // Initialize progress string
     const int bufLen = title.size() + totalPlusses + 64;
     std::unique_ptr<char[]> buf = std::make_unique<char[]>(bufLen);
-    snprintf(buf.get(), bufLen, "\r%s: [", title.c_str());
+    snprintf(buf.get(), bufLen, "\r%s: ", title.c_str());
     char *curSpace = buf.get() + strlen(buf.get());
-    char *s = curSpace;
-    for (int i = 0; i < totalPlusses; ++i)
-        *s++ = ' ';
-    *s++ = ']';
-    *s++ = ' ';
-    *s++ = '\0';
     fputs(buf.get(), stdout);
     fflush(stdout);
 
@@ -107,6 +102,9 @@ void ProgressReporter::printBar() {
         if (iterCount == 10)
             // Up to 0.5s after ~2.5s elapsed
             sleepDuration *= 2;
+        else if (iterCount == 25)
+            // After ~10s
+            ++printPlusStatus;
         else if (iterCount == 70)
             // Up to 1s after an additional ~30s have elapsed.
             sleepDuration *= 2;
@@ -129,11 +127,27 @@ void ProgressReporter::printBar() {
         }
 #endif
 
+        if (printPlusStatus == 1) {
+            ++printPlusStatus;
+
+            char *s = curSpace;
+            *s++ = '[';
+            for (int i = 0; i < totalPlusses; ++i)
+                *s++ = ' ';
+            *s++ = ']';
+            *s++ = ' ';
+            *s++ = '\0';
+
+            *curSpace++;
+        }
+
         Float percentDone = Float(workDone) / Float(totalWork);
-        int plussesNeeded = std::round(totalPlusses * percentDone);
-        while (plussesPrinted < plussesNeeded) {
-            *curSpace++ = '+';
-            ++plussesPrinted;
+        if (printPlusStatus == 2) {
+            int plussesNeeded = std::round(totalPlusses * percentDone);
+            while (plussesPrinted < plussesNeeded) {
+                *curSpace++ = '+';
+                ++plussesPrinted;
+            }
         }
         fputs(buf.get(), stdout);
 

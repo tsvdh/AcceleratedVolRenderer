@@ -123,9 +123,13 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             int to = path[pathSize - 1];
 
             if (from != to) {
+                ++connected;
                 Vertex& fromVertex = graph.GetVertex(from)->get();
+
                 if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
                     graph.AddEdge(from, to, EdgeData{});
+                else
+                    ++connectedAgain;
             } else
                 ++scattersInSameSphere;
         }
@@ -238,6 +242,8 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     if (!quiet) {
         std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
             graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
+        std::cout << StringPrintf("Edges connected more than once: %s / %s (%s)",
+            connectedAgain, connected, static_cast<float>(connectedAgain) / static_cast<float>(connected)) << std::endl;
         std::cout << StringPrintf("Edges added: %s", edgesAdded) << std::endl;
 
         util::Averager pathRemainLengthAverager;

@@ -37,9 +37,12 @@ private:
     float squaredSearchRadius;
     int sampleIndexOffset;
 
+    // logging
     int64_t scattersInSameSphere = 0;
     int64_t scattersInSameSphereCorrected = 0;
     int64_t totalScatters = 0;
     int64_t edgesAdded = 0;
+    int64_t connected = 0;
+    int64_t connectedAgain = 0;
 };
 }
