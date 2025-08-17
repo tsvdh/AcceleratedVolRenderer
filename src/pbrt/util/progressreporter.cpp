@@ -2,6 +2,7 @@
 // The pbrt source code is licensed under the Apache License, Version 2.0.
 // SPDX: Apache-2.0
 
+#include <iostream>
 #include <pbrt/util/progressreporter.h>
 
 #ifdef PBRT_BUILD_GPU_RENDERER
@@ -69,8 +70,30 @@ ProgressReporter::~ProgressReporter() {
     Done();
 }
 
+inline std::string formatTime(int totalSeconds) {
+    int hours = totalSeconds / 3600;
+    int minutes = totalSeconds / 60 - hours * 60;
+    int seconds = totalSeconds - hours * 3600 - minutes * 60;
+
+    if (hours > 0)
+        return StringPrintf("%ih %im %is", hours, minutes, seconds);
+    if (minutes > 0)
+        return StringPrintf("%im %is", minutes, seconds);
+
+    return StringPrintf("%is", seconds);
+}
+
+inline std::string formatTime(float totalSeconds) {
+    float whole;
+    float fractional = std::modf(totalSeconds, &whole);
+    std::string formattedTime = formatTime(static_cast<int>(whole));
+    return StringPrintf("%s.%ss",
+        formattedTime.substr(0, formattedTime.size() - 1),
+        StringPrintf("%.1f", fractional).substr(2, 2));
+}
+
 void ProgressReporter::printBar() {
-    int barLength = TerminalWidth() - 28;
+    int barLength = TerminalWidth() - 40;
     int totalPlusses = std::max<int>(2, barLength - title.size());
     int plussesPrinted = 0;
 
@@ -88,7 +111,6 @@ void ProgressReporter::printBar() {
     std::chrono::milliseconds sleepDuration(250);
 #endif
 
-    int iterCount = 0;
     bool reallyExit = false;  // make sure we do one more go-round to get the final report
     while (!reallyExit) {
         if (exitThread)
@@ -96,21 +118,16 @@ void ProgressReporter::printBar() {
         else
             std::this_thread::sleep_for(sleepDuration);
 
-        // Periodically increase sleepDuration to reduce overhead of
-        // updates.
-        ++iterCount;
-        if (iterCount == 10)
-            // Up to 0.5s after ~2.5s elapsed
-            sleepDuration *= 2;
-        else if (iterCount == 25)
-            // After ~10s
+        // Periodically increase sleepDuration to reduce overhead of updates.
+        Float elapsed = ElapsedSeconds();
+        if (elapsed > 5 && elapsed < 10)
+            sleepDuration = std::chrono::milliseconds(500);
+        else if (elapsed > 10 && elapsed < 60 && printPlusStatus == 0)
             ++printPlusStatus;
-        else if (iterCount == 70)
-            // Up to 1s after an additional ~30s have elapsed.
-            sleepDuration *= 2;
-        else if (iterCount == 520)
-            // After 15m, jump up to 5s intervals
-            sleepDuration *= 5;
+        else if (elapsed > 60 && elapsed < 15 * 60)
+            sleepDuration = std::chrono::milliseconds(1000);
+        else if (elapsed > 15 * 60)
+            sleepDuration = std::chrono::milliseconds(5000);
 
 #ifdef PBRT_BUILD_GPU_RENDERER
         if (gpuEvents.size()) {
@@ -130,7 +147,7 @@ void ProgressReporter::printBar() {
         if (printPlusStatus == 1) {
             ++printPlusStatus;
 
-            char *s = curSpace;
+            char* s = curSpace;
             *s++ = '[';
             for (int i = 0; i < totalPlusses; ++i)
                 *s++ = ' ';
@@ -138,7 +155,7 @@ void ProgressReporter::printBar() {
             *s++ = ' ';
             *s++ = '\0';
 
-            *curSpace++;
+            curSpace++;
         }
 
         Float percentDone = Float(workDone) / Float(totalWork);
@@ -152,16 +169,19 @@ void ProgressReporter::printBar() {
         fputs(buf.get(), stdout);
 
         // Update elapsed time and estimated time to completion
-        Float elapsed = ElapsedSeconds();
+
         Float estRemaining = elapsed / percentDone - elapsed;
+        int elapsedRounded = static_cast<int>(std::floor(elapsed));
+        int estRemainingRounded = static_cast<int>(std::floor(estRemaining));
+
         if (exitThread)
-            printf(" (%.1fs)       ", *finishTime);
+            printf(" (%s)               ", formatTime(*finishTime).c_str());
         else if (percentDone == 1.f)
-            printf(" (%.1fs)       ", elapsed);
+            printf(" (%s)               ", formatTime(elapsedRounded).c_str());
         else if (!std::isinf(estRemaining))
-            printf(" (%.1fs|%.1fs)  ", elapsed, std::max<Float>(0, estRemaining));
+            printf(" (%s|%s)            ", formatTime(elapsedRounded).c_str(), formatTime(std::max<int>(0, estRemainingRounded)).c_str());
         else
-            printf(" (%.1fs|?s)  ", elapsed);
+            printf(" (%s|?)             ", formatTime(elapsedRounded).c_str());
         fflush(stdout);
     }
 }
