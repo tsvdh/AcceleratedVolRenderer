@@ -832,19 +832,8 @@ set(GRAPH
         src/pbrt/graph/lighting_calculator.h
         src/pbrt/graph/lighting_calculator.cpp
 
-        src/pbrt/graph/voxels/voxel_boundary.h
-        src/pbrt/graph/voxels/voxel_boundary.cpp
-        src/pbrt/graph/voxels/voxel_transmittance.h
-        src/pbrt/graph/voxels/voxel_transmittance.cpp
-        src/pbrt/graph/voxels/voxel_lighting_calculator.h
-        src/pbrt/graph/voxels/voxel_lighting_calculator.cpp
-
-        src/pbrt/graph/free/subdivider.h
-        src/pbrt/graph/free/subdivider.cpp
         src/pbrt/graph/free/free_graph_builder.h
         src/pbrt/graph/free/free_graph_builder.cpp
-        src/pbrt/graph/free/free_lighting_calculator.h
-        src/pbrt/graph/free/free_lighting_calculator.cpp
 
         src/pbrt/graph/deps/json.hpp
         src/pbrt/graph/deps/nanoflann.hpp

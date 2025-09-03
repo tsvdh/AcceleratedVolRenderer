@@ -644,11 +644,6 @@ struct GraphBuilderConfig {
     int dimensionSteps;
     int iterationsPerStep;
 
-    // transmittance calculation
-    int transmittanceIterations;
-    int pointsOnRadiusTransmittance;
-    bool runInParallel;
-
     // sparse reinforcement
     bool reinforceSparseAreas;
     int neighboursForNotSparse;
@@ -657,8 +652,8 @@ struct GraphBuilderConfig {
     int pointsOnRadiusReinforcement;
 
     // pruning
-    float pruneEdgeMinimum;
-    int pruneVertexMinimum;
+    bool pruneLowDensity;
+    int pruneVertexOutEdgesMinimum;
 };
 
 struct LightingCalculatorConfig {
@@ -668,17 +663,9 @@ struct LightingCalculatorConfig {
     bool runInParallel;
 };
 
-struct SubDividerConfig {
-    int subdivisions;
-    GraphBuilderConfig graphBuilder;
-    LightingCalculatorConfig lightingCalculator;
-    bool runInParallel;
-};
-
 struct Config {
     GraphBuilderConfig graphBuilder;
     LightingCalculatorConfig lightingCalculator;
-    SubDividerConfig subdivider;
 };
 
 inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderConfig) {
@@ -690,12 +677,8 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);
 
-    graphBuilder.at("transmittanceIterations").get_to(graphBuilderConfig.transmittanceIterations);
-    graphBuilder.at("pointsOnRadiusTransmittance").get_to(graphBuilderConfig.pointsOnRadiusTransmittance);
-    graphBuilder.at("runInParallel").get_to(graphBuilderConfig.runInParallel);
-
-    graphBuilder.at("pruneEdgeMinimum").get_to(graphBuilderConfig.pruneEdgeMinimum);
-    graphBuilder.at("pruneVertexMinimum").get_to(graphBuilderConfig.pruneVertexMinimum);
+    graphBuilder.at("pruneLowDensity").get_to(graphBuilderConfig.pruneLowDensity);
+    graphBuilder.at("pruneVertexOutEdgesMinimum").get_to(graphBuilderConfig.pruneVertexOutEdgesMinimum);
 
     graphBuilder.at("reinforceSparseAreas").get_to(graphBuilderConfig.reinforceSparseAreas);
     graphBuilder.at("neighboursForNotSparse").get_to(graphBuilderConfig.neighboursForNotSparse);
@@ -712,18 +695,9 @@ inline void from_json(const json& jsonObject, LightingCalculatorConfig& lighting
     lightingCalculator.at("runInParallel").get_to(lightingCalculatorConfig.runInParallel);
 }
 
-inline void from_json(const json& jsonObject, SubDividerConfig& subDividerConfig) {
-    auto subdivider = jsonObject.at("subdivider");
-    subdivider.at("subdivisions").get_to(subDividerConfig.subdivisions);
-    from_json(subdivider, subDividerConfig.graphBuilder);
-    from_json(subdivider, subDividerConfig.lightingCalculator);
-    subdivider.at("runInParallel").get_to(subDividerConfig.runInParallel);
-}
-
 inline void from_json(const json& jsonObject, Config& config) {
     from_json(jsonObject, config.graphBuilder);
     from_json(jsonObject, config.lightingCalculator);
-    // from_json(jsonObject, config.subdivider);
 }
 
 using namespace pbrt;

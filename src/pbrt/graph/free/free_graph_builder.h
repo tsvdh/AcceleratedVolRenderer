@@ -9,13 +9,11 @@ using namespace pbrt;
 class FreeGraphBuilder {
 public:
     FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config, bool quiet,
-    int sampleIndexOffset = 0);
+                     int sampleIndexOffset = 0);
     FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config, bool quiet,
                      int sampleIndexOffset, float squaredSearchRadius);
 
     FreeGraph TracePaths();
-    void PruneAndClean(FreeGraph& graph);
-    void ComputeTransmittance(FreeGraph& graph);
 
 private:
     int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit);
@@ -26,6 +24,7 @@ private:
     void AddExtraEdges(Graph& graph);
     void ReinforceSparseAreas(FreeGraph& graph);
     void OrderIdsAndRebuildTree(Graph& graph);
+    void PruneAndClean(FreeGraph& graph);
 
     const util::MediumData& mediumData;
     Vector3f inDirection;
@@ -42,7 +41,5 @@ private:
     int64_t scattersInSameSphereCorrected = 0;
     int64_t totalScatters = 0;
     int64_t edgesAdded = 0;
-    int64_t connected = 0;
-    int64_t connectedAgain = 0;
 };
 }

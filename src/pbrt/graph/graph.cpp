@@ -28,7 +28,7 @@ void VertexData::MergeWithDataFrom(const VertexData& otherData) {
         || lightScalar != -1 || otherData.lightScalar != -1)
         ErrorExit(StringPrintf("Cannot merge type or lightScalar").c_str());
 
-    this->pathContinuePDF.AddSamples(otherData.pathContinuePDF);
+    this->totalSamples += otherData.totalSamples;
     this->pathRemainLength.AddSamples(otherData.pathRemainLength);
 }
 
@@ -48,7 +48,7 @@ void Vertex::AddPathIndices(int pathId, const std::vector<int>& indices) {
 }
 
 void EdgeData::MergeWithDataFrom(const EdgeData& otherData) {
-    this->throughput.AddSamples(otherData.throughput);
+    this->samples += otherData.samples;
 }
 
 // Graph implementations
@@ -241,9 +241,11 @@ inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFla
     if (flags.useRayVertexTypes)
         out << data.type << SEP;
 
-    if (flags.useLighting) {
+    if (flags.useLighting)
         out << data.lightScalar << SEP;
-    }
+
+    if (flags.useSamples)
+        out << data.totalSamples << SEP;
 }
 
 inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
@@ -256,27 +258,30 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
         in >> lighting;
     }
 
-    return VertexData{static_cast<RayVertexType>(rayVertexType), lighting};
+    int totalSamples = -1;
+    if (flags.useSamples)
+        in >> totalSamples;
+
+    return VertexData{static_cast<RayVertexType>(rayVertexType), lighting, totalSamples};
 }
 
 inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
-    if (flags.useThroughput)
-        out << data.throughput.value << SEP << data.throughput.numSamples << SEP;
+    if (flags.useSamples)
+        out << data.samples << SEP;
 }
 
 inline EdgeData ReadEdgeData(std::istream& in, StreamFlags flags) {
-    float throughput = - 1;
-    float numSamples = -1;
+    int samples = -1;
 
-    if (flags.useThroughput)
-        in >> throughput >> numSamples;
+    if (flags.useSamples)
+        in >> samples;
 
-    return EdgeData{throughput, numSamples};
+    return EdgeData{samples};
 }
 
 void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
     out << (flags.useCoors ? "True" : "False") << SEP
-        << (flags.useThroughput ? "True" : "False") << SEP
+        << (flags.useSamples ? "True" : "False") << SEP
         << (flags.useRayVertexTypes ? "True" : "False") << SEP
         << (flags.useLighting ? "True" : "False") << NEW;
 
@@ -336,12 +341,12 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
 void Graph::ReadFromStream(std::istream& in) {
     StreamFlags flags;
 
-    std::string useCoors, useThroughput, useRayVertexType, useLighting;
-    in >> useCoors >> useThroughput >> useRayVertexType >> useLighting;
+    std::string useCoors, useSamples, useRayVertexType, useLighting;
+    in >> useCoors >> useSamples >> useRayVertexType >> useLighting;
     if (useCoors == "True")
         flags.useCoors = true;
-    if (useThroughput == "True")
-        flags.useThroughput = true;
+    if (useSamples == "True")
+        flags.useSamples = true;
     if (useRayVertexType == "True")
         flags.useRayVertexTypes = true;
     if (useLighting == "True")

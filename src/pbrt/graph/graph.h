@@ -49,7 +49,7 @@ struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
 
-    SamplesStore pathContinuePDF;
+    int totalSamples = 0;
     SamplesStore pathRemainLength;
 
     void MergeWithDataFrom(const VertexData& otherData);
@@ -72,7 +72,7 @@ struct Vertex {
 };
 
 struct EdgeData {
-    SamplesStore throughput;
+    int samples = 0;
 
     void MergeWithDataFrom(const EdgeData& otherData);
 };
@@ -103,7 +103,7 @@ struct Path {
 
 struct StreamFlags {
     bool useCoors = false;
-    bool useThroughput = false;
+    bool useSamples = false;
     bool useRayVertexTypes = false;
     bool useLighting = false;
 };

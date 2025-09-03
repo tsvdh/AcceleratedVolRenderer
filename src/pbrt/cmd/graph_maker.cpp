@@ -1,16 +1,14 @@
 #include <pbrt/scene.h>
 #include <pbrt/graph/graph.h>
-#include <pbrt/graph/voxels/voxel_transmittance.h>
 #include <pbrt/util/args.h>
 
 #include <fstream>
 #include <regex>
 
+#include "pbrt/lights.h"
 #include "pbrt/graph/lighting_calculator.h"
 #include "pbrt/graph/deps/json.hpp"
 #include "pbrt/graph/free/free_graph_builder.h"
-#include "pbrt/graph/free/free_lighting_calculator.h"
-#include "pbrt/graph/free/subdivider.h"
 
 using namespace pbrt;
 
@@ -24,7 +22,7 @@ Graph making options:
 )");
 }
 
-void main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) {
     static_assert(sizeof(double) * CHAR_BIT == 64, "Double must be 64 bits");
 
     std::vector<std::string> args = GetCommandLineArguments(argv);
@@ -74,35 +72,19 @@ void main(int argc, char* argv[]) {
 
     auto config = jsonConfig.get<graph::Config>();
 
-    int maxDimensionSteps = std::max(config.graphBuilder.dimensionSteps,
-                                     config.subdivider.graphBuilder.dimensionSteps);
-    int maxIterationsPerStep = std::max(config.graphBuilder.iterationsPerStep,
-                                        config.subdivider.graphBuilder.iterationsPerStep);
-    int maxMaxDepth = std::max(config.graphBuilder.maxDepth,
-                               config.subdivider.graphBuilder.maxDepth);
+    int dimensionSteps = config.graphBuilder.dimensionSteps;
+    int iterationsPerStep = config.graphBuilder.iterationsPerStep;
+    int maxDepth = config.graphBuilder.maxDepth;
 
-    int maxIterations = std::max(
-        {config.graphBuilder.transmittanceIterations,
-            config.graphBuilder.reinforcementIterations,
-            config.lightingCalculator.lightIterations,
-            config.subdivider.graphBuilder.transmittanceIterations,
-            config.subdivider.graphBuilder.reinforcementIterations,
-            config.subdivider.lightingCalculator.lightIterations});
+    int maxIterations = std::max(config.graphBuilder.reinforcementIterations,
+                                 config.lightingCalculator.lightIterations);
 
-    int maxDiskPoints = util::GetDiskPointsSize(std::max(
-        config.lightingCalculator.pointsOnRadiusLight,
-        config.subdivider.lightingCalculator.pointsOnRadiusLight));
-
-    int maxSpherePoints = util::GetSphereVolumePointsSize(std::max({
-        config.graphBuilder.pointsOnRadiusTransmittance,
-        config.graphBuilder.pointsOnRadiusReinforcement,
-        config.subdivider.graphBuilder.pointsOnRadiusTransmittance,
-        config.subdivider.graphBuilder.pointsOnRadiusReinforcement}));
-
+    int maxDiskPoints = util::GetDiskPointsSize(config.lightingCalculator.pointsOnRadiusLight);
+    int maxSpherePoints = util::GetSphereVolumePointsSize(config.graphBuilder.pointsOnRadiusReinforcement);
     int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
 
-    int64_t numRays = Sqr(maxDimensionSteps);
-    int64_t maxNumVertices = numRays * maxIterationsPerStep * maxMaxDepth;
+    int64_t numRays = Sqr(dimensionSteps);
+    int64_t maxNumVertices = numRays * iterationsPerStep * maxDepth;
     int64_t maxNumRays = maxNumVertices * maxRaysPerVertex;
     int64_t maxSampleDimensionSizeAsLong = std::ceil(std::sqrt(maxNumRays));
     int pixelSamples = RoundUpPow2(maxIterations);
@@ -145,10 +127,8 @@ void main(int argc, char* argv[]) {
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.TracePaths();
-    graphBuilder.ComputeTransmittance(graph);
-    graphBuilder.PruneAndClean(graph);
 
-    graph::FreeLightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
+    graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
 
     // graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, config.subdivider);
@@ -171,7 +151,7 @@ void main(int argc, char* argv[]) {
         std::string graphFileName = std::regex_replace(configName.value(),
             std::regex("\\.json"), StringPrintf("_d%s.txt", depthComputed));
         graph.WriteToDisk(graphFileName, graph::basic,
-                          graph::StreamFlags{false, false, false, true},
+                          graph::StreamFlags{false, true, false, true},
                           graph::StreamOptions{true, false, false});
 
         if (depth != depthComputed) {

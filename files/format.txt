@@ -1,12 +1,13 @@
-graph desc  string-description                                                          super class
+graph desc  string-description                                                       super class
 extra meta	string-name (float-spacing)
 
-flags 		string-useCoors string-useThroughput string-useRayVertexTypes               base class
+flags 		string-useCoors string-useSamples string-useRayVertexTypes               base class
                 string-useLighting
 base meta	int-curVertexId,curEdgeId,curPathId,vertices,edges,paths
 vertices	int-id float-x,y,z (int-x,y,z) (int type) (float-lighting)
+                (int-totalSamples)
 ...
-edges		int-id,from,to (float-throughput int-numSamples)
+edges		int-id,from,to (int-samples)
 ...
 paths		int-id,size, ...int-id...
 ...

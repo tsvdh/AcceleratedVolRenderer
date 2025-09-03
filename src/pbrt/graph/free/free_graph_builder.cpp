@@ -27,10 +27,10 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
     std::vector<int>& path = pathHolder.vertices;
     bool usedTHit = false;
 
-    auto HandlePotentialPathEnd = [&](bool pathContinues) {
+    auto HandlePotentialPathEnd = [&] {
         if (!path.empty()) {
             Vertex& lastVertex = graph.GetVertex(path.back())->get();
-            lastVertex.data.pathContinuePDF.AddSample(pathContinues);
+            ++lastVertex.data.totalSamples;
         }
     };
 
@@ -51,7 +51,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
 
             if (!optIntersection) {
-                HandlePotentialPathEnd(false);
+                HandlePotentialPathEnd();
                 // pathLengths.push_back(path.size());
                 return numNewVertices;
             }
@@ -91,7 +91,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             });
 
         // Handle terminated, scattered, and unscattered medium rays
-        HandlePotentialPathEnd(optNewInteraction.has_value());
+        HandlePotentialPathEnd();
         if (!optNewInteraction) {
             // pathLengths.push_back(path.size());
             return numNewVertices;
@@ -123,13 +123,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             int to = path[pathSize - 1];
 
             if (from != to) {
-                ++connected;
-                Vertex& fromVertex = graph.GetVertex(from)->get();
-
-                if (fromVertex.outEdges.find(to) == fromVertex.outEdges.end())
-                    graph.AddEdge(from, to, EdgeData{});
-                else
-                    ++connectedAgain;
+                graph.AddEdge(from, to, EdgeData{1});
             } else
                 ++scattersInSameSphere;
         }
@@ -239,11 +233,22 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
     UsePathInfo(graph);
 
+    if (config.pruneLowDensity)
+        PruneAndClean(graph);
+
     if (!quiet) {
         std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
             graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
+
+        size_t numEdges = graph.GetEdges().size();
+        size_t numEdgesMoreThanOnce = 0;
+        for (auto& [id, edge] : graph.GetEdges()) {
+            if (edge.data.samples > 1)
+                ++numEdgesMoreThanOnce;
+        }
+        float moreThanOnceRatio = static_cast<float>(numEdgesMoreThanOnce) / static_cast<float>(numEdges);
         std::cout << StringPrintf("Edges connected more than once: %s / %s (%s)",
-            connectedAgain, connected, static_cast<float>(connectedAgain) / static_cast<float>(connected)) << std::endl;
+            numEdgesMoreThanOnce, numEdges, moreThanOnceRatio == 0 ? "-" : std::to_string(moreThanOnceRatio)) << std::endl;
         std::cout << StringPrintf("Edges added: %s", edgesAdded) << std::endl;
 
         util::Averager pathRemainLengthAverager;
@@ -255,14 +260,6 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
             scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
             static_cast<float>(scattersInSameSphereCorrected) / static_cast<float>(totalScatters)) << std::endl;
-
-        util::Averager pathContinuePDFAverager;
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            // TODO: check if -1 is allowed
-            if (vertex.data.pathContinuePDF.value != -1)
-                pathContinuePDFAverager.AddValue(vertex.data.pathContinuePDF.value);
-        }
-        std::cout << StringPrintf("Path continue PDF: %s", pathContinuePDFAverager.PrintInfo()) << std::endl;
     }
 
     return graph;
@@ -392,7 +389,7 @@ void FreeGraphBuilder::UsePathInfo(Graph& graph) {
 
             for (int i = 1; i < pathIndices.size(); ++i) {
                 if (pathIndices[i - 1] == pathIndices[i] - 1) {
-                    vertex.data.pathContinuePDF.RemoveSample(true);
+                    --vertex.data.totalSamples;
                     ++scattersInSameSphereCorrected;
                     ++pathRemainLength;
                 } else {
@@ -415,8 +412,9 @@ void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
     for (auto& [thisVertexId, thisVertex] : graph.GetVertices()) {
         for (auto [otherVertexId, edgeId] : thisVertex.outEdges) {
             Vertex& otherVertex = graph.GetVertex(otherVertexId)->get();
+            Edge& edge = graph.GetEdge(edgeId)->get();
             if (otherVertex.outEdges.find(thisVertexId) == otherVertex.outEdges.end()) {
-                graph.AddEdge(otherVertexId, thisVertexId, EdgeData{});
+                graph.AddEdge(otherVertexId, thisVertexId, edge.data);
                 ++edgesAdded;
             }
         }
@@ -431,23 +429,12 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) {
 
     int verticesRemoved = 0;
     int vertexEdgesRemoved = 0;
-    int edgesRemoved = 0;
-
-    std::vector<int> edgesToRemove;
-    for (auto& [id, edge] : graph.GetEdges())
-        if (edge.data.throughput.value < config.pruneEdgeMinimum)
-            edgesToRemove.push_back(id);
-
-    for (int edgeId : edgesToRemove)
-        graph.RemoveEdge(edgeId);
-
-    edgesRemoved += static_cast<int>(edgesToRemove.size());
 
     while (true) {
         std::vector<int> verticesToRemove;
 
         for (auto& [id, vertex] : graph.GetVertices())
-            if (vertex.outEdges.size() < config.pruneVertexMinimum)
+            if (vertex.outEdges.size() < config.pruneVertexOutEdgesMinimum)
                 verticesToRemove.push_back(id);
 
         for (int vertexId : verticesToRemove) {
@@ -464,8 +451,8 @@ void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) {
 
     if (!quiet) {
         std::cout << "done" << std::endl;
-        std::cout << StringPrintf("Removed %s low PDF edges, %s sparse vertices (with %s edges)",
-                edgesRemoved, verticesRemoved, vertexEdgesRemoved) << std::endl;
+        std::cout << StringPrintf("Removed %s sparse vertices (with %s edges)",
+                verticesRemoved, vertexEdgesRemoved) << std::endl;
     }
 
     OrderIdsAndRebuildTree(graph);
@@ -643,80 +630,5 @@ void FreeGraphBuilder::OrderIdsAndRebuildTree(Graph& graph) {
     duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
     if (!quiet)
         std::cout << StringPrintf("done (%ss, %s to %s vertices)", duration, sizeBefore, sizeAfter) << std::endl;
-}
-
-void FreeGraphBuilder::ComputeTransmittance(FreeGraph& graph) {
-    ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
-
-    float sphereRadius = graph.GetVertexRadius().value();
-    util::SpherePointsMaker spherePointsMaker(sphereRadius, config.pointsOnRadiusTransmittance);
-    util::SphereMaker sphereMaker(sphereRadius);
-
-    int64_t numEdges = static_cast<int64_t>(graph.GetEdges().size());
-    int numRaysPerEdge = config.transmittanceIterations * util::GetSphereVolumePointsSize(config.pointsOnRadiusTransmittance);
-    int64_t workNeeded = numEdges * numRaysPerEdge;
-    if (workNeeded == 0)
-        return;
-
-    std::vector<int> edgeIds;
-    edgeIds.reserve(numEdges);
-    for (auto& [id, edge] : graph.GetEdges())
-        edgeIds.push_back(id);
-
-    ProgressReporter progress(workNeeded, "Computing edge transmittance", quiet);
-
-    ParallelFor(0, numEdges, config.runInParallel, [&](int listIndex) {
-        Sampler& samplerClone = samplers.Get();
-
-        int edgeId = edgeIds[listIndex];
-        Edge& edge = graph.GetEdge(edgeId)->get();
-
-        Point3f fromPoint = graph.GetVertex(edge.from)->get().point;
-        Point3f toPoint = graph.GetVertex(edge.to)->get().point;
-        Vector3f pointToPointDirection = Normalize(toPoint - fromPoint);
-
-        SphereContainer currentSphere = sphereMaker.GetSphereFor(toPoint);
-        std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(fromPoint);
-
-        util::Averager transmittanceAverager;
-
-        uint64_t startIndex = listIndex * static_cast<int>(spherePoints.size());
-        for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
-            uint64_t curIndex = startIndex + pointIndex;
-
-            Point3f spherePoint = spherePoints[pointIndex];
-            RayDifferential rayToSphere(spherePoint, pointToPointDirection, 0, mediumData.medium);
-
-            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, rayToSphere, mediumData);
-            util::HitsResult sphereHits = GetHits(currentSphere.sphere, rayToSphere, mediumData);
-
-            if (!mediumHits.RayEntersVolume() || !sphereHits.RayEntersVolume()) {
-                progress.Update(config.transmittanceIterations);
-                continue;
-            }
-
-            util::StartEndT startEnd = GetStartEndT(mediumHits, sphereHits);
-
-            if (startEnd.sphereRayNotInMedium) {
-                progress.Update(config.transmittanceIterations);
-                continue;
-            }
-
-            if (mediumHits.type == util::OutsideTwoHits) {
-                mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
-                startEnd.SkipForward(startEnd.startT);
-            }
-
-            RayDifferential rayInSphere(rayToSphere(startEnd.startScatterT), pointToPointDirection, 0, mediumData.medium);
-
-            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, rayInSphere, startEnd, mediumData, samplerClone,
-                config.transmittanceIterations, curIndex));
-
-            progress.Update(config.transmittanceIterations);
-        }
-
-        graph.AddEdge(edge.from, edge.to, EdgeData{transmittanceAverager.ToSamplesStore()});
-    });
-    progress.Done();
 }
 }

@@ -4,10 +4,9 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-LightingCalculator::LightingCalculator(Graph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
-                                       const LightingCalculatorConfig& config, bool quiet, int sampleIndexOffset)
-    : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
-      sampleIndexOffset(sampleIndexOffset) {
+LightingCalculator::LightingCalculator(FreeGraph& graph, const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler,
+                                       const LightingCalculatorConfig& config, bool quiet)
+    : graph(graph), mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet) {
     if (config.lightIterations <= 0)
         ErrorExit("Must have at least one light ray iteration");
 
@@ -23,25 +22,26 @@ int LightingCalculator::ComputeFinalLight(int bouncesIndex) {
 int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIndex) {
     int bounces = config.bounces[bouncesIndex];
 
-    SparseVec finalLight(light);
-    SparseVec finalWeights(numVertices);
+    SparseVec totalLight(light);
+    SparseVec initialWeights(numVertices);
     for (int i = 0; i < numVertices; ++i)
-        finalWeights.coeffRef(i) = 1.f;
+        initialWeights.coeffRef(i) = graph.GetVertex(i)->get().data.totalSamples;
 
     int curIteration = 0;
 
     if (bounces > 0) {
-        SparseMat transmittance = GetTransmittanceMatrix();
-        SparseVec pathContinueVector = GetPathContinueVector();
+        SparseMat transmittance = GetTransportMatrix();
 
-        SparseVec curLight = finalLight;
-        SparseVec curWeights = finalWeights;
+        SparseVec curLight = totalLight;
+        SparseVec curWeights = initialWeights;
 
         ProgressReporter progress(bounces, "Computing final lighting", quiet);
 
         for (; curIteration < bounces; ++curIteration) {
-            curLight = (transmittance * curLight).cwiseProduct(pathContinueVector);
-            curWeights = transmittance * curWeights;
+            curLight = transmittance * curLight;
+
+            if (curIteration > 0)
+                curWeights = transmittance * curWeights;
 
             bool invalidNumbers = false;
             for (int i = 0; i < numVertices; ++i) {
@@ -59,7 +59,7 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
                 float weight = curWeights.coeff(i);
                 invCurWeights.coeffRef(i) = weight == 0.f ? 0.f : 1.f / weight;
             }
-            finalLight += curLight.cwiseProduct(invCurWeights);
+            totalLight += curLight.cwiseProduct(invCurWeights);
 
             progress.Update();
         }
@@ -67,51 +67,96 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
     }
 
     for (auto& [id, vertex] : graph.GetVertices())
-        vertex.data.lightScalar = finalLight.coeff(id);
+        vertex.data.lightScalar = totalLight.coeff(id);
 
     return curIteration;
 }
 
-SparseMat LightingCalculator::GetPhaseMatrix() const {
-    std::vector<Eigen::Triplet<float>> phaseEntries;
-    phaseEntries.reserve(numVertices);
+SparseMat LightingCalculator::GetTransportMatrix() const {
+    auto& edges = graph.GetEdgesConst();
 
-    for (int i = 0; i < numVertices; ++i)
-        phaseEntries.emplace_back(i, i, Inv4Pi);
+    std::vector<Eigen::Triplet<float>> entries;
+    entries.reserve(edges.size());
 
-    SparseMat phaseMatrix(numVertices, numVertices);
-    phaseMatrix.setFromTriplets(phaseEntries.begin(), phaseEntries.end());
-    return phaseMatrix;
-}
-
-SparseMat LightingCalculator::GetTransmittanceMatrix() const {
-    return GetGMatrix();
-}
-
-SparseMat LightingCalculator::GetPathContinueMatrix() const {
-    auto& vertices = graph.GetVerticesConst();
-
-    std::vector<Eigen::Triplet<float>> pathContinueEntries;
-    pathContinueEntries.reserve(vertices.size());
-
-    for (auto& [id, vertex] : vertices) {
-        if (vertex.data.pathContinuePDF.value == -1 && !vertex.outEdges.empty())
-            ErrorExit("No continue PDF for outgoing edges");
-        pathContinueEntries.emplace_back(id, id, vertex.data.pathContinuePDF.value);
+    for (auto& [id, edge] : edges) {
+        float T = edge.data.samples;
+        entries.emplace_back(edge.to, edge.from, T);
     }
 
-    SparseMat pathContinueMatrix(numVertices, numVertices);
-    pathContinueMatrix.setFromTriplets(pathContinueEntries.begin(), pathContinueEntries.end());
-    return pathContinueMatrix;
+    SparseMat transportMatrix(numVertices, numVertices);
+    transportMatrix.setFromTriplets(entries.begin(), entries.end());
+    transportMatrix = transportMatrix.transpose();
+    return transportMatrix;
 }
 
-SparseVec LightingCalculator::GetPathContinueVector() const {
-    SparseVec pathContinueVector(numVertices);
+SparseVec LightingCalculator::GetLightVector() {
+    std::unordered_map<int, float> lightMap;
+    std::vector<int> vertexIds;
+    lightMap.reserve(numVertices);
+    vertexIds.reserve(numVertices);
 
-    for (int i = 0; i < graph.GetVertices().size(); ++i)
-        pathContinueVector.coeffRef(i) = graph.GetVertex(i)->get().data.pathContinuePDF.value;
+    for (auto& [id, vertex] : graph.GetVertices()) {
+        lightMap[id] = 0; // allocate space for concurrent access
+        vertexIds.push_back(id);
+    }
 
-    return pathContinueVector;
+    ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
+
+    float sphereRadius = graph.GetVertexRadius().value();
+    util::SphereMaker sphereMaker(sphereRadius);
+
+    int64_t workNeeded = numVertices * config.lightIterations * util::GetDiskPointsSize(config.pointsOnRadiusLight);
+    ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
+
+    ParallelFor(0, numVertices, config.runInParallel, [&](int listIndex) {
+        Sampler& samplerClone = samplers.Get();
+
+        int vertexId = vertexIds[listIndex];
+        Vertex& vertex = graph.GetVertex(vertexId)->get();
+
+        SphereContainer currentSphere = sphereMaker.GetSphereFor(vertex.point);
+
+        Point3f origin = vertex.point - inDirection * mediumData.primitiveData.maxDistToCenter * 2;
+        std::vector<Point3f> diskPoints = util::GetDiskPoints(origin, sphereRadius, config.pointsOnRadiusLight, inDirection);
+
+        util::Averager transmittanceAverager;
+
+        uint64_t startIndex = listIndex * diskPoints.size();
+        for (int pointIndex = 0; pointIndex < diskPoints.size(); ++pointIndex) {
+            uint64_t curIndex = startIndex + pointIndex;
+
+            Point3f diskPoint = diskPoints[pointIndex];
+            RayDifferential rayToSphere(diskPoint, inDirection, 0, mediumData.medium);
+
+            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, rayToSphere, mediumData);
+            util::HitsResult sphereHits = GetHits(currentSphere.sphere, rayToSphere, mediumData);
+
+            if (mediumHits.type != util::OutsideTwoHits || sphereHits.type != util::OutsideTwoHits) {
+                progress.Update(config.lightIterations);
+                continue;
+            }
+
+            util::StartEndT startEnd = GetStartEndT(mediumHits, sphereHits);
+
+            if (startEnd.sphereRayNotInMedium) {
+                progress.Update(config.lightIterations);
+                continue;
+            }
+
+            mediumHits.intersections[0].intr.SkipIntersection(&rayToSphere, startEnd.startT);
+            startEnd.SkipForward(startEnd.startT);
+
+            transmittanceAverager.AddValue(ComputeRaysToSphere(rayToSphere, std::nullopt, startEnd, mediumData, samplerClone,
+                config.lightIterations, curIndex));
+
+            progress.Update(config.lightIterations);
+        }
+
+        lightMap[vertexId] = transmittanceAverager.GetAverage();
+    });
+    progress.Done();
+
+    return LightMapToVector(lightMap);
 }
 
 SparseVec LightingCalculator::LightMapToVector(const std::unordered_map<int, float>& lightMap) const {
