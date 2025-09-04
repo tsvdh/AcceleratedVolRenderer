@@ -30,7 +30,7 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
     int curIteration = 0;
 
     if (bounces > 0) {
-        SparseMat transmittance = GetTransportMatrix();
+        SparseMat transportMatrix = GetTransportMatrix();
 
         SparseVec curLight = totalLight;
         SparseVec curWeights = initialWeights;
@@ -38,10 +38,8 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
         ProgressReporter progress(bounces, "Computing final lighting", quiet);
 
         for (; curIteration < bounces; ++curIteration) {
-            curLight = transmittance * curLight;
-
-            if (curIteration > 0)
-                curWeights = transmittance * curWeights;
+            curLight = transportMatrix * curLight;
+            curWeights = transportMatrix * curWeights;
 
             bool invalidNumbers = false;
             for (int i = 0; i < numVertices; ++i) {
