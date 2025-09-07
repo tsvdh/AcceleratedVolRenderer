@@ -23,9 +23,9 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
     int bounces = config.bounces[bouncesIndex];
 
     SparseVec totalLight(light);
-    SparseVec initialWeights(numVertices);
+    SparseVec samples(numVertices);
     for (int i = 0; i < numVertices; ++i)
-        initialWeights.coeffRef(i) = graph.GetVertex(i)->get().data.totalSamples;
+        samples.coeffRef(i) = 1;
 
     int curIteration = 0;
 
@@ -33,18 +33,35 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
         SparseMat transportMatrix = GetTransportMatrix();
 
         SparseVec curLight = totalLight;
-        SparseVec curWeights = initialWeights;
+        SparseVec invAttenuationVec(numVertices);
+        for (int i = 0; i < numVertices; ++i) {
+            float attenuation = graph.GetVertex(i)->get().data.attenuation.value;
+            invAttenuationVec.coeffRef(i) = attenuation == 0.f ? 0.f : 1 / attenuation;
+        }
 
         ProgressReporter progress(bounces, "Computing final lighting", quiet);
 
         for (; curIteration < bounces; ++curIteration) {
             curLight = transportMatrix * curLight;
-            curWeights = transportMatrix * curWeights;
+            samples = transportMatrix * samples;
+            samples = samples.cwiseProduct(invAttenuationVec);
+
+            if (curIteration == 0) {
+                SparseVec samplesCopy(numVertices);
+                for (int i = 0; i < numVertices; ++i) {
+                    SamplesStore& samplesStore = graph.GetVertex(i)->get().data.attenuation;
+                    if (samplesStore.value == 0.f)
+                        samplesCopy.coeffRef(i) = samplesStore.numSamples;
+                    else
+                        samplesCopy.coeffRef(i) = samples.coeff(i);
+                }
+                samples = samplesCopy;
+            }
 
             bool invalidNumbers = false;
             for (int i = 0; i < numVertices; ++i) {
                 if (IsNaN(curLight.coeff(i)) || IsInf(curLight.coeff(i))
-                    || IsNaN(curWeights.coeff(i)) || IsInf(curWeights.coeff(i))) {
+                    || IsNaN(samples.coeff(i)) || IsInf(samples.coeff(i))) {
                     invalidNumbers = true;
                     break;
                 }
@@ -52,12 +69,11 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
             if (invalidNumbers)
                 break;
 
-            SparseVec invCurWeights(numVertices);
+            SparseVec invSamples(numVertices);
             for (int i = 0; i < numVertices; ++i) {
-                float weight = curWeights.coeff(i);
-                invCurWeights.coeffRef(i) = weight == 0.f ? 0.f : 1.f / weight;
+                invSamples.coeffRef(i) = samples.coeff(i) == 0.f ? 0.f : 1.f / samples.coeff(i);
             }
-            totalLight += curLight.cwiseProduct(invCurWeights);
+            totalLight += curLight.cwiseProduct(invSamples);
 
             progress.Update();
         }

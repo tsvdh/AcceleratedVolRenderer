@@ -131,9 +131,6 @@ int main(int argc, char* argv[]) {
     graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
 
-    // graph::Subdivider subdivider(graph, mediumData, lightDir, sampler, config.subdivider);
-    // subdivider.ComputeSubdivisionEffect(lightVec);
-
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
         int bounces = config.lightingCalculator.bounces[bouncesIndex];
         int depth = bounces + 1;

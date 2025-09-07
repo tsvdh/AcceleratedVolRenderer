@@ -27,10 +27,10 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
     std::vector<int>& path = pathHolder.vertices;
     bool usedTHit = false;
 
-    auto HandlePotentialPathEnd = [&] {
+    auto HandlePotentialPathEnd = [&] (bool pathContinues) {
         if (!path.empty()) {
             Vertex& lastVertex = graph.GetVertex(path.back())->get();
-            ++lastVertex.data.totalSamples;
+            lastVertex.data.attenuation.AddSample(pathContinues);
         }
     };
 
@@ -51,7 +51,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
 
             if (!optIntersection) {
-                HandlePotentialPathEnd();
+                HandlePotentialPathEnd(false);
                 // pathLengths.push_back(path.size());
                 return numNewVertices;
             }
@@ -91,7 +91,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             });
 
         // Handle terminated, scattered, and unscattered medium rays
-        HandlePotentialPathEnd();
+        HandlePotentialPathEnd(optNewInteraction.has_value());
         if (!optNewInteraction) {
             // pathLengths.push_back(path.size());
             return numNewVertices;
@@ -389,7 +389,7 @@ void FreeGraphBuilder::UsePathInfo(Graph& graph) {
 
             for (int i = 1; i < pathIndices.size(); ++i) {
                 if (pathIndices[i - 1] == pathIndices[i] - 1) {
-                    --vertex.data.totalSamples;
+                    vertex.data.attenuation.RemoveSample(true);
                     ++scattersInSameSphereCorrected;
                     ++pathRemainLength;
                 } else {

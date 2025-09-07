@@ -16,10 +16,10 @@ public:
     FreeGraph TracePaths();
 
 private:
-    int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit);
-    std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
-    std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
-    void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId);
+    int TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit);
+    std::vector<std::tuple<int, float>> GetInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
+    std::optional<std::tuple<int, float>> GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
+    void AddToTreeAndFit(Graph& graph, int startId, int endId);
     void UsePathInfo(Graph& graph);
     void AddExtraEdges(Graph& graph);
     void ReinforceSparseAreas(FreeGraph& graph);
