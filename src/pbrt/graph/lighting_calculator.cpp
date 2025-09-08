@@ -16,52 +16,28 @@ LightingCalculator::LightingCalculator(FreeGraph& graph, const util::MediumData&
 
 int LightingCalculator::ComputeFinalLight(int bouncesIndex) {
     SparseVec initialLight = GetLightVector();
-    return ComputeFinalLight(initialLight, bouncesIndex);
+    SparseMat transportMatrix = GetTransportMatrix();
+    return ComputeFinalLight(initialLight, transportMatrix, bouncesIndex);
 }
 
-int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesIndex) {
+int LightingCalculator::ComputeFinalLight(const SparseVec& lightVec, const SparseMat& transportMat, int bouncesIndex) {
     int bounces = config.bounces[bouncesIndex];
 
-    SparseVec totalLight(light);
-    SparseVec samples(numVertices);
-    for (int i = 0; i < numVertices; ++i)
-        samples.coeffRef(i) = 1;
+    SparseVec totalLight(lightVec);
 
     int curIteration = 0;
 
     if (bounces > 0) {
-        SparseMat transportMatrix = GetTransportMatrix();
-
         SparseVec curLight = totalLight;
-        SparseVec invAttenuationVec(numVertices);
-        for (int i = 0; i < numVertices; ++i) {
-            float attenuation = graph.GetVertex(i)->get().data.attenuation.value;
-            invAttenuationVec.coeffRef(i) = attenuation == 0.f ? 0.f : 1 / attenuation;
-        }
 
-        ProgressReporter progress(bounces, "Computing final lighting", quiet);
+        ProgressReporter transportProgress(bounces, "Computing final lighting", quiet);
 
         for (; curIteration < bounces; ++curIteration) {
-            curLight = transportMatrix * curLight;
-            samples = transportMatrix * samples;
-            samples = samples.cwiseProduct(invAttenuationVec);
-
-            if (curIteration == 0) {
-                SparseVec samplesCopy(numVertices);
-                for (int i = 0; i < numVertices; ++i) {
-                    SamplesStore& samplesStore = graph.GetVertex(i)->get().data.attenuation;
-                    if (samplesStore.value == 0.f)
-                        samplesCopy.coeffRef(i) = samplesStore.numSamples;
-                    else
-                        samplesCopy.coeffRef(i) = samples.coeff(i);
-                }
-                samples = samplesCopy;
-            }
+            curLight = transportMat * curLight;
 
             bool invalidNumbers = false;
             for (int i = 0; i < numVertices; ++i) {
-                if (IsNaN(curLight.coeff(i)) || IsInf(curLight.coeff(i))
-                    || IsNaN(samples.coeff(i)) || IsInf(samples.coeff(i))) {
+                if (IsNaN(curLight.coeff(i)) || IsInf(curLight.coeff(i))) {
                     invalidNumbers = true;
                     break;
                 }
@@ -69,15 +45,11 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
             if (invalidNumbers)
                 break;
 
-            SparseVec invSamples(numVertices);
-            for (int i = 0; i < numVertices; ++i) {
-                invSamples.coeffRef(i) = samples.coeff(i) == 0.f ? 0.f : 1.f / samples.coeff(i);
-            }
-            totalLight += curLight.cwiseProduct(invSamples);
+            totalLight += curLight;
 
-            progress.Update();
+            transportProgress.Update();
         }
-        progress.Done();
+        transportProgress.Done();
     }
 
     for (auto& [id, vertex] : graph.GetVertices())
@@ -87,15 +59,22 @@ int LightingCalculator::ComputeFinalLight(const SparseVec& light, int bouncesInd
 }
 
 SparseMat LightingCalculator::GetTransportMatrix() const {
-    auto& edges = graph.GetEdgesConst();
+    ProgressReporter progress(numVertices, "Computing edge weights", quiet);
 
     std::vector<Eigen::Triplet<float>> entries;
-    entries.reserve(edges.size());
+    entries.reserve(graph.GetEdges().size());
 
-    for (auto& [id, edge] : edges) {
-        float T = edge.data.samples;
-        entries.emplace_back(edge.to, edge.from, T);
+    for (auto& [currentVertexId, vertex] : graph.GetVertices()) {
+        int samples = vertex.data.samples;
+
+        for (auto& [otherVertexId, edgeId] : vertex.outEdges) {
+            int edgeSamples = graph.GetEdge(edgeId)->get().data.samples;
+            entries.emplace_back(otherVertexId, currentVertexId,
+                static_cast<float>(edgeSamples) / static_cast<float>(samples));
+        }
+        progress.Update();
     }
+    progress.Done();
 
     SparseMat transportMatrix(numVertices, numVertices);
     transportMatrix.setFromTriplets(entries.begin(), entries.end());

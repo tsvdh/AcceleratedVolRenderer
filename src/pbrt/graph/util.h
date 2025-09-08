@@ -487,8 +487,8 @@ struct SamplesStore {
     float value = -1;
     float numSamples = 0;
 
-    void AddSample(float value) {
-        AddSamples({value, 1});
+    void AddSample(float sampleValue) {
+        AddSamples({sampleValue, 1});
     }
 
     void AddSamples(const SamplesStore& other) {
@@ -498,8 +498,8 @@ struct SamplesStore {
         this->value /= this->numSamples != 0 ? this->numSamples : -1;
     }
 
-    void RemoveSample(float value) {
-        AddSamples({value, -1});
+    void RemoveSample(float sampleValue) {
+        AddSamples({sampleValue, -1});
     }
 
     void FillWithAverager(Averager& averager);

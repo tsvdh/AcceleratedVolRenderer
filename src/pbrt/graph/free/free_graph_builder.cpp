@@ -27,10 +27,10 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
     std::vector<int>& path = pathHolder.vertices;
     bool usedTHit = false;
 
-    auto HandlePotentialPathEnd = [&] (bool pathContinues) {
+    auto HandlePotentialPathEnd = [&] {
         if (!path.empty()) {
             Vertex& lastVertex = graph.GetVertex(path.back())->get();
-            lastVertex.data.attenuation.AddSample(pathContinues);
+            ++lastVertex.data.samples;
         }
     };
 
@@ -51,7 +51,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             pstd::optional<ShapeIntersection> optIntersection = mediumData.primitiveData.primitive.Intersect(ray, Infinity);
 
             if (!optIntersection) {
-                HandlePotentialPathEnd(false);
+                HandlePotentialPathEnd();
                 // pathLengths.push_back(path.size());
                 return numNewVertices;
             }
@@ -91,7 +91,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             });
 
         // Handle terminated, scattered, and unscattered medium rays
-        HandlePotentialPathEnd(optNewInteraction.has_value());
+        HandlePotentialPathEnd();
         if (!optNewInteraction) {
             // pathLengths.push_back(path.size());
             return numNewVertices;
@@ -237,6 +237,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         PruneAndClean(graph);
 
     if (!quiet) {
+        std::cout << "=== Debug info ===" << std::endl;
         std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
             graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
 
@@ -260,6 +261,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
             scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
             static_cast<float>(scattersInSameSphereCorrected) / static_cast<float>(totalScatters)) << std::endl;
+        std::cout << "==================" << std::endl;
     }
 
     return graph;
@@ -389,7 +391,7 @@ void FreeGraphBuilder::UsePathInfo(Graph& graph) {
 
             for (int i = 1; i < pathIndices.size(); ++i) {
                 if (pathIndices[i - 1] == pathIndices[i] - 1) {
-                    vertex.data.attenuation.RemoveSample(true);
+                    --vertex.data.samples;
                     ++scattersInSameSphereCorrected;
                     ++pathRemainLength;
                 } else {

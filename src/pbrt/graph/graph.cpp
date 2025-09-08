@@ -26,9 +26,9 @@ std::istream& operator>>(std::istream& in, Point3<T>& p) {
 void VertexData::MergeWithDataFrom(const VertexData& otherData) {
     if (type != none || otherData.type != none
         || lightScalar != -1 || otherData.lightScalar != -1)
-        ErrorExit(StringPrintf("Cannot merge type or lightScalar").c_str());
+        ErrorExit(StringPrintf("Cannot merge vertex type or lightScalar").c_str());
 
-    this->attenuation.AddSamples(otherData.attenuation);
+    this->samples += otherData.samples;
     this->pathRemainLength.AddSamples(otherData.pathRemainLength);
 }
 
@@ -245,7 +245,7 @@ inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFla
         out << data.lightScalar << SEP;
 
     if (flags.useSamples)
-        out << data.transportedSamples << SEP;
+        out << data.samples << SEP;
 }
 
 inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
@@ -258,11 +258,11 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
         in >> lightScalar;
     }
 
-    float transportedSamples = -1;
+    int samples = -1;
     if (flags.useSamples)
-        in >> transportedSamples;
+        in >> samples;
 
-    return VertexData{static_cast<RayVertexType>(rayVertexType), lightScalar, transportedSamples};
+    return VertexData{static_cast<RayVertexType>(rayVertexType), lightScalar, samples};
 }
 
 inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
@@ -272,7 +272,6 @@ inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
 
 inline EdgeData ReadEdgeData(std::istream& in, StreamFlags flags) {
     int samples = -1;
-
     if (flags.useSamples)
         in >> samples;
 

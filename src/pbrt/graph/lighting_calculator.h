@@ -16,11 +16,11 @@ public:
         const LightingCalculatorConfig& config, bool quiet);
 
     [[nodiscard]] SparseVec GetLightVector();
-    int ComputeFinalLight(int bouncesIndex = 0);
-    int ComputeFinalLight(const SparseVec& light, int bouncesIndex = 0);
-
-protected:
     [[nodiscard]] SparseMat GetTransportMatrix() const;
+    int ComputeFinalLight(int bouncesIndex = 0);
+    int ComputeFinalLight(const SparseVec& lightVec, const SparseMat& transportMat, int bouncesIndex = 0);
+
+private:
     [[nodiscard]] SparseVec LightMapToVector(const std::unordered_map<int, float>& lightMap) const;
 
     FreeGraph& graph;

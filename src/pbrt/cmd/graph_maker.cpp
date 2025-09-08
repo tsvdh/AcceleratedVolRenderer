@@ -130,13 +130,14 @@ int main(int argc, char* argv[]) {
 
     graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
+    graph::SparseMat transportMat = lighting.GetTransportMatrix();
 
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
         int bounces = config.lightingCalculator.bounces[bouncesIndex];
         int depth = bounces + 1;
         std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bounces) << std::endl;
 
-        int bouncesComputed = lighting.ComputeFinalLight(lightVec, bouncesIndex);
+        int bouncesComputed = lighting.ComputeFinalLight(lightVec, transportMat, bouncesIndex);
         int depthComputed = bouncesComputed + 1;
 
         util::Averager lightAverager(static_cast<int>(graph.GetVertices().size()));

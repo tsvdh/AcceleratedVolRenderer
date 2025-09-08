@@ -48,9 +48,7 @@ enum RayVertexType {
 struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
-    float transportedSamples;
-
-    SamplesStore attenuation;
+    int samples = 0;
     SamplesStore pathRemainLength;
 
     void MergeWithDataFrom(const VertexData& otherData);
