@@ -20,7 +20,7 @@ private:
     std::vector<std::tuple<int, float>> GetInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
     std::optional<std::tuple<int, float>> GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
     void AddToTreeAndFit(Graph& graph, int startId, int endId);
-    void UsePathInfo(Graph& graph);
+    void UsePathInfoAndRemove(Graph& graph);
     void AddExtraEdges(Graph& graph);
     void ReinforceSparseAreas(FreeGraph& graph);
     void OrderIdsAndRebuildTree(Graph& graph);

@@ -213,15 +213,17 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
                 if (currentBatch >= batchSize) {
                     AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-
                     startingId += currentBatch;
                     currentBatch = 0;
+
+                    UsePathInfoAndRemove(graph);
                 }
                 tracingProgress.Update();
             }
         }
     }
     AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+    UsePathInfoAndRemove(graph);
     tracingProgress.Done();
 
     OrderIdsAndRebuildTree(graph);
@@ -232,7 +234,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     if (config.addExtraEdges)
         AddExtraEdges(graph);
 
-    UsePathInfo(graph);
+    UsePathInfoAndRemove(graph);
 
     if (config.pruneLowDensity)
         PruneAndClean(graph);
@@ -378,18 +380,19 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     }
 }
 
-void FreeGraphBuilder::UsePathInfo(Graph& graph) {
-    ProgressReporter progress(static_cast<int64_t>(graph.GetPaths().size()), "Using path info", quiet);
+void FreeGraphBuilder::UsePathInfoAndRemove(Graph& graph) {
+    std::vector<int> pathsToRemove;
+    pathsToRemove.reserve(graph.GetPaths().size());
 
     for (auto& [pathId, path] : graph.GetPaths()) {
+        pathsToRemove.push_back(pathId);
+
         if (path.Length() == 0) {
-            progress.Update();
             continue;
         }
 
         if (path.Length() == 1) {
             graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(1);
-            progress.Update();
             continue;
         }
 
@@ -407,10 +410,10 @@ void FreeGraphBuilder::UsePathInfo(Graph& graph) {
             }
         }
         graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(pathRemainLength);
-
-        progress.Update();
     }
-    progress.Done();
+
+    for (int pathId : pathsToRemove)
+        graph.RemovePath(pathId);
 }
 
 void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
