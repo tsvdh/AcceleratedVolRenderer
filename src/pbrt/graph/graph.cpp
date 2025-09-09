@@ -171,8 +171,6 @@ bool Graph::RemovePath(int id) {
     if (result == paths.end())
         return false;
 
-    // TODO: maybe remove contents of path
-
     for (int vertexId : result->second.vertices) {
         Vertex& vertex = GetVertex(vertexId)->get();
         vertex.paths.erase(id);

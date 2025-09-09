@@ -23,13 +23,12 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f 
 
 int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit) {
     int numNewVertices = 0;
-    Path& pathHolder = graph.AddPath();
-    std::vector<int>& path = pathHolder.vertices;
+    Path& path = graph.AddPath();
     bool usedTHit = false;
 
     auto HandlePotentialPathEnd = [&] {
-        if (!path.empty()) {
-            Vertex& lastVertex = graph.GetVertex(path.back())->get();
+        if (!path.vertices.empty()) {
+            Vertex& lastVertex = graph.GetVertex(path.vertices.back())->get();
             ++lastVertex.data.samples;
         }
     };
@@ -99,14 +98,16 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
 
         Point3f newPoint = optNewInteraction->p();
         std::optional<std::tuple<int, float>> optResult = GetClosestInRadius(newPoint, squaredSearchRadius);
-        std::optional<Point3f> prevPoint = path.empty() ? std::nullopt : std::make_optional(graph.GetVertex(path.back())->get().point);
+        std::optional<Point3f> prevPoint = path.vertices.empty()
+            ? std::nullopt
+            : std::make_optional(graph.GetVertex(path.vertices.back())->get().point);
 
         Vertex* newVertex;
         if (optResult) {
             newVertex = &graph.GetVertex(std::get<0>(optResult.value()))->get();
         }
         else if (prevPoint && DistanceSquared(prevPoint.value(), newPoint) <= squaredSearchRadius) {
-            newVertex = &graph.GetVertex(path.back())->get();
+            newVertex = &graph.GetVertex(path.vertices.back())->get();
         }
         else {
             newVertex = &graph.AddVertex(newPoint, VertexData{});
@@ -114,13 +115,13 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             ++numNewVertices;
         }
 
-        graph.AddVertexToPath(newVertex->id, pathHolder.id);
+        graph.AddVertexToPath(newVertex->id, path.id);
 
-        if (path.size() >= 2) {
-            int pathSize = pathHolder.Length();
+        if (path.vertices.size() >= 2) {
+            int pathSize = path.Length();
 
-            int from = path[pathSize - 2];
-            int to = path[pathSize - 1];
+            int from = path.vertices[pathSize - 2];
+            int to = path.vertices[pathSize - 1];
 
             if (from != to) {
                 graph.AddEdge(from, to, EdgeData{1});
@@ -130,7 +131,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         ++totalScatters;
 
         // terminate if max depth reached
-        if (path.size() == maxDepth) {
+        if (path.vertices.size() == maxDepth) {
             // pathLengths.push_back(path.size());
             return numNewVertices;
         }
@@ -378,30 +379,34 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
 }
 
 void FreeGraphBuilder::UsePathInfo(Graph& graph) {
-    ProgressReporter progress(static_cast<int64_t>(graph.GetVertices().size()), "Using path info", quiet);
+    ProgressReporter progress(static_cast<int64_t>(graph.GetPaths().size()), "Using path info", quiet);
 
-    for (auto& [vertexId, vertex] : graph.GetVertices()) {
-        util::Averager pathRemainLengthAverager;
-
-        for (auto& [pathId, pathIndices] : vertex.paths) {
-            if (pathIndices.empty())
-                continue;
-
-            float pathRemainLength = 1;
-
-            for (int i = 1; i < pathIndices.size(); ++i) {
-                if (pathIndices[i - 1] == pathIndices[i] - 1) {
-                    --vertex.data.samples;
-                    ++scattersInSameSphereCorrected;
-                    ++pathRemainLength;
-                } else {
-                    pathRemainLengthAverager.AddValue(pathRemainLength);
-                    pathRemainLength = 1;
-                }
-            }
-            pathRemainLengthAverager.AddValue(pathRemainLength);
+    for (auto& [pathId, path] : graph.GetPaths()) {
+        if (path.Length() == 0) {
+            progress.Update();
+            continue;
         }
-        vertex.data.pathRemainLength.FillWithAverager(pathRemainLengthAverager);
+
+        if (path.Length() == 1) {
+            graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(1);
+            progress.Update();
+            continue;
+        }
+
+        float pathRemainLength = 1;
+
+        for (int i = 0; i < path.vertices.size() - 1; ++i) {
+            Vertex& vertex = graph.GetVertex(path.vertices[i])->get();
+            if (path.vertices[i] == path.vertices[i + 1]) {
+                --vertex.data.samples;
+                ++scattersInSameSphereCorrected;
+                ++pathRemainLength;
+            } else {
+                vertex.data.pathRemainLength.AddSample(pathRemainLength);
+                pathRemainLength = 1;
+            }
+        }
+        graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(pathRemainLength);
 
         progress.Update();
     }
