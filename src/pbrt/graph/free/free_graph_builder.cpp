@@ -21,10 +21,13 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f 
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
-int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit) {
+int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit, std::optional<int> startingVertex) {
     int numNewVertices = 0;
     Path& path = graph.AddPath();
     bool usedTHit = false;
+
+    if (startingVertex.has_value())
+        graph.AddVertexToPath(startingVertex.value(), path.id);
 
     auto HandlePotentialPathEnd = [&] {
         if (!path.vertices.empty()) {
@@ -207,7 +210,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
 
                 sampler.StartPixelSample({xCoor, yCoor}, sampleIndexOffset);
-                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit);
+                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit, std::nullopt);
 
                 currentBatch += newVertices;
 
@@ -216,28 +219,23 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                     startingId += currentBatch;
                     currentBatch = 0;
 
-                    UsePathInfoAndRemove(graph);
+                    UseAndRemovePathInfo(graph);
                 }
                 tracingProgress.Update();
             }
         }
     }
     AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-    UsePathInfoAndRemove(graph);
+    UseAndRemovePathInfo(graph);
     tracingProgress.Done();
 
     OrderIdsAndRebuildTree(graph);
 
-    if (config.reinforceSparseAreas)
-        ReinforceSparseAreas(graph);
+    if (config.reinforceSparseVertices)
+        ReinforceSparseVertices(graph);
 
     if (config.addExtraEdges)
         AddExtraEdges(graph);
-
-    UsePathInfoAndRemove(graph);
-
-    if (config.pruneLowDensity)
-        PruneAndClean(graph);
 
     if (!quiet) {
         std::cout << "=== Debug info ===" << std::endl;
@@ -380,7 +378,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
     }
 }
 
-void FreeGraphBuilder::UsePathInfoAndRemove(Graph& graph) {
+void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
     std::vector<int> pathsToRemove;
     pathsToRemove.reserve(graph.GetPaths().size());
 
@@ -433,61 +431,15 @@ void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
     progress.Done();
 }
 
-void FreeGraphBuilder::PruneAndClean(FreeGraph& graph) {
-    if (!quiet)
-        std::cout << "Pruning low PDF edges and sparse vertices... ";
-
-    int verticesRemoved = 0;
-    int vertexEdgesRemoved = 0;
-
-    while (true) {
-        std::vector<int> verticesToRemove;
-
-        for (auto& [id, vertex] : graph.GetVertices())
-            if (vertex.outEdges.size() < config.pruneVertexOutEdgesMinimum)
-                verticesToRemove.push_back(id);
-
-        for (int vertexId : verticesToRemove) {
-            Vertex& vertex = graph.GetVertex(vertexId)->get();
-            vertexEdgesRemoved += static_cast<int>(vertex.inEdges.size() + vertex.outEdges.size());
-
-            graph.RemoveVertex(vertexId);
-        }
-        verticesRemoved += static_cast<int>(verticesToRemove.size());
-
-        if (verticesToRemove.empty())
-            break;
-    }
-
-    if (!quiet) {
-        std::cout << "done" << std::endl;
-        std::cout << StringPrintf("Removed %s sparse vertices (with %s edges)",
-                verticesRemoved, vertexEdgesRemoved) << std::endl;
-    }
-
-    OrderIdsAndRebuildTree(graph);
-}
-
-void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
-    auto startTime = std::chrono::high_resolution_clock::now();
-    if (!quiet)
-        std::cout << "Searching for sparse areas... ";
-
-    float neighbourSquaredSearchRadius = squaredSearchRadius * config.reinforcementRadiusModifierMult;
-
+void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     std::vector<int> sparseVertices;
     for (auto& [id, vertex] : graph.GetVertices()) {
-        std::vector<std::tuple<int, float>> result = GetInRadius(vertex.point, neighbourSquaredSearchRadius, id);
-
-        if (result.size() < config.neighboursForNotSparse)
+        if (vertex.outEdges.size() < config.edgesForNotSparse)
             sparseVertices.push_back(id);
     }
 
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
     if (!quiet) {
-        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
-        std::cout << StringPrintf("%s / %s vertices found with few neighbours", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
+        std::cout << StringPrintf("%s / %s vertices found with few edges", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
     }
 
     float sphereRadius = graph.GetVertexRadius().value();
@@ -497,7 +449,7 @@ void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
     int numRaysPerVertex = config.reinforcementIterations * util::GetSphereVolumePointsSize(config.pointsOnRadiusReinforcement);
     int64_t workNeeded = numSparseVertices * numRaysPerVertex;
 
-    ProgressReporter progress(workNeeded, "Reinforcing sparse areas", quiet);
+    ProgressReporter progress(workNeeded, "Reinforcing sparse vertices", quiet);
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
     int batchSize = 100;
@@ -516,11 +468,11 @@ void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
 
             Point3f spherePoint = spherePoints[pointIndex];
             PhaseFunction phase = mediumData.medium.SamplePoint(spherePoint, mediumData.defaultLambda).phase;
+            Vector3f inDir(1, 0, 0);
 
             for (int i = 0; i < config.reinforcementIterations; ++i) {
                 sampler.StartPixelSample({xCoor, yCoor}, i);
 
-                Vector3f inDir(1, 0, 0);
                 Vector3f outDir = phase.Sample_p(inDir, sampler.Get2D())->wi;
                 RayDifferential ray(spherePoint, outDir, 0, mediumData.medium);
                 util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
@@ -535,33 +487,43 @@ void FreeGraphBuilder::ReinforceSparseAreas(FreeGraph& graph) {
 
                 float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
 
-                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit);
+                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
                 currentBatch += newVertices;
 
                 if (currentBatch >= batchSize) {
                     AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-
                     startingId += currentBatch;
                     currentBatch = 0;
+
+                    UseAndRemovePathInfo(graph);
                 }
                 progress.Update();
             }
         }
     }
     AddToTreeAndFit(graph, startingId, startingId + currentBatch);
+    UseAndRemovePathInfo(graph);
     progress.Done();
 
-    int sparseVerticesAfter = 0;
+    int sparseVerticesStillSparse = 0;
     for (int vertexId : sparseVertices) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
-        std::vector<std::tuple<int, float>> result = GetInRadius(vertex.point, neighbourSquaredSearchRadius, vertexId);
 
-        if (result.size() < config.neighboursForNotSparse)
-            ++sparseVerticesAfter;
+        if (vertex.outEdges.size() < config.edgesForNotSparse)
+            ++sparseVerticesStillSparse;
     }
 
-    if (!quiet)
-        std::cout << StringPrintf("%s / %s sparse vertices after reinforcing", sparseVerticesAfter, numSparseVertices) << std::endl;
+    sparseVertices.clear();
+    sparseVertices.shrink_to_fit();
+    for (auto& [id, vertex] : graph.GetVertices()) {
+        if (vertex.outEdges.size() < config.edgesForNotSparse)
+            sparseVertices.push_back(id);
+    }
+
+    if (!quiet) {
+        std::cout << StringPrintf("%s / %s sparse vertices remain sparse after reinforcing", sparseVerticesStillSparse, numSparseVertices) << std::endl;
+        std::cout << StringPrintf("%s / %s total vertices found with few edges", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
+    }
 
     OrderIdsAndRebuildTree(graph);
 }

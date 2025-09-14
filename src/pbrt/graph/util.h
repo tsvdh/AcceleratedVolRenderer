@@ -645,15 +645,10 @@ struct GraphBuilderConfig {
     int iterationsPerStep;
 
     // sparse reinforcement
-    bool reinforceSparseAreas;
-    int neighboursForNotSparse;
-    float reinforcementRadiusModifierMult;
+    bool reinforceSparseVertices;
+    int edgesForNotSparse;
     int reinforcementIterations;
     int pointsOnRadiusReinforcement;
-
-    // pruning
-    bool pruneLowDensity;
-    int pruneVertexOutEdgesMinimum;
 };
 
 struct LightingCalculatorConfig {
@@ -677,12 +672,8 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);
 
-    graphBuilder.at("pruneLowDensity").get_to(graphBuilderConfig.pruneLowDensity);
-    graphBuilder.at("pruneVertexOutEdgesMinimum").get_to(graphBuilderConfig.pruneVertexOutEdgesMinimum);
-
-    graphBuilder.at("reinforceSparseAreas").get_to(graphBuilderConfig.reinforceSparseAreas);
-    graphBuilder.at("neighboursForNotSparse").get_to(graphBuilderConfig.neighboursForNotSparse);
-    graphBuilder.at("reinforcementRadiusModifierMult").get_to(graphBuilderConfig.reinforcementRadiusModifierMult);
+    graphBuilder.at("reinforceSparseVertices").get_to(graphBuilderConfig.reinforceSparseVertices);
+    graphBuilder.at("edgesForNotSparse").get_to(graphBuilderConfig.edgesForNotSparse);
     graphBuilder.at("reinforcementIterations").get_to(graphBuilderConfig.reinforcementIterations);
     graphBuilder.at("pointsOnRadiusReinforcement").get_to(graphBuilderConfig.pointsOnRadiusReinforcement);
 }
