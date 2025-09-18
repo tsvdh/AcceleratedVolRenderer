@@ -243,7 +243,7 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
         lightAverager.AddValue(v.data.lightScalar);
     }
 
-    return Inv4Pi * lightAverager.GetAverage();
+    return lightAverager.GetAverage();
 }
 
 std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(

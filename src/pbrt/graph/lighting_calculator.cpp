@@ -149,6 +149,9 @@ SparseVec LightingCalculator::GetLightVector() {
     });
     progress.Done();
 
+    for (auto& [id, light] : lightMap)
+        light *= Inv4Pi;
+
     return LightMapToVector(lightMap);
 }
 
