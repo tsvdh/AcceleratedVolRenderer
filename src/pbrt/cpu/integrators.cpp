@@ -46,6 +46,7 @@
 #include <iostream>
 
 #include "pbrt/graph/graph_integrator.h"
+#include "pbrt/graph/analysis/integration_analyzer.h"
 
 namespace pbrt {
 
@@ -3695,6 +3696,8 @@ std::unique_ptr<Integrator> Integrator::Create(
         integrator = graph::VolPathCustomIntegrator::Create(parameters, camera, sampler, aggregate, lights);
     else if (name == "graph")
         integrator = graph::GraphIntegrator::Create(parameters, camera, sampler, aggregate, lights);
+    else if (name == "analyzer")
+        integrator = graph::IntegrationAnalyzer::Create(parameters, camera, sampler, aggregate, lights);
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
 

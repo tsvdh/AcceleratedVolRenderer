@@ -16,8 +16,6 @@
 
 namespace graph {
 
-using namespace pbrt;
-
 STAT_COUNTER("Integrator/Volume interactions", volumeInteractions)
 STAT_COUNTER("Integrator/Surface interactions", surfaceInteractions)
 STAT_PERCENT("Integrator/Regularized BSDFs", regularizedBSDFs, totalBSDFs)
@@ -160,8 +158,6 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
 
     if (freeGraph) {
         float L = 0;
-        std::vector throughput{1.f};
-        std::vector<MediumInteraction> points;
 
         // support for camera inside the volume
         // if (pstd::optional<ShapeIntersection> shapeIntersection = Intersect(ray)) {
@@ -201,6 +197,7 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
                             return false;
                         }
                         if (mode == 1) {
+                            // Handle scattering along ray path
                             L += ConnectToGraph(p);
                             terminated = true;
                             return false;

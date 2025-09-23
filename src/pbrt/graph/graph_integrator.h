@@ -16,12 +16,11 @@ using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
     nanoflann::L2_Simple_Adaptor<Float, util::VerticesHolder>,
     util::VerticesHolder, 3, int>;
 
-class GraphIntegrator final : public RayIntegrator {
+class GraphIntegrator : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
     GraphIntegrator(float renderRadiusMod, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
-        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate),
-                        lights), maxDepth(maxDepth) {
+        : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights) {
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
@@ -47,8 +46,7 @@ public:
 
     [[nodiscard]] std::string ToString() const override { return "Graph Integrator"; }
 
-private:
-    int maxDepth;
+protected:
     DistantLight* light;
     Transform worldFromRender;
     Transform renderFromWorld;

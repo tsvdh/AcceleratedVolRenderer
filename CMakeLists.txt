@@ -832,6 +832,9 @@ set(GRAPH
         src/pbrt/graph/lighting_calculator.h
         src/pbrt/graph/lighting_calculator.cpp
 
+        src/pbrt/graph/analysis/integration_analyzer.h
+        src/pbrt/graph/analysis/integration_analyzer.cpp
+
         src/pbrt/graph/free/free_graph_builder.h
         src/pbrt/graph/free/free_graph_builder.cpp
 

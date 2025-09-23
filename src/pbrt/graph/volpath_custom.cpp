@@ -1,7 +1,5 @@
 #include "volpath_custom.h"
 
-#include <iostream>
-
 #include <pbrt/materials.h>
 #include <pbrt/graph/T_sampler_custom.h>
 #include <pbrt/util/display.h>
@@ -10,8 +8,6 @@
 #include <pbrt/util/string.h>
 
 namespace graph {
-
-using namespace pbrt;
 
 STAT_COUNTER("Integrator/Volume interactions", volumeInteractions)
 STAT_COUNTER("Integrator/Surface interactions", surfaceInteractions)
@@ -133,9 +129,6 @@ void VolPathCustomIntegrator::Render() {
                            }
                        });
     }
-
-    FreeGraph surfaceGraph;
-    // FreeGraph pathGraph;
 
     // Render image in waves
     while (waveStart < spp) {
