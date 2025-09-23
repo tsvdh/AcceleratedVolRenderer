@@ -23,7 +23,7 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f 
 
 int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit, std::optional<int> startingVertex) {
     int numNewVertices = 0;
-    Path& path = graph.AddPath();
+    Path& path = graph.AddPath(PathData{});
     bool usedTHit = false;
 
     if (startingVertex.has_value())
@@ -136,6 +136,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         // terminate if max depth reached
         if (path.vertices.size() == maxDepth) {
             // pathLengths.push_back(path.size());
+            path.data.forcedEnd = true;
             return numNewVertices;
         }
 
@@ -254,8 +255,10 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         std::cout << StringPrintf("Edges added: %s", edgesAdded) << std::endl;
 
         util::Averager pathRemainLengthAverager;
-        for (auto& [id, vertex] : graph.GetVertices())
-            pathRemainLengthAverager.AddValue(vertex.data.pathRemainLength.value);
+        for (auto& [id, vertex] : graph.GetVertices()) {
+            if (vertex.data.pathRemainLength.numSamples > 0)
+                pathRemainLengthAverager.AddValue(vertex.data.pathRemainLength.value);
+        }
 
         std::cout << StringPrintf("Path remain length: %s", pathRemainLengthAverager.PrintInfo()) << std::endl;
 
@@ -389,7 +392,7 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
             continue;
         }
 
-        if (path.Length() == 1) {
+        if (path.Length() == 1 && !path.data.forcedEnd) {
             graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(1);
             continue;
         }
@@ -407,7 +410,8 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
                 pathRemainLength = 1;
             }
         }
-        graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(pathRemainLength);
+        if (!path.data.forcedEnd)
+            graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(pathRemainLength);
     }
 
     for (int pathId : pathsToRemove)

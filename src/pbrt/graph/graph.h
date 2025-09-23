@@ -87,8 +87,13 @@ struct Edge {
     }
 };
 
+struct PathData {
+    bool forcedEnd = false;
+};
+
 struct Path {
     int id = -1;
+    PathData data;
     std::vector<int> vertices; // vertex id
 
     bool operator==(const Path& other) const {
@@ -143,8 +148,8 @@ public:
     OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data);
     bool RemoveEdge(int id);
 
-    Path& AddPath();
-    Path& AddPath(int id);
+    Path& AddPath(const PathData& data);
+    Path& AddPath(int id, const PathData& data);
     bool RemovePath(int id);
 
     bool AddVertexToPath(int vertexId, int pathId);

@@ -5,14 +5,15 @@
 namespace graph {
 
 void IntegrationAnalyzer::Render() {
-    std::vector<Point2i> points{{440, 252}, {727, 395}, {728, 395}};
+    // {727, 395}, {728, 395}
+    std::vector<Point2i> points{{440, 252}, {441, 252}, {442, 252}, {440, 253}, {441, 253}, {442, 253}};
     std::vector maxDepths{1, 2, 3, 5, 10};
 
     Sampler sampler = samplerPrototype.Clone();
 
     for (Point2i pixel : points) {
-        for (int maxDepth : maxDepths) {
-            this->maxDepth = maxDepth;
+        for (int _maxDepth : maxDepths) {
+            this->maxDepth = _maxDepth;
 
             for (int i = 0; i < sampler.SamplesPerPixel(); ++i) {
                 sampler.StartPixelSample(pixel, i);
@@ -34,7 +35,7 @@ void IntegrationAnalyzer::Render() {
                 AnalyzeRay(cameraRay.ray, sampler, lambda);
             }
 
-            std::cout << StringPrintf("%s, %s: %s / %s (%s)", pixel, maxDepth,
+            std::cout << StringPrintf("%s, %s: %s / %s (%s)", pixel, this->maxDepth,
                 nodeScatters, totalScatters, static_cast<float>(nodeScatters) / static_cast<float>(totalScatters)) << std::endl;
 
             totalScatters = 0;
@@ -53,7 +54,7 @@ void IntegrationAnalyzer::AnalyzeRay(RayDifferential ray, Sampler sampler, const
 
         searchTree->radiusSearch(searchPointArray, squaredSearchRadius, resultItems);
 
-        return resultItems.size();
+        return static_cast<int>(resultItems.size());
     };
 
     int depth = 0;

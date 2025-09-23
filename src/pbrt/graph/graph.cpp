@@ -105,20 +105,22 @@ bool Graph::RemoveVertex(int id) {
         pathsToRemove.push_back(pathId);
 
         Path& path = GetPath(pathId)->get();
-        std::vector<int> verticesWithoutVertex = path.vertices;
+        std::vector<int> verticesWithoutPath = path.vertices;
         for (int index : indices)
-            verticesWithoutVertex[index] = -1;
+            verticesWithoutPath[index] = -1;
 
         int newPathId = -1;
 
         for (int i = 0; i < path.vertices.size(); ++i) {
-            if (verticesWithoutVertex[i] != -1) {
+            if (verticesWithoutPath[i] != -1) {
                 if (newPathId == -1)
-                    newPathId = AddPath().id;
-                AddVertexToPath(verticesWithoutVertex[i], newPathId);
+                    newPathId = AddPath(path.data).id;
+                AddVertexToPath(verticesWithoutPath[i], newPathId);
             }
-            else
+            else {
+                GetPath(newPathId)->get().data.forcedEnd = true;
                 newPathId = -1;
+            }
         }
     }
 
@@ -154,15 +156,15 @@ bool Graph::RemoveEdge(int id) {
     return true;
 }
 
-Path& Graph::AddPath() {
-    return AddPath(++curPathId);
+Path& Graph::AddPath(const PathData& data) {
+    return AddPath(++curPathId, data);
 }
 
-Path& Graph::AddPath(int id) {
+Path& Graph::AddPath(int id, const PathData& data) {
     if (paths.find(id) != paths.end())
         ErrorExit("Path id %i already exists", id);
 
-    auto result = paths.emplace(id, Path{id});
+    auto result = paths.emplace(id, Path{id, data});
     return result.first->second;
 }
 
@@ -389,7 +391,7 @@ void Graph::ReadFromStream(std::istream& in) {
         int id, pathLength;
         in >> id >> pathLength;
 
-        Path& path = AddPath(id);
+        Path& path = AddPath(id, PathData{});
 
         for (int j = 0; j < pathLength; ++j) {
             int pathVertexId;
@@ -584,7 +586,7 @@ UniformGraph FreeGraph::ToUniform(float spacing) const {
     }
 
     for (auto& [id, oldPath]: paths) {
-        Path& newPath = uniform.AddPath();
+        Path& newPath = uniform.AddPath(oldPath.data);
         for (auto vertexId : oldPath.vertices) {
             uniform.AddVertexToPath(vertexId, newPath.id);
         }

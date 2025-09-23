@@ -1219,8 +1219,14 @@ int diff(std::vector<std::string> args) {
         deltaString = Red(deltaString);
     else if (std::abs(delta) > 0.001)
         deltaString = Yellow(deltaString);
-    Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), %s = %f\n", imageFile,
-           referenceFile, imageAverage, refAverage, deltaString, metric, error.Average());
+
+    if (metric != "ME")
+        Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), %s = %f\n", imageFile,
+               referenceFile, imageAverage, refAverage, deltaString, metric, error.Average());
+    else
+        Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), ME = %f; PE = %f; NE = %f\n", imageFile,
+               referenceFile, imageAverage, refAverage, deltaString, error.Average(),
+               errorPositive.Average(), errorNegative.Average());
 
     if (!outFile.empty())
         return errorImage.Write(outFile, im.metadata);
