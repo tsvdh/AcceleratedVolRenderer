@@ -59,8 +59,8 @@ struct Vertex {
     Point3f point;
     VertexData data;
     std::optional<Point3i> coors;
-    std::unordered_map<int, int> inEdges, outEdges; // other vertex ID, edge id
-    std::unordered_map<int, std::vector<int>> paths; // path ID, indices in path
+    std::map<int, int> inEdges, outEdges; // other vertex ID, edge id
+    std::map<int, std::vector<int>> paths; // path ID, indices in path
 
     bool operator==(const Vertex& other) const {
         return id == other.id;
