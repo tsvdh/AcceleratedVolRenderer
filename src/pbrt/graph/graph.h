@@ -29,8 +29,6 @@ using DynamicTreeType = nanoflann::KDTreeSingleIndexDynamicAdaptor<
     nanoflann::L2_Simple_Adaptor<Float, util::VerticesHolder>,
     util::VerticesHolder, 3, int>;
 
-using util::SamplesStore;
-
 struct Vertex;
 struct VertexData;
 struct Edge;
@@ -49,7 +47,7 @@ struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
     int samples = 0;
-    SamplesStore pathRemainLength;
+    util::SamplesStore pathRemainLength;
 
     void MergeWithDataFrom(const VertexData& otherData);
 };
@@ -58,6 +56,7 @@ struct Vertex {
     int id = -1;
     Point3f point;
     VertexData data;
+    
     std::optional<Point3i> coors;
     std::map<int, int> inEdges, outEdges; // other vertex ID, edge id
     std::map<int, std::vector<int>> paths; // path ID, indices in path
@@ -94,6 +93,7 @@ struct PathData {
 struct Path {
     int id = -1;
     PathData data;
+
     std::vector<int> vertices; // vertex id
 
     bool operator==(const Path& other) const {

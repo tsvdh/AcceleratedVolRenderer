@@ -302,10 +302,10 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
         for (auto& [id, vertex] : vertices) {
             out << vertex.id << SEP << vertex.point;
 
+            WriteVertexData(out, vertex.data, flags);
+
             if (flags.useCoors)
                 out << vertex.coors.value();
-
-            WriteVertexData(out, vertex.data, flags);
 
             out << NEW;
 

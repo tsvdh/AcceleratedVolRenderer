@@ -4,8 +4,8 @@ extra meta	string-name (float-spacing)
 flags 		string-useCoors string-useSamples string-useRayVertexTypes               base class
                 string-useLighting string-useWeights
 base meta	int-curVertexId,curEdgeId,curPathId,vertices,edges,paths
-vertices	int-id float-x,y,z (int-x,y,z) (int type) (float-lightScalar)
-                (int-samples)
+vertices	int-id float-x,y,z (int type) (float-lightScalar)
+                (int-samples) (int-x,y,z)
 ...
 edges		int-id,from,to (int-samples) (float-weight)
 ...
