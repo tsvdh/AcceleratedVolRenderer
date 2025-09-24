@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <set>
 
 #include "pbrt/util/progressreporter.h"
 
@@ -29,7 +30,6 @@ void VertexData::MergeWithDataFrom(const VertexData& otherData) {
         ErrorExit(StringPrintf("Cannot merge vertex type or lightScalar").c_str());
 
     this->samples += otherData.samples;
-    this->pathRemainLength.AddSamples(otherData.pathRemainLength);
 }
 
 void Vertex::AddPathIndex(int pathId, int index) {
@@ -92,14 +92,14 @@ bool Graph::RemoveVertex(int id) {
     if (result == vertices.end())
         return false;
 
-    std::vector<int> edgesToRemove;
+    std::set<int> edgesToRemove;
     std::vector<int> pathsToRemove;
 
     for (auto [_, edgeId] : result->second.inEdges)
-        edgesToRemove.push_back(edgeId);
+        edgesToRemove.insert(edgeId);
 
     for (auto [_, edgeId] : result->second.outEdges)
-        edgesToRemove.push_back(edgeId);
+        edgesToRemove.insert(edgeId);
 
     for (auto& [pathId, indices] : result->second.paths) {
         pathsToRemove.push_back(pathId);
@@ -226,7 +226,7 @@ OptRef<Edge> Graph::AddEdge(int id, int fromId, int toId, const EdgeData& data, 
     }
 
     auto emplaceResult = edges.emplace(id, Edge{id, from.id, to.id, data});
-    auto& newEdge = emplaceResult.first->second;
+    Edge& newEdge = emplaceResult.first->second;
 
     from.outEdges.emplace(to.id, newEdge.id);
     to.inEdges.emplace(from.id, newEdge.id);
@@ -567,19 +567,30 @@ UniformGraph FreeGraph::ToUniform(float spacing) const {
     ProgressReporter progress(static_cast<int>(vertices.size()), "Converting graph to uniform", false);
 
     for (auto& [id, oldVertex] : vertices) {
-        Vertex& curVertex = uniform.AddVertex(oldVertex.point, oldVertex.data);
+        Vertex& curNewVertex = uniform.AddVertex(oldVertex.point, oldVertex.data);
 
-        for (auto [otherVertexId, edgeId] : oldVertex.inEdges) {
-            const Vertex& otherVertex = vertices.at(otherVertexId);
-            Vertex& newVertex = uniform.AddVertex(otherVertex.point, otherVertex.data);
+        for (auto [otherOldVertexId, edgeId] : oldVertex.inEdges) {
             const Edge& oldEdge = GetEdgeConst(edgeId).value();
-            uniform.AddEdge(newVertex.id, curVertex.id, oldEdge.data);
+
+            if (otherOldVertexId == oldVertex.id) {
+                uniform.AddEdge(curNewVertex.id, curNewVertex.id, oldEdge.data);
+            } else {
+                const Vertex& otherOldVertex = vertices.at(otherOldVertexId);
+                Vertex& otherNewVertex = uniform.AddVertex(otherOldVertex.point, otherOldVertex.data);
+                uniform.AddEdge(otherNewVertex.id, curNewVertex.id, oldEdge.data);
+            }
         }
-        for (auto [otherVertexId, edgeId] : oldVertex.outEdges) {
-            const Vertex& otherVertex = vertices.at(otherVertexId);
-            Vertex& newVertex = uniform.AddVertex(otherVertex.point, otherVertex.data);
+
+        for (auto [otherOldVertexId, edgeId] : oldVertex.outEdges) {
             const Edge& oldEdge = GetEdgeConst(edgeId).value();
-            uniform.AddEdge(curVertex.id, newVertex.id, oldEdge.data);
+
+            if (otherOldVertexId == oldVertex.id) {
+                uniform.AddEdge(curNewVertex.id, curNewVertex.id, oldEdge.data);
+            } else {
+                const Vertex& otherOldVertex = vertices.at(otherOldVertexId);
+                Vertex& otherNewVertex = uniform.AddVertex(otherOldVertex.point, otherOldVertex.data);
+                uniform.AddEdge(curNewVertex.id, otherNewVertex.id, oldEdge.data);
+            }
         }
 
         progress.Update();

@@ -638,7 +638,6 @@ struct GraphBuilderConfig {
     // general
     float radiusModifier;
     int maxDepth;
-    bool addExtraEdges;
 
     // path tracing
     int dimensionSteps;
@@ -667,7 +666,6 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     auto graphBuilder = jsonObject.at("graphBuilder");
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
     graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
-    graphBuilder.at("addExtraEdges").get_to(graphBuilderConfig.addExtraEdges);
 
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);

@@ -47,7 +47,6 @@ struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
     int samples = 0;
-    util::SamplesStore pathRemainLength;
 
     void MergeWithDataFrom(const VertexData& otherData);
 };
@@ -56,7 +55,7 @@ struct Vertex {
     int id = -1;
     Point3f point;
     VertexData data;
-    
+
     std::optional<Point3i> coors;
     std::map<int, int> inEdges, outEdges; // other vertex ID, edge id
     std::map<int, std::vector<int>> paths; // path ID, indices in path

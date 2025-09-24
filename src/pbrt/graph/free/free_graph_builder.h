@@ -21,7 +21,6 @@ private:
     std::optional<std::tuple<int, float>> GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId = -1);
     void AddToTreeAndFit(Graph& graph, int startId, int endId);
     void UseAndRemovePathInfo(Graph& graph);
-    void AddExtraEdges(Graph& graph);
     void ReinforceSparseVertices(FreeGraph& graph);
     void OrderIdsAndRebuildTree(Graph& graph);
 
@@ -35,10 +34,7 @@ private:
     float squaredSearchRadius;
     int sampleIndexOffset;
 
-    // logging
-    int64_t scattersInSameSphere = 0;
-    int64_t scattersInSameSphereCorrected = 0;
-    int64_t totalScatters = 0;
-    int64_t edgesAdded = 0;
+    // stats
+    util::Averager inNodePathLengthAverager;
 };
 }

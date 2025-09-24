@@ -1,6 +1,7 @@
 #include "free_graph_builder.h"
 
 #include <iostream>
+#include <set>
 
 #include "pbrt/lights.h"
 #include "pbrt/media.h"
@@ -122,16 +123,11 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
 
         if (path.vertices.size() >= 2) {
             int pathSize = path.Length();
-
             int from = path.vertices[pathSize - 2];
             int to = path.vertices[pathSize - 1];
 
-            if (from != to) {
-                graph.AddEdge(from, to, EdgeData{1});
-            } else
-                ++scattersInSameSphere;
+            graph.AddEdge(from, to, EdgeData{1});
         }
-        ++totalScatters;
 
         // terminate if max depth reached
         if (path.vertices.size() == maxDepth) {
@@ -235,11 +231,8 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     if (config.reinforceSparseVertices)
         ReinforceSparseVertices(graph);
 
-    if (config.addExtraEdges)
-        AddExtraEdges(graph);
-
     if (!quiet) {
-        std::cout << "=== Debug info ===" << std::endl;
+        std::cout << "=== Graph stats ===" << std::endl;
         std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
             graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
 
@@ -252,20 +245,9 @@ FreeGraph FreeGraphBuilder::TracePaths() {
         float moreThanOnceRatio = static_cast<float>(numEdgesMoreThanOnce) / static_cast<float>(numEdges);
         std::cout << StringPrintf("Edges connected more than once: %s / %s (%s)",
             numEdgesMoreThanOnce, numEdges, moreThanOnceRatio == 0 ? "-" : std::to_string(moreThanOnceRatio)) << std::endl;
-        std::cout << StringPrintf("Edges added: %s", edgesAdded) << std::endl;
 
-        util::Averager pathRemainLengthAverager;
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            if (vertex.data.pathRemainLength.numSamples > 0)
-                pathRemainLengthAverager.AddValue(vertex.data.pathRemainLength.value);
-        }
-
-        std::cout << StringPrintf("Path remain length: %s", pathRemainLengthAverager.PrintInfo()) << std::endl;
-
-        std::cout << StringPrintf("Scattered: in same sphere %s (corrected %s), scattered total %s, (%s)",
-            scattersInSameSphere, scattersInSameSphereCorrected, totalScatters,
-            static_cast<float>(scattersInSameSphereCorrected) / static_cast<float>(totalScatters)) << std::endl;
-        std::cout << "==================" << std::endl;
+        std::cout << StringPrintf("Path remain length: %s", inNodePathLengthAverager.PrintInfo()) << std::endl;
+        std::cout << "===================" << std::endl;
     }
 
     return graph;
@@ -294,46 +276,32 @@ std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const
     return result.empty() ? std::nullopt : std::make_optional(result[0]);
 }
 
-inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
+inline void MoveEdgeReferences(Vertex& movingVertex, Vertex& targetVertex, Graph& graph) {
     struct TempEdge {
         TempEdge(int id, int from, int to, EdgeData data)
             : id(id), from(from), to(to), data(data) {
         }
         int id, from, to;
         EdgeData data;
+
+        bool operator<(const TempEdge& other) const { return id < other.id; }
     };
 
-    int count = 0;
+    std::set<TempEdge> edgesToAdd;
+    std::set<int> edgesToRemove;
 
-    std::vector<TempEdge> edgesToAdd;
-    std::vector<int> edgesToRemove;
-
-    for (auto& [fromId, edgeId] : toMoveVertex.inEdges) {
-        Vertex& fromVertex = graph.GetVertex(fromId)->get();
+    for (auto& [fromId, edgeId] : movingVertex.inEdges) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 
-        if (fromVertex.id == targetVertex.id) {
-            edgesToRemove.push_back(edgeId);
-            ++count;
-        } else if (targetVertex.inEdges.find(fromVertex.id) == targetVertex.inEdges.end()) {
-            edgesToAdd.emplace_back(edgeId, fromVertex.id, targetVertex.id, edge.data);
-            edgesToRemove.push_back(edgeId);
-        } else
-            edgesToRemove.push_back(edgeId);
+        edgesToAdd.emplace(edgeId, fromId, targetVertex.id, edge.data);
+        edgesToRemove.insert(edgeId);
     }
 
-    for (auto& [toId, edgeId] : toMoveVertex.outEdges) {
-        Vertex& toVertex = graph.GetVertex(toId)->get();
+    for (auto& [toId, edgeId] : movingVertex.outEdges) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 
-        if (toVertex.id == targetVertex.id) {
-            edgesToRemove.push_back(edgeId);
-            ++count;
-        } else if (targetVertex.outEdges.find(toVertex.id) == targetVertex.outEdges.end()) {
-            edgesToAdd.emplace_back(edgeId, targetVertex.id, toVertex.id, edge.data);
-            edgesToRemove.push_back(edgeId);
-        } else
-            edgesToRemove.push_back(edgeId);
+        edgesToAdd.emplace(edgeId, targetVertex.id, toId, edge.data);
+        edgesToRemove.insert(edgeId);
     }
 
     for (int toRemoveId : edgesToRemove)
@@ -341,8 +309,6 @@ inline int MoveEdgeReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph&
 
     for (TempEdge toAdd : edgesToAdd)
         graph.AddEdge(toAdd.id, toAdd.from, toAdd.to, toAdd.data);
-
-    return count;
 }
 
 inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
@@ -356,12 +322,11 @@ inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph
     toMoveVertex.paths.clear();
 }
 
-inline int MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
+inline void MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
     targetVertex.data.MergeWithDataFrom(vertexToMove.data);
-    int count = MoveEdgeReferences(vertexToMove, targetVertex, graph);
+    MoveEdgeReferences(vertexToMove, targetVertex, graph);
     MovePathReferences(vertexToMove, targetVertex, graph);
     graph.RemoveVertex(vertexToMove.id);
-    return count;
 }
 
 void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
@@ -374,7 +339,7 @@ void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
             Vertex& vertexToMove = graph.GetVertex(curId)->get();
             Vertex& targetVertex = graph.GetVertex(std::get<0>(resultItem.value()))->get();
 
-            scattersInSameSphere += MoveVertexToTarget(vertexToMove, targetVertex, graph);
+            MoveVertexToTarget(vertexToMove, targetVertex, graph);
 
             searchTree->removePoint(curId);
         }
@@ -393,46 +358,26 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
         }
 
         if (path.Length() == 1 && !path.data.forcedEnd) {
-            graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(1);
+            inNodePathLengthAverager.AddValue(1);
             continue;
         }
 
-        float pathRemainLength = 1;
+        float inNodePathLength = 1;
 
         for (int i = 0; i < path.vertices.size() - 1; ++i) {
-            Vertex& vertex = graph.GetVertex(path.vertices[i])->get();
             if (path.vertices[i] == path.vertices[i + 1]) {
-                --vertex.data.samples;
-                ++scattersInSameSphereCorrected;
-                ++pathRemainLength;
+                ++inNodePathLength;
             } else {
-                vertex.data.pathRemainLength.AddSample(pathRemainLength);
-                pathRemainLength = 1;
+                inNodePathLengthAverager.AddValue(inNodePathLength);
+                inNodePathLength = 1;
             }
         }
         if (!path.data.forcedEnd)
-            graph.GetVertex(path.vertices.back())->get().data.pathRemainLength.AddSample(pathRemainLength);
+            inNodePathLengthAverager.AddValue(inNodePathLength);
     }
 
     for (int pathId : pathsToRemove)
         graph.RemovePath(pathId);
-}
-
-void FreeGraphBuilder::AddExtraEdges(Graph& graph) {
-    ProgressReporter progress(static_cast<int64_t>(graph.GetVertices().size()), "Adding extra edges", quiet);
-
-    for (auto& [thisVertexId, thisVertex] : graph.GetVertices()) {
-        for (auto [otherVertexId, edgeId] : thisVertex.outEdges) {
-            Vertex& otherVertex = graph.GetVertex(otherVertexId)->get();
-            Edge& edge = graph.GetEdge(edgeId)->get();
-            if (otherVertex.outEdges.find(thisVertexId) == otherVertex.outEdges.end()) {
-                graph.AddEdge(otherVertexId, thisVertexId, edge.data);
-                ++edgesAdded;
-            }
-        }
-        progress.Update();
-    }
-    progress.Done();
 }
 
 void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
