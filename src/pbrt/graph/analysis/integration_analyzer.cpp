@@ -5,8 +5,9 @@
 namespace graph {
 
 void IntegrationAnalyzer::Render() {
-    // {727, 395}, {728, 395}
-    std::vector<Point2i> points{{440, 252}, {441, 252}, {442, 252}, {440, 253}, {441, 253}, {442, 253}};
+    // {440, 252}, {441, 252}, {727, 395}, {728, 395}, {561, 387}, {562, 387}
+    // {500, 389}, {500, 390}, {500, 391}
+    std::vector<Point2i> points{{651, 389}, {533, 340}};
     std::vector maxDepths{1, 2, 3, 5, 10};
 
     Sampler sampler = samplerPrototype.Clone();
@@ -145,7 +146,7 @@ std::unique_ptr<IntegrationAnalyzer> IntegrationAnalyzer::Create(
 
     float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 10);
 
-    int maxDepthFromFile = parameters.GetOneInt("maxdepth", 5); // suppress PBRT warning
+    int maxDepthFromFile = parameters.GetOneInt("maxdepth", 1); // suppress PBRT warning
     int maxDepth = Options->maxdepth ? Options->maxdepth.value() : maxDepthFromFile;
 
     return std::make_unique<IntegrationAnalyzer>(renderRadiusMod, maxDepth,

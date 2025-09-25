@@ -22,7 +22,7 @@ FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f 
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
-int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit, std::optional<int> startingVertex) {
+void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit, std::optional<int> startingVertex) {
     int numNewVertices = 0;
     Path& path = graph.AddPath(PathData{});
     bool usedTHit = false;
@@ -56,7 +56,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
             if (!optIntersection) {
                 HandlePotentialPathEnd();
                 // pathLengths.push_back(path.size());
-                return numNewVertices;
+                return;
             }
 
             tMax = optIntersection.value().tHit;
@@ -97,7 +97,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         HandlePotentialPathEnd();
         if (!optNewInteraction) {
             // pathLengths.push_back(path.size());
-            return numNewVertices;
+            return;
         }
 
         Point3f newPoint = optNewInteraction->p();
@@ -116,6 +116,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         else {
             newVertex = &graph.AddVertex(newPoint, VertexData{});
             vHolder.GetList().emplace_back(newVertex->point);
+            searchTree->addPoints(newVertex->id, newVertex->id);
             ++numNewVertices;
         }
 
@@ -133,7 +134,7 @@ int FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxDe
         if (path.vertices.size() == maxDepth) {
             // pathLengths.push_back(path.size());
             path.data.forcedEnd = true;
-            return numNewVertices;
+            return;
         }
 
         // Sample new direction at real-scattering event
@@ -179,10 +180,6 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
     FreeGraph graph(std::sqrt(squaredSearchRadius));
 
-    int batchSize = 1000;
-    int startingId = graph.GetCurVertexId();
-    int currentBatch = 0;
-
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
     for (int x = 1; x <= config.dimensionSteps; ++x) {
@@ -207,23 +204,13 @@ FreeGraph FreeGraphBuilder::TracePaths() {
                 int xCoor = static_cast<int>(curIndex - yCoor * resolutionDimensionSize);
 
                 sampler.StartPixelSample({xCoor, yCoor}, sampleIndexOffset);
-                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit, std::nullopt);
+                TracePath(ray, graph, config.maxDepth, mediumExitTHit, std::nullopt);
+                UseAndRemovePathInfo(graph);
 
-                currentBatch += newVertices;
-
-                if (currentBatch >= batchSize) {
-                    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-                    startingId += currentBatch;
-                    currentBatch = 0;
-
-                    UseAndRemovePathInfo(graph);
-                }
                 tracingProgress.Update();
             }
         }
     }
-    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-    UseAndRemovePathInfo(graph);
     tracingProgress.Done();
 
     OrderIdsAndRebuildTree(graph);
@@ -331,22 +318,22 @@ inline void MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph
     graph.RemoveVertex(vertexToMove.id);
 }
 
-void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
-    searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
-
-    for (int curId = startId; curId < endId; ++curId) {
-        std::optional<std::tuple<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point, squaredSearchRadius, curId);
-
-        if (resultItem.has_value()) {
-            Vertex& vertexToMove = graph.GetVertex(curId)->get();
-            Vertex& targetVertex = graph.GetVertex(std::get<0>(resultItem.value()))->get();
-
-            MoveVertexToTarget(vertexToMove, targetVertex, graph);
-
-            searchTree->removePoint(curId);
-        }
-    }
-}
+// void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
+//     searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
+//
+//     for (int curId = startId; curId < endId; ++curId) {
+//         std::optional<std::tuple<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point, squaredSearchRadius, curId);
+//
+//         if (resultItem.has_value()) {
+//             Vertex& vertexToMove = graph.GetVertex(curId)->get();
+//             Vertex& targetVertex = graph.GetVertex(std::get<0>(resultItem.value()))->get();
+//
+//             MoveVertexToTarget(vertexToMove, targetVertex, graph);
+//
+//             searchTree->removePoint(curId);
+//         }
+//     }
+// }
 
 void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
     std::vector<int> pathsToRemove;
@@ -403,10 +390,6 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     ProgressReporter progress(workNeeded, "Reinforcing sparse vertices", quiet);
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
-    int batchSize = 100;
-    int startingId = graph.GetCurVertexId();
-    int currentBatch = 0;
-
     for (int vertexId : sparseVertices) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
         std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(vertex.point);
@@ -438,22 +421,13 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
                 float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
 
-                int newVertices = TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
-                currentBatch += newVertices;
+                TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
+                UseAndRemovePathInfo(graph);
 
-                if (currentBatch >= batchSize) {
-                    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-                    startingId += currentBatch;
-                    currentBatch = 0;
-
-                    UseAndRemovePathInfo(graph);
-                }
                 progress.Update();
             }
         }
     }
-    AddToTreeAndFit(graph, startingId, startingId + currentBatch);
-    UseAndRemovePathInfo(graph);
     progress.Done();
 
     int sparseVerticesStillSparse = 0;
