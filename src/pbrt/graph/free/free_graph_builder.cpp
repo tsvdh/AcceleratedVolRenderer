@@ -179,7 +179,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
 
     FreeGraph graph(std::sqrt(squaredSearchRadius));
 
-    int batchSize = 100;
+    int batchSize = 1000;
     int startingId = graph.GetCurVertexId();
     int currentBatch = 0;
 
@@ -293,14 +293,16 @@ inline void MoveEdgeReferences(Vertex& movingVertex, Vertex& targetVertex, Graph
     for (auto& [fromId, edgeId] : movingVertex.inEdges) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 
-        edgesToAdd.emplace(edgeId, fromId, targetVertex.id, edge.data);
+        int movedFromId = fromId != movingVertex.id ? fromId : targetVertex.id;
+        edgesToAdd.emplace(edgeId, movedFromId, targetVertex.id, edge.data);
         edgesToRemove.insert(edgeId);
     }
 
     for (auto& [toId, edgeId] : movingVertex.outEdges) {
         Edge& edge = graph.GetEdge(edgeId)->get();
 
-        edgesToAdd.emplace(edgeId, targetVertex.id, toId, edge.data);
+        int movedToId = toId != movingVertex.id ? toId : targetVertex.id;
+        edgesToAdd.emplace(edgeId, targetVertex.id, movedToId, edge.data);
         edgesToRemove.insert(edgeId);
     }
 
