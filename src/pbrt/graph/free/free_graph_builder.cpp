@@ -213,8 +213,6 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     }
     tracingProgress.Done();
 
-    OrderIdsAndRebuildTree(graph);
-
     if (config.reinforceSparseVertices)
         ReinforceSparseVertices(graph);
 
@@ -240,7 +238,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     return graph;
 }
 
-std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius, int vertexId) {
+std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
     nanoflann::RadiusResultSet resultSet(squaredRadius, resultItems);
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
@@ -251,89 +249,16 @@ std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f&
     std::vector<std::tuple<int, float>> result;
     result.reserve(resultItems.size());
 
-    for (nanoflann::ResultItem resultItem : resultItems) {
-        if (resultItem.first != vertexId)
-            result.emplace_back(std::tuple{resultItem.first, resultItem.second});
-    }
+    for (nanoflann::ResultItem resultItem : resultItems)
+        result.emplace_back(std::tuple{resultItem.first, resultItem.second});
+
     return result;
 }
 
-std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius, int vertexId) {
-    std::vector<std::tuple<int, float>> result = GetInRadius(pointRef, squaredRadius, vertexId);
+std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius) {
+    std::vector<std::tuple<int, float>> result = GetInRadius(pointRef, squaredRadius);
     return result.empty() ? std::nullopt : std::make_optional(result[0]);
 }
-
-inline void MoveEdgeReferences(Vertex& movingVertex, Vertex& targetVertex, Graph& graph) {
-    struct TempEdge {
-        TempEdge(int id, int from, int to, EdgeData data)
-            : id(id), from(from), to(to), data(data) {
-        }
-        int id, from, to;
-        EdgeData data;
-
-        bool operator<(const TempEdge& other) const { return id < other.id; }
-    };
-
-    std::set<TempEdge> edgesToAdd;
-    std::set<int> edgesToRemove;
-
-    for (auto& [fromId, edgeId] : movingVertex.inEdges) {
-        Edge& edge = graph.GetEdge(edgeId)->get();
-
-        int movedFromId = fromId != movingVertex.id ? fromId : targetVertex.id;
-        edgesToAdd.emplace(edgeId, movedFromId, targetVertex.id, edge.data);
-        edgesToRemove.insert(edgeId);
-    }
-
-    for (auto& [toId, edgeId] : movingVertex.outEdges) {
-        Edge& edge = graph.GetEdge(edgeId)->get();
-
-        int movedToId = toId != movingVertex.id ? toId : targetVertex.id;
-        edgesToAdd.emplace(edgeId, targetVertex.id, movedToId, edge.data);
-        edgesToRemove.insert(edgeId);
-    }
-
-    for (int toRemoveId : edgesToRemove)
-        graph.RemoveEdge(toRemoveId);
-
-    for (TempEdge toAdd : edgesToAdd)
-        graph.AddEdge(toAdd.id, toAdd.from, toAdd.to, toAdd.data);
-}
-
-inline void MovePathReferences(Vertex& toMoveVertex, Vertex& targetVertex, Graph& graph) {
-    for (auto& [pathId, indicesInPath] : toMoveVertex.paths) {
-        Path& path = graph.GetPath(pathId)->get();
-        for (int indexInPath : indicesInPath)
-            path.vertices[indexInPath] = targetVertex.id;
-
-        targetVertex.AddPathIndices(pathId, indicesInPath);
-    }
-    toMoveVertex.paths.clear();
-}
-
-inline void MoveVertexToTarget(Vertex& vertexToMove, Vertex& targetVertex, Graph& graph) {
-    targetVertex.data.MergeWithDataFrom(vertexToMove.data);
-    MoveEdgeReferences(vertexToMove, targetVertex, graph);
-    MovePathReferences(vertexToMove, targetVertex, graph);
-    graph.RemoveVertex(vertexToMove.id);
-}
-
-// void FreeGraphBuilder::AddToTreeAndFit(Graph& graph, int startId, int endId) {
-//     searchTree->addPoints(startId, endId - 1); // method needs inclusive end range
-//
-//     for (int curId = startId; curId < endId; ++curId) {
-//         std::optional<std::tuple<int, float>> resultItem = GetClosestInRadius(graph.GetVertex(curId)->get().point, squaredSearchRadius, curId);
-//
-//         if (resultItem.has_value()) {
-//             Vertex& vertexToMove = graph.GetVertex(curId)->get();
-//             Vertex& targetVertex = graph.GetVertex(std::get<0>(resultItem.value()))->get();
-//
-//             MoveVertexToTarget(vertexToMove, targetVertex, graph);
-//
-//             searchTree->removePoint(curId);
-//         }
-//     }
-// }
 
 void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
     std::vector<int> pathsToRemove;
@@ -449,83 +374,5 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
         std::cout << StringPrintf("%s / %s sparse vertices remain sparse after reinforcing", sparseVerticesStillSparse, numSparseVertices) << std::endl;
         std::cout << StringPrintf("%s / %s total vertices found with few edges", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
     }
-
-    OrderIdsAndRebuildTree(graph);
-}
-
-void FreeGraphBuilder::OrderIdsAndRebuildTree(Graph& graph) {
-    auto GetLargestTakenId = [&](int currentLargestId) {
-        for (int i = currentLargestId; i >= 0; --i)
-            if (graph.GetVertex(i).has_value())
-                return i;
-
-        return -1;
-    };
-
-    auto startTime = std::chrono::high_resolution_clock::now();
-    if (!quiet)
-        std::cout << "Rearranging vertex ids... ";
-
-    int currentLargestId = GetLargestTakenId(graph.GetCurVertexId());
-
-    for (int curId = 0; curId < graph.GetCurVertexId(); ++curId) {
-        if (currentLargestId <= curId)
-            break;
-
-        OptRef<Vertex> optVertex = graph.GetVertex(curId);
-
-        if (!optVertex.has_value()) {
-            Vertex& vertexToMove = graph.GetVertex(currentLargestId)->get();
-            Vertex& newVertex = graph.AddVertex(curId, vertexToMove.point, VertexData{});
-
-            MoveVertexToTarget(vertexToMove, newVertex, graph);
-
-            currentLargestId = GetLargestTakenId(currentLargestId);
-        }
-    }
-
-    graph.SetCurVertexId(currentLargestId + 1);
-
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
-    if (!quiet)
-        std::cout << StringPrintf("done (%ss)", duration) << std::endl;
-
-    graph.CheckSequentialIds();
-
-    startTime = std::chrono::high_resolution_clock::now();
-    if (!quiet)
-        std::cout << "Rebuilding search tree... ";
-
-    int numVertices = static_cast<int>(graph.GetVertices().size());
-
-    std::vector<Point3f>& list = vHolder.GetList();
-    int sizeBefore = static_cast<int>(list.size());
-    list.clear();
-    list.shrink_to_fit();
-    list.reserve(numVertices);
-
-    searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
-
-    if (numVertices == 0)
-        return;
-
-    for (int id = 0; id < numVertices; ++id) {
-        Vertex& vertex = graph.GetVertex(id)->get();
-        list.push_back(vertex.point);
-    }
-    int sizeAfter = static_cast<int>(list.size());
-
-    int batchSize = 1000;
-    int lastId = numVertices - 1;
-    for (int startingId = 0; startingId < numVertices; startingId += batchSize) {
-        int endingId = std::min(startingId + batchSize - 1, lastId);
-        searchTree->addPoints(startingId, endingId);
-    }
-
-    endTime = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
-    if (!quiet)
-        std::cout << StringPrintf("done (%ss, %s to %s vertices)", duration, sizeBefore, sizeAfter) << std::endl;
 }
 }
