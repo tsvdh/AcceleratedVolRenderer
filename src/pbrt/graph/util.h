@@ -633,6 +633,24 @@ using nlohmann::json;
 struct Config;
 struct GraphBuilderConfig;
 struct LightingCalculatorConfig;
+struct ReinforcementConfig;
+struct EdgeReinforcementConfig;
+struct NeighbourReinforcementConfig;
+
+struct ReinforcementConfig {
+    bool active;
+    int reinforcementIterations;
+    int pointsOnRadiusReinforcement;
+};
+
+struct EdgeReinforcementConfig : ReinforcementConfig {
+    int edgesForNotSparse;
+};
+
+struct NeighbourReinforcementConfig : ReinforcementConfig {
+    int neighboursForNotSparse;
+    float neighbourRangeModifier;
+};
 
 struct GraphBuilderConfig {
     // general
@@ -644,10 +662,8 @@ struct GraphBuilderConfig {
     int iterationsPerStep;
 
     // sparse reinforcement
-    bool reinforceSparseVertices;
-    int edgesForNotSparse;
-    int reinforcementIterations;
-    int pointsOnRadiusReinforcement;
+    EdgeReinforcementConfig edgeReinforcement;
+    NeighbourReinforcementConfig neighbourReinforcement;
 };
 
 struct LightingCalculatorConfig {
@@ -662,6 +678,27 @@ struct Config {
     LightingCalculatorConfig lightingCalculator;
 };
 
+inline void from_json(const json& jsonObject, ReinforcementConfig& reinforcementConfig) {
+    jsonObject.at("active").get_to(reinforcementConfig.active);
+    jsonObject.at("reinforcementIterations").get_to(reinforcementConfig.reinforcementIterations);
+    jsonObject.at("pointsOnRadiusReinforcement").get_to(reinforcementConfig.pointsOnRadiusReinforcement);
+}
+
+inline void from_json(const json& jsonObject, EdgeReinforcementConfig& edgeReinforcementConfig) {
+    auto edgeReinforcement = jsonObject.at("edgeReinforcement");
+    from_json(edgeReinforcement, static_cast<ReinforcementConfig&>(edgeReinforcementConfig));
+
+    edgeReinforcement.at("edgesForNotSparse").get_to(edgeReinforcementConfig.edgesForNotSparse);
+}
+
+inline void from_json(const json& jsonObject, NeighbourReinforcementConfig& neighbourReinforcementConfig) {
+    auto neighbourReinforcement = jsonObject.at("neighbourReinforcement");
+    from_json(neighbourReinforcement, static_cast<ReinforcementConfig&>(neighbourReinforcementConfig));
+
+    neighbourReinforcement.at("neighboursForNotSparse").get_to(neighbourReinforcementConfig.neighboursForNotSparse);
+    neighbourReinforcement.at("neighbourRangeModifier").get_to(neighbourReinforcementConfig.neighbourRangeModifier);
+}
+
 inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderConfig) {
     auto graphBuilder = jsonObject.at("graphBuilder");
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
@@ -670,10 +707,11 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);
 
-    graphBuilder.at("reinforceSparseVertices").get_to(graphBuilderConfig.reinforceSparseVertices);
-    graphBuilder.at("edgesForNotSparse").get_to(graphBuilderConfig.edgesForNotSparse);
-    graphBuilder.at("reinforcementIterations").get_to(graphBuilderConfig.reinforcementIterations);
-    graphBuilder.at("pointsOnRadiusReinforcement").get_to(graphBuilderConfig.pointsOnRadiusReinforcement);
+    if (graphBuilder.contains("edgeReinforcement"))
+        from_json(graphBuilder, graphBuilderConfig.edgeReinforcement);
+
+    if (graphBuilder.contains("neighbourReinforcement"))
+        from_json(graphBuilder, graphBuilderConfig.neighbourReinforcement);
 }
 
 inline void from_json(const json& jsonObject, LightingCalculatorConfig& lightingCalculatorConfig) {

@@ -76,11 +76,14 @@ int main(int argc, char* argv[]) {
     int iterationsPerStep = config.graphBuilder.iterationsPerStep;
     int maxDepth = config.graphBuilder.maxDepth;
 
-    int maxIterations = std::max(config.graphBuilder.reinforcementIterations,
-                                 config.lightingCalculator.lightIterations);
+    std::vector iterations = {config.graphBuilder.edgeReinforcement.reinforcementIterations,
+                                   config.graphBuilder.neighbourReinforcement.reinforcementIterations,
+                                   config.lightingCalculator.lightIterations,};
+    int maxIterations = *std::max_element(iterations.begin(), iterations.end());
 
     int maxDiskPoints = util::GetDiskPointsSize(config.lightingCalculator.pointsOnRadiusLight);
-    int maxSpherePoints = util::GetSphereVolumePointsSize(config.graphBuilder.pointsOnRadiusReinforcement);
+    int maxSpherePoints = util::GetSphereVolumePointsSize(std::max(config.graphBuilder.edgeReinforcement.pointsOnRadiusReinforcement,
+                                                                  config.graphBuilder.neighbourReinforcement.pointsOnRadiusReinforcement));
     int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
 
     int64_t numRays = Sqr(dimensionSteps);
