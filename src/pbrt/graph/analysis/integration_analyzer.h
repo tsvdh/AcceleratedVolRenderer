@@ -16,8 +16,8 @@ using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
 
 class IntegrationAnalyzer final : public GraphIntegrator {
 public:
-    IntegrationAnalyzer(float renderRadiusMod, int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
-        : GraphIntegrator(renderRadiusMod, std::move(camera), std::move(sampler), std::move(aggregate), lights), maxDepth(maxDepth) {
+    IntegrationAnalyzer(float renderRadiusMod, float neighbourRadiusMod, int maxDepth, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
+        : GraphIntegrator(renderRadiusMod, neighbourRadiusMod, std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights)), maxDepth(maxDepth) {
     }
 
     void Render() override;

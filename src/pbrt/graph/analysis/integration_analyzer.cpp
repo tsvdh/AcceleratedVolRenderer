@@ -144,12 +144,13 @@ std::unique_ptr<IntegrationAnalyzer> IntegrationAnalyzer::Create(
     const ParameterDictionary& parameters, Camera camera, Sampler sampler,
     Primitive aggregate, std::vector<Light> lights) {
 
-    float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 10);
+    float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 1);
+    float neighbourRadiusMod = parameters.GetOneFloat("neighbourRadiusMod", 1);
 
     int maxDepthFromFile = parameters.GetOneInt("maxdepth", 1); // suppress PBRT warning
     int maxDepth = Options->maxdepth ? Options->maxdepth.value() : maxDepthFromFile;
 
-    return std::make_unique<IntegrationAnalyzer>(renderRadiusMod, maxDepth,
+    return std::make_unique<IntegrationAnalyzer>(renderRadiusMod, neighbourRadiusMod, maxDepth,
         std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));
 }
 
