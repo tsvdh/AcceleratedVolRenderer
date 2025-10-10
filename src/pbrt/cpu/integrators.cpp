@@ -40,13 +40,13 @@
 #include <pbrt/util/stats.h>
 #include <pbrt/util/string.h>
 
-#include <pbrt/graph/volpath_custom.h>
+#include <graph/volpath_custom.h>
 
 #include <algorithm>
 #include <iostream>
 
-#include "pbrt/graph/graph_integrator.h"
-#include "pbrt/graph/analysis/integration_analyzer.h"
+#include "graph/graph_integrator.h"
+#include "graph/analysis/integration_analyzer.h"
 
 namespace pbrt {
 

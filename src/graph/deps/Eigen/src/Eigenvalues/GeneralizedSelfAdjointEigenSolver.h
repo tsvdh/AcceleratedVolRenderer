@@ -11,7 +11,7 @@
 #ifndef EIGEN_GENERALIZEDSELFADJOINTEIGENSOLVER_H
 #define EIGEN_GENERALIZEDSELFADJOINTEIGENSOLVER_H
 
-#include "./Tridiagonalization.h"
+#include "Tridiagonalization.h"
 
 namespace Eigen { 
 

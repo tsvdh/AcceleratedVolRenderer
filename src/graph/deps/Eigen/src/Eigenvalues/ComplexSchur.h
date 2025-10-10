@@ -12,7 +12,7 @@
 #ifndef EIGEN_COMPLEX_SCHUR_H
 #define EIGEN_COMPLEX_SCHUR_H
 
-#include "./HessenbergDecomposition.h"
+#include "HessenbergDecomposition.h"
 
 namespace Eigen { 
 

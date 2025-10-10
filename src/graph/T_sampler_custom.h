@@ -1,9 +1,9 @@
 #pragma once
 
+#include <graph/graph.h>
 #include <pbrt/media.h>
 #include <pbrt/pbrt.h>
 #include <pbrt/ray.h>
-#include <pbrt/graph/graph.h>
 #include <pbrt/util/spectrum.h>
 
 namespace graph {

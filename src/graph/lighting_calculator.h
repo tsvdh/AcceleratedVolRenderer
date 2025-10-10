@@ -3,7 +3,7 @@
 #include <pbrt/base/sampler.h>
 
 #include "graph.h"
-#include "pbrt/graph/deps/Eigen/SparseCore"
+#include "graph/deps/Eigen/SparseCore"
 
 namespace graph {
 

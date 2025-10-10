@@ -12,7 +12,7 @@
 #ifndef EIGEN_COMPLEX_EIGEN_SOLVER_H
 #define EIGEN_COMPLEX_EIGEN_SOLVER_H
 
-#include "./ComplexSchur.h"
+#include "ComplexSchur.h"
 
 namespace Eigen { 
 

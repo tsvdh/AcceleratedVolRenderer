@@ -821,25 +821,25 @@ set_property (TARGET soac PROPERTY FOLDER "cmd")
 # Graph lib
 
 set(GRAPH
-        src/pbrt/graph/util.h
-        src/pbrt/graph/graph.h
-        src/pbrt/graph/graph.cpp
-        src/pbrt/graph/volpath_custom.h
-        src/pbrt/graph/volpath_custom.cpp
-        src/pbrt/graph/T_sampler_custom.h
-        src/pbrt/graph/graph_integrator.h
-        src/pbrt/graph/graph_integrator.cpp
-        src/pbrt/graph/lighting_calculator.h
-        src/pbrt/graph/lighting_calculator.cpp
+        src/graph/util.h
+        src/graph/graph.h
+        src/graph/graph.cpp
+        src/graph/volpath_custom.h
+        src/graph/volpath_custom.cpp
+        src/graph/T_sampler_custom.h
+        src/graph/graph_integrator.h
+        src/graph/graph_integrator.cpp
+        src/graph/lighting_calculator.h
+        src/graph/lighting_calculator.cpp
 
-        src/pbrt/graph/analysis/integration_analyzer.h
-        src/pbrt/graph/analysis/integration_analyzer.cpp
+        src/graph/analysis/integration_analyzer.h
+        src/graph/analysis/integration_analyzer.cpp
 
-        src/pbrt/graph/free/free_graph_builder.h
-        src/pbrt/graph/free/free_graph_builder.cpp
+        src/graph/free/free_graph_builder.h
+        src/graph/free/free_graph_builder.cpp
 
-        src/pbrt/graph/deps/json.hpp
-        src/pbrt/graph/deps/nanoflann.hpp
+        src/graph/deps/json.hpp
+        src/graph/deps/nanoflann.hpp
 )
 
 source_group ("Graph files" FILES ${GRAPH})
@@ -868,8 +868,8 @@ target_include_directories(graph_lib PUBLIC
         ${CMAKE_CURRENT_BINARY_DIR}
         ${GLFW_INCLUDE}
         ${GLAD_INCLUDE}
-        src/pbrt/graph/deps/Eigen
-        src/pbrt/graph/deps/Eigen_Unsupported
+        src/graph/deps/Eigen
+        src/graph/deps/Eigen_Unsupported
 )
 
 target_compile_options(graph_lib PUBLIC ${PBRT_CXX_FLAGS})

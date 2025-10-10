@@ -2,9 +2,9 @@
 
 #include <pbrt/pbrt.h>
 
-#include "pbrt/graph/graph.h"
-#include "pbrt/graph/graph_integrator.h"
-#include "pbrt/graph/deps/nanoflann.hpp"
+#include "graph/graph.h"
+#include "graph/graph_integrator.h"
+#include "graph/deps/nanoflann.hpp"
 
 namespace graph {
 
