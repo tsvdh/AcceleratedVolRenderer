@@ -22,6 +22,8 @@
 
 namespace pbrt {
 
+int TerminalWidth();
+
 // Timer Definition
 class Timer {
   public:

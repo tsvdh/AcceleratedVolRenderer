@@ -304,13 +304,39 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
 }
 
 void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
-    bool edgesSatisfied = true, neighboursSatisfied = true;
-    std::vector<int> initialVertices;
-    std::vector<int> currentFewEdges;
-    std::vector<int> currentFewNeighbours;
+    if (!quiet)
+        std::cout << "--- Graph Reinforcement ---" << std::endl;
 
-    for (auto& [id, vertex] : graph.GetVertices())
-        initialVertices.push_back(id);
+    bool edgesSatisfied = true, neighboursSatisfied = true;
+    float edgesUnsatisfiedRatio = 0, neighboursUnsatisfiedRatio = 0;
+    std::vector<int> initialVertices;
+    std::vector<int> currentFewEdges, currentFewNeighbours;
+
+    float edgeDuration = 0, neighbourDuration = 0;
+
+    auto printEdgeStatus = [&]() -> void {
+        if (quiet)
+            return;
+        if (!config.edgeReinforcement.active)
+            std::cout << "Edges: inactive" << std::endl;
+        else
+            std::cout << StringPrintf("Edges: %s / %s; %.3f (%s)               ",
+                currentFewEdges.size(), initialVertices.size(), edgesUnsatisfiedRatio, util::formatTime(edgeDuration)) << std::endl;
+    };
+    auto printNeighbourStatus = [&]() -> void {
+        if (quiet)
+            return;
+        if (!config.neighbourReinforcement.active)
+            std::cout << "Neighbours: inactive" << std::endl;
+        else
+            std::cout << StringPrintf("Neighbours: %s / %s; %.3f (%s)          ",
+                currentFewNeighbours.size(), initialVertices.size(), neighboursUnsatisfiedRatio, util::formatTime(neighbourDuration)) << std::endl;
+    };
+    auto clearLine = []() -> void {
+        std::string blankLine;
+        blankLine.assign(TerminalWidth(), ' ');
+        std::cout << blankLine << "\r";
+    };
 
     auto checkFewEdges = [&]() -> void {
         currentFewEdges.clear();
@@ -320,12 +346,8 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
                 currentFewEdges.push_back(id);
         }
 
-        float unsatisfiedRatio = static_cast<float>(currentFewEdges.size()) / static_cast<float>(initialVertices.size());
-        edgesSatisfied = unsatisfiedRatio < config.edgeReinforcement.unsatisfiedAllowedRatio;
-
-        if (!quiet)
-            std::cout << StringPrintf("Edges: %s / %s of original vertices remain sparse",
-                currentFewEdges.size(), initialVertices.size()) << std::endl;
+        edgesUnsatisfiedRatio = static_cast<float>(currentFewEdges.size()) / static_cast<float>(initialVertices.size());
+        edgesSatisfied = edgesUnsatisfiedRatio < config.edgeReinforcement.unsatisfiedAllowedRatio;
     };
 
     auto checkFewNeighbours = [&]() -> void {
@@ -336,45 +358,71 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
                 currentFewNeighbours.push_back(id);
         }
 
-        float unsatisfiedRatio = static_cast<float>(currentFewNeighbours.size()) / static_cast<float>(initialVertices.size());
-        neighboursSatisfied = unsatisfiedRatio < config.neighbourReinforcement.unsatisfiedAllowedRatio;
-
-        if (!quiet)
-            std::cout << StringPrintf("Neighbours: %s / %s of original vertices remain sparse",
-                currentFewNeighbours.size(), initialVertices.size()) << std::endl;
+        neighboursUnsatisfiedRatio = static_cast<float>(currentFewNeighbours.size()) / static_cast<float>(initialVertices.size());
+        neighboursSatisfied = neighboursUnsatisfiedRatio < config.neighbourReinforcement.unsatisfiedAllowedRatio;
     };
+
+    for (auto& [id, vertex] : graph.GetVertices())
+        initialVertices.push_back(id);
 
     if (config.edgeReinforcement.active)
         checkFewEdges();
-
     if (config.neighbourReinforcement.active)
         checkFewNeighbours();
 
+    printEdgeStatus();
+    printNeighbourStatus();
+
+    int cycle = 0;
     while (!edgesSatisfied || !neighboursSatisfied) {
-        if (!edgesSatisfied) {
-            ReinforceSparseVertices(graph, currentFewEdges, config.edgeReinforcement);
+        if (config.edgeReinforcement.active && !edgesSatisfied) {
+
+            ProgressReporter progress(currentFewEdges.size() * config.edgeReinforcement.reinforcementRays,
+                "Reinforcing edges", false);
+
+            ReinforceSparseVertices(graph, currentFewEdges, config.edgeReinforcement, cycle, progress);
+            edgeDuration += progress.ElapsedSeconds();
             checkFewEdges();
+
+            std::cout << "\x1b[3A";
+            printEdgeStatus();
+            printNeighbourStatus();
+            clearLine();
         }
-        if (!neighboursSatisfied) {
-            ReinforceSparseVertices(graph, currentFewNeighbours, config.neighbourReinforcement);
+        if (config.neighbourReinforcement.active && !neighboursSatisfied) {
+
+            ProgressReporter progress(currentFewNeighbours.size() * config.neighbourReinforcement.reinforcementRays,
+                "Reinforcing neighbours", false);
+
+            ReinforceSparseVertices(graph, currentFewNeighbours, config.neighbourReinforcement, cycle, progress);
+            neighbourDuration += progress.ElapsedSeconds();
             checkFewNeighbours();
+
+            std::cout << "\x1b[3A";
+            printEdgeStatus();
+            printNeighbourStatus();
+            clearLine();
         }
+        ++cycle;
+    }
+
+    if (!quiet) {
+        std::cout << StringPrintf("Done (%s)                         ",
+            util::formatTime(edgeDuration + neighbourDuration)) << std::endl;
+        std::cout << "---------------------------" << std::endl;
     }
 }
 
-void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, std::vector<int>& sparseVertices, ReinforcementConfig& reinforcementConfig) {
-    // dynamic_cast<EdgeReinforcementConfig*>(&reinforcementConfig);
-
-    int64_t numSparseVertices = static_cast<int64_t>(sparseVertices.size());
-    int numRaysPerVertex = reinforcementConfig.reinforcementRays;
-    int64_t workNeeded = numSparseVertices * numRaysPerVertex;
-
-    ProgressReporter progress(workNeeded, "Reinforcing sparse vertices", quiet);
+void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vector<int>& sparseVertices, const ReinforcementConfig& reinforcementConfig,
+        int cycle, ProgressReporter& progress) {
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
     for (int vertexId : sparseVertices) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
-        std::vector<Point3f> spherePoints = util::GetSphereVolumePointsRandom(graph.GetVertexRadius().value(), vertex.point, numRaysPerVertex, sampler);
+
+        sampler.StartPixelSample(Point2i(0, 0), cycle);
+        std::vector<Point3f> spherePoints = util::GetSphereVolumePointsRandom(
+            graph.GetVertexRadius().value(), vertex.point, reinforcementConfig.reinforcementRays, sampler);
 
         uint64_t startIndex = vertexId * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
@@ -386,7 +434,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, std::vector<int
             PhaseFunction phase = mediumData.medium.SamplePoint(spherePoint, mediumData.defaultLambda).phase;
             Vector3f inDir(1, 0, 0);
 
-            sampler.StartPixelSample({xCoor, yCoor}, 0);
+            sampler.StartPixelSample({xCoor, yCoor}, cycle);
 
             Vector3f outDir = phase.Sample_p(inDir, sampler.Get2D())->wi;
             RayDifferential ray(spherePoint, outDir, 0, mediumData.medium);

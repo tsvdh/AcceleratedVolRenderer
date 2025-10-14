@@ -613,6 +613,28 @@ inline void SamplesStore::FillWithAverager(Averager& averager) {
     this->numSamples = averager.GetValues().size();
 }
 
+inline std::string formatTime(int totalSeconds) {
+    int hours = totalSeconds / 3600;
+    int minutes = totalSeconds / 60 - hours * 60;
+    int seconds = totalSeconds - hours * 3600 - minutes * 60;
+
+    if (hours > 0)
+        return StringPrintf("%ih %im %is", hours, minutes, seconds);
+    if (minutes > 0)
+        return StringPrintf("%im %is", minutes, seconds);
+
+    return StringPrintf("%is", seconds);
+}
+
+inline std::string formatTime(float totalSeconds) {
+    float whole;
+    float fractional = std::modf(totalSeconds, &whole);
+    std::string formattedTime = formatTime(static_cast<int>(whole));
+    return StringPrintf("%s.%ss",
+        formattedTime.substr(0, formattedTime.size() - 1),
+        StringPrintf("%.1f", fractional).substr(2, 2));
+}
+
 }
 
 namespace graph {

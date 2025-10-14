@@ -22,7 +22,8 @@ private:
     int CountInRadius(const Point3f& pointRef, float squaredRadius);
     void UseAndRemovePathInfo(Graph& graph);
     void ReinforceSparseVertices(FreeGraph& graph);
-    void ReinforceSparseVertices(FreeGraph& graph, std::vector<int>& sparseVertices, ReinforcementConfig& reinforcementConfig);
+    void ReinforceSparseVertices(FreeGraph& graph, const std::vector<int>& sparseVertices, const ReinforcementConfig& reinforcementConfig, int cycle,
+        ProgressReporter& progress);
 
     const util::MediumData& mediumData;
     Vector3f inDirection;

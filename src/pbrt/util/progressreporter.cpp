@@ -5,6 +5,8 @@
 #include <iostream>
 #include <pbrt/util/progressreporter.h>
 
+#include "graph/util.h"
+
 #ifdef PBRT_BUILD_GPU_RENDERER
 #include <pbrt/gpu/util.h>
 #endif
@@ -24,8 +26,6 @@
 #endif  // !PBRT_IS_WINDOWS
 
 namespace pbrt {
-
-static int TerminalWidth();
 
 std::string Timer::ToString() const {
     return StringPrintf(
@@ -68,28 +68,6 @@ ProgressReporter::ProgressReporter(int64_t totalWork, std::string title, bool qu
 
 ProgressReporter::~ProgressReporter() {
     Done();
-}
-
-inline std::string formatTime(int totalSeconds) {
-    int hours = totalSeconds / 3600;
-    int minutes = totalSeconds / 60 - hours * 60;
-    int seconds = totalSeconds - hours * 3600 - minutes * 60;
-
-    if (hours > 0)
-        return StringPrintf("%ih %im %is", hours, minutes, seconds);
-    if (minutes > 0)
-        return StringPrintf("%im %is", minutes, seconds);
-
-    return StringPrintf("%is", seconds);
-}
-
-inline std::string formatTime(float totalSeconds) {
-    float whole;
-    float fractional = std::modf(totalSeconds, &whole);
-    std::string formattedTime = formatTime(static_cast<int>(whole));
-    return StringPrintf("%s.%ss",
-        formattedTime.substr(0, formattedTime.size() - 1),
-        StringPrintf("%.1f", fractional).substr(2, 2));
 }
 
 void ProgressReporter::printBar() {
@@ -175,13 +153,13 @@ void ProgressReporter::printBar() {
         int estRemainingRounded = static_cast<int>(std::floor(estRemaining));
 
         if (exitThread)
-            printf(" (%s)               ", formatTime(*finishTime).c_str());
+            printf(" (%s)               ", util::formatTime(*finishTime).c_str());
         else if (percentDone == 1.f)
-            printf(" (%s)               ", formatTime(elapsedRounded).c_str());
+            printf(" (%s)               ", util::formatTime(elapsedRounded).c_str());
         else if (!std::isinf(estRemaining))
-            printf(" (%s|%s)            ", formatTime(elapsedRounded).c_str(), formatTime(std::max<int>(0, estRemainingRounded)).c_str());
+            printf(" (%s|%s)            ", util::formatTime(elapsedRounded).c_str(), util::formatTime(std::max<int>(0, estRemainingRounded)).c_str());
         else
-            printf(" (%s|?)             ", formatTime(elapsedRounded).c_str());
+            printf(" (%s|?)             ", util::formatTime(elapsedRounded).c_str());
         fflush(stdout);
     }
 }
@@ -219,7 +197,7 @@ std::string ProgressReporter::ToString() const {
                         totalWork, title, timer, workDone, exitThread);
 }
 
-static int TerminalWidth() {
+int TerminalWidth() {
 #ifdef PBRT_IS_WINDOWS
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
     if (h == INVALID_HANDLE_VALUE || !h) {
