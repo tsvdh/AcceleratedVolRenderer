@@ -3,8 +3,8 @@
 #include <fstream>
 #include <iostream>
 
-#include <pbrt/materials.h>
 #include <graph/T_sampler_custom.h>
+#include <pbrt/materials.h>
 #include <pbrt/util/display.h>
 #include <pbrt/util/file.h>
 #include <pbrt/util/progressreporter.h>

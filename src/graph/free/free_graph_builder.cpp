@@ -304,84 +304,69 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
 }
 
 void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
-    // ------ edges ------
-    if (config.edgeReinforcement.active) {
-        std::vector<int> sparseVertices;
-        for (auto& [id, vertex] : graph.GetVertices()) {
+    bool edgesSatisfied = true, neighboursSatisfied = true;
+    std::vector<int> initialVertices;
+    std::vector<int> currentFewEdges;
+    std::vector<int> currentFewNeighbours;
+
+    for (auto& [id, vertex] : graph.GetVertices())
+        initialVertices.push_back(id);
+
+    auto checkFewEdges = [&]() -> void {
+        currentFewEdges.clear();
+        for (int id : initialVertices) {
+            Vertex& vertex = graph.GetVertex(id)->get();
             if (vertex.outEdges.size() < config.edgeReinforcement.edgesForNotSparse)
-                sparseVertices.push_back(id);
+                currentFewEdges.push_back(id);
         }
-        int numSparseVertices = static_cast<int>(sparseVertices.size());
+
+        float unsatisfiedRatio = static_cast<float>(currentFewEdges.size()) / static_cast<float>(initialVertices.size());
+        edgesSatisfied = unsatisfiedRatio < config.edgeReinforcement.unsatisfiedAllowedRatio;
 
         if (!quiet)
-            std::cout << StringPrintf("%s / %s vertices found with few edges", numSparseVertices, graph.GetVertices().size()) << std::endl;
+            std::cout << StringPrintf("Edges: %s / %s of original vertices remain sparse",
+                currentFewEdges.size(), initialVertices.size()) << std::endl;
+    };
 
-        ReinforceSparseVertices(graph, sparseVertices, config.edgeReinforcement);
-
-        int sparseVerticesStillSparse = 0;
-        for (int vertexId : sparseVertices) {
-            Vertex& vertex = graph.GetVertex(vertexId)->get();
-
-            if (vertex.outEdges.size() < config.edgeReinforcement.edgesForNotSparse)
-                ++sparseVerticesStillSparse;
+    auto checkFewNeighbours = [&]() -> void {
+        currentFewNeighbours.clear();
+        for (int id : initialVertices) {
+            Vertex& vertex = graph.GetVertex(id)->get();
+            if (CountInRadius(vertex.point, squaredNeighbourSearchRadius) < config.neighbourReinforcement.neighboursForNotSparse)
+                currentFewNeighbours.push_back(id);
         }
 
-        sparseVertices.clear();
-        sparseVertices.shrink_to_fit();
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            if (vertex.outEdges.size() < config.edgeReinforcement.edgesForNotSparse)
-                sparseVertices.push_back(id);
-        }
-
-        if (!quiet) {
-            std::cout << StringPrintf("%s / %s remain sparse after reinforcing", sparseVerticesStillSparse, numSparseVertices) << std::endl;
-            std::cout << StringPrintf("%s / %s total vertices found with few edges", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
-        }
-    }
-
-    // --- neighbours ---
-    if (config.neighbourReinforcement.active) {
-        int neighboursForNotSparse = config.neighbourReinforcement.neighboursForNotSparse;
-
-        std::vector<int> sparseVertices;
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            if (CountInRadius(vertex.point, squaredNeighbourSearchRadius) < neighboursForNotSparse)
-                sparseVertices.push_back(id);
-        }
-        int numSparseVertices = static_cast<int>(sparseVertices.size());
+        float unsatisfiedRatio = static_cast<float>(currentFewNeighbours.size()) / static_cast<float>(initialVertices.size());
+        neighboursSatisfied = unsatisfiedRatio < config.neighbourReinforcement.unsatisfiedAllowedRatio;
 
         if (!quiet)
-            std::cout << StringPrintf("%s / %s vertices found with few neighbours", numSparseVertices, graph.GetVertices().size()) << std::endl;
+            std::cout << StringPrintf("Neighbours: %s / %s of original vertices remain sparse",
+                currentFewNeighbours.size(), initialVertices.size()) << std::endl;
+    };
 
-        ReinforceSparseVertices(graph, sparseVertices, config.neighbourReinforcement);
+    if (config.edgeReinforcement.active)
+        checkFewEdges();
 
-        int sparseVerticesStillSparse = 0;
-        for (int vertexId : sparseVertices) {
-            Vertex& vertex = graph.GetVertex(vertexId)->get();
-            if (CountInRadius(vertex.point, squaredNeighbourSearchRadius) < neighboursForNotSparse)
-                ++sparseVerticesStillSparse;
+    if (config.neighbourReinforcement.active)
+        checkFewNeighbours();
+
+    while (!edgesSatisfied || !neighboursSatisfied) {
+        if (!edgesSatisfied) {
+            ReinforceSparseVertices(graph, currentFewEdges, config.edgeReinforcement);
+            checkFewEdges();
         }
-
-        sparseVertices.clear();
-        sparseVertices.shrink_to_fit();
-        for (auto& [id, vertex] : graph.GetVertices()) {
-            if (CountInRadius(vertex.point, squaredNeighbourSearchRadius) < neighboursForNotSparse)
-                sparseVertices.push_back(id);
-        }
-
-        if (!quiet) {
-            std::cout << StringPrintf("%s / %s remain sparse after reinforcing", sparseVerticesStillSparse, numSparseVertices) << std::endl;
-            std::cout << StringPrintf("%s / %s total vertices found with few neighbours", sparseVertices.size(), graph.GetVertices().size()) << std::endl;
+        if (!neighboursSatisfied) {
+            ReinforceSparseVertices(graph, currentFewNeighbours, config.neighbourReinforcement);
+            checkFewNeighbours();
         }
     }
 }
 
 void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, std::vector<int>& sparseVertices, ReinforcementConfig& reinforcementConfig) {
-    float sphereRadius = graph.GetVertexRadius().value();
-    util::SpherePointsMaker spherePointsMaker(sphereRadius, reinforcementConfig.pointsOnRadiusReinforcement);
+    // dynamic_cast<EdgeReinforcementConfig*>(&reinforcementConfig);
 
     int64_t numSparseVertices = static_cast<int64_t>(sparseVertices.size());
-    int numRaysPerVertex = reinforcementConfig.reinforcementIterations * util::GetSphereVolumePointsSize(reinforcementConfig.pointsOnRadiusReinforcement);
+    int numRaysPerVertex = reinforcementConfig.reinforcementRays;
     int64_t workNeeded = numSparseVertices * numRaysPerVertex;
 
     ProgressReporter progress(workNeeded, "Reinforcing sparse vertices", quiet);
@@ -389,7 +374,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, std::vector<int
 
     for (int vertexId : sparseVertices) {
         Vertex& vertex = graph.GetVertex(vertexId)->get();
-        std::vector<Point3f> spherePoints = spherePointsMaker.GetSpherePointsFor(vertex.point);
+        std::vector<Point3f> spherePoints = util::GetSphereVolumePointsRandom(graph.GetVertexRadius().value(), vertex.point, numRaysPerVertex, sampler);
 
         uint64_t startIndex = vertexId * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
@@ -401,28 +386,26 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, std::vector<int
             PhaseFunction phase = mediumData.medium.SamplePoint(spherePoint, mediumData.defaultLambda).phase;
             Vector3f inDir(1, 0, 0);
 
-            for (int i = 0; i < reinforcementConfig.reinforcementIterations; ++i) {
-                sampler.StartPixelSample({xCoor, yCoor}, i);
+            sampler.StartPixelSample({xCoor, yCoor}, 0);
 
-                Vector3f outDir = phase.Sample_p(inDir, sampler.Get2D())->wi;
-                RayDifferential ray(spherePoint, outDir, 0, mediumData.medium);
-                util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
+            Vector3f outDir = phase.Sample_p(inDir, sampler.Get2D())->wi;
+            RayDifferential ray(spherePoint, outDir, 0, mediumData.medium);
+            util::HitsResult mediumHits = GetHits(mediumData.primitiveData.primitive, ray, mediumData);
 
-                if (!mediumHits.RayEntersVolume()) {
-                    progress.Update();
-                    continue;
-                }
-
-                if (mediumHits.type == util::OutsideTwoHits)
-                    mediumHits.intersections[0].intr.SkipIntersection(&ray, mediumHits.tHits[0]);
-
-                float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
-
-                TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
-                UseAndRemovePathInfo(graph);
-
+            if (!mediumHits.RayEntersVolume()) {
                 progress.Update();
+                continue;
             }
+
+            if (mediumHits.type == util::OutsideTwoHits)
+                mediumHits.intersections[0].intr.SkipIntersection(&ray, mediumHits.tHits[0]);
+
+            float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
+
+            TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
+            UseAndRemovePathInfo(graph);
+
+            progress.Update();
         }
     }
     progress.Done();

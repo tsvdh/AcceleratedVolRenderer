@@ -230,6 +230,22 @@ static std::vector<Point3f> GetSphereVolumePoints(float radius, int numPointsOnR
     return points;
 }
 
+static std::vector<Point3f> GetSphereVolumePointsRandom(float radius, Point3f center, int numPoints, Sampler sampler) {
+    std::vector<Point3f> points;
+    points.reserve(numPoints);
+
+    while (points.size() < numPoints) {
+        Point3f point((sampler.Get1D() - 0.5) * 2 * radius,
+                      (sampler.Get1D() - 0.5) * 2 * radius,
+                      (sampler.Get1D() - 0.5) * 2 * radius);
+
+        if (Length(Vector3f(point)) < radius)
+            points.push_back(point + center);
+    }
+
+    return points;
+}
+
 inline int GetSphereVolumePointsSize(int numPointsOnRadius) {
     return static_cast<int>(GetSphereVolumePoints(1, numPointsOnRadius).size());
 }
@@ -639,8 +655,8 @@ struct NeighbourReinforcementConfig;
 
 struct ReinforcementConfig {
     bool active;
-    int reinforcementIterations;
-    int pointsOnRadiusReinforcement;
+    float unsatisfiedAllowedRatio;
+    int reinforcementRays;
 };
 
 struct EdgeReinforcementConfig : ReinforcementConfig {
@@ -680,8 +696,8 @@ struct Config {
 
 inline void from_json(const json& jsonObject, ReinforcementConfig& reinforcementConfig) {
     jsonObject.at("active").get_to(reinforcementConfig.active);
-    jsonObject.at("reinforcementIterations").get_to(reinforcementConfig.reinforcementIterations);
-    jsonObject.at("pointsOnRadiusReinforcement").get_to(reinforcementConfig.pointsOnRadiusReinforcement);
+    jsonObject.at("unsatisfiedAllowedRatio").get_to(reinforcementConfig.unsatisfiedAllowedRatio);
+    jsonObject.at("reinforcementRays").get_to(reinforcementConfig.reinforcementRays);
 }
 
 inline void from_json(const json& jsonObject, EdgeReinforcementConfig& edgeReinforcementConfig) {
@@ -729,8 +745,8 @@ inline void from_json(const json& jsonObject, Config& config) {
 
 using namespace pbrt;
 
-inline float ComputeRaysToSphere(const RayDifferential& rayToSphere, const std::optional<RayDifferential>& rayInSphere, const util::StartEndT& startEnd, const util::MediumData& mediumData,
-                                          Sampler sampler, int iterations, uint64_t samplingIndex) {
+inline float ComputeRaysToSphere(const RayDifferential& rayToSphere, const std::optional<RayDifferential>& rayInSphere, const util::StartEndT& startEnd,
+                                 const util::MediumData& mediumData, Sampler sampler, int iterations, uint64_t samplingIndex) {
     int yCoor = static_cast<int>(samplingIndex / Options->graph.samplingResolution->x);
     int xCoor = static_cast<int>(samplingIndex - yCoor * Options->graph.samplingResolution->x);
 

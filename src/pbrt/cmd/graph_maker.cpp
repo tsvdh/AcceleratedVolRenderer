@@ -1,14 +1,14 @@
+#include <graph/graph.h>
 #include <pbrt/scene.h>
-#include <pbrt/graph/graph.h>
 #include <pbrt/util/args.h>
 
 #include <fstream>
 #include <regex>
 
+#include "graph/lighting_calculator.h"
+#include "graph/deps/json.hpp"
+#include "graph/free/free_graph_builder.h"
 #include "pbrt/lights.h"
-#include "pbrt/graph/lighting_calculator.h"
-#include "pbrt/graph/deps/json.hpp"
-#include "pbrt/graph/free/free_graph_builder.h"
 
 using namespace pbrt;
 
@@ -76,14 +76,11 @@ int main(int argc, char* argv[]) {
     int iterationsPerStep = config.graphBuilder.iterationsPerStep;
     int maxDepth = config.graphBuilder.maxDepth;
 
-    std::vector iterations = {config.graphBuilder.edgeReinforcement.reinforcementIterations,
-                                   config.graphBuilder.neighbourReinforcement.reinforcementIterations,
-                                   config.lightingCalculator.lightIterations,};
-    int maxIterations = *std::max_element(iterations.begin(), iterations.end());
+    int maxIterations = config.lightingCalculator.lightIterations;
 
     int maxDiskPoints = util::GetDiskPointsSize(config.lightingCalculator.pointsOnRadiusLight);
-    int maxSpherePoints = util::GetSphereVolumePointsSize(std::max(config.graphBuilder.edgeReinforcement.pointsOnRadiusReinforcement,
-                                                                  config.graphBuilder.neighbourReinforcement.pointsOnRadiusReinforcement));
+    int maxSpherePoints = std::max(config.graphBuilder.edgeReinforcement.reinforcementRays,
+                                    config.graphBuilder.neighbourReinforcement.reinforcementRays);
     int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
 
     int64_t numRays = Sqr(dimensionSteps);
