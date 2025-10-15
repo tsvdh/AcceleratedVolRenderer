@@ -47,6 +47,7 @@ struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
     int samples = 0;
+    float searchRangeMod = 1;
 
     void MergeWithDataFrom(const VertexData& otherData);
 };
@@ -109,6 +110,7 @@ struct StreamFlags {
     bool useSamples = false;
     bool useRayVertexTypes = false;
     bool useLighting = false;
+    bool useSearchRangeMod = false;
 };
 
 struct StreamOptions {
@@ -227,7 +229,7 @@ public:
 
     using Graph::AddVertex;
 
-    std::optional<float> GetVertexRadius() { return vertexRadius; }
+    float GetVertexRadius() { return vertexRadius; }
 
     [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 
@@ -240,7 +242,7 @@ protected:
     Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) override;
 
 private:
-    std::optional<float> vertexRadius;
+    float vertexRadius = -1;
 };
 
 }

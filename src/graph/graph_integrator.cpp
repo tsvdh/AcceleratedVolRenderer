@@ -33,8 +33,10 @@ void GraphIntegrator::Initialize() {
 
     if (name == "uniform")
         uniformGraph = UniformGraph::ReadFromDisk(graphName);
-    if (name == "free")
+    if (name == "free") {
         freeGraph = FreeGraph::ReadFromDisk(graphName);
+        squaredSearchRadius = Sqr(freeGraph->GetVertexRadius());
+    }
 
     if (uniformGraph) {
         if (Options->graph.debug) {
@@ -89,8 +91,8 @@ SampledSpectrum GraphIntegrator::Li(RayDifferential ray, SampledWavelengths& lam
 
             RayDifferential worldRay = worldFromRender(ray);
 
-            for (const Bounds3f& voxelBounds : voxelBounds) {
-                if (voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0.get(), hit1.get())) {
+            for (const Bounds3f& _voxelBounds : voxelBounds) {
+                if (_voxelBounds.IntersectP(worldRay.o, worldRay.d, Infinity, hit0.get(), hit1.get())) {
                     if (*hit0 < minHit0) {
                         minHit0 = *hit0;
                         minHit1 = *hit1;
@@ -233,9 +235,6 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
 
     searchTree->radiusSearch(searchPointArray, squaredSearchRadius, resultItems);
 
-    if (resultItems.empty() && squaredNeighbourSearchRadius != -1)
-        searchTree->radiusSearch(searchPointArray, squaredNeighbourSearchRadius, resultItems);
-
     util::Averager lightAverager(static_cast<int>(resultItems.size()));
 
     for (nanoflann::ResultItem resultItem : resultItems) {
@@ -250,11 +249,7 @@ std::unique_ptr<GraphIntegrator> GraphIntegrator::Create(
         const ParameterDictionary& parameters, Camera camera, Sampler sampler,
         Primitive aggregate, std::vector<Light> lights)
 {
-    float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 1);
-    float neighbourRadiusMod = parameters.GetOneFloat("neighbourRadiusMod", 1);
-
-    return std::make_unique<GraphIntegrator>(renderRadiusMod, neighbourRadiusMod,
-        std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));
+    return std::make_unique<GraphIntegrator>(std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));
 }
 
 }

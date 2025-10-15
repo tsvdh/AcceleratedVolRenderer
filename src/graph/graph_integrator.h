@@ -19,16 +19,13 @@ using StaticTreeType = nanoflann::KDTreeSingleIndexAdaptor<
 class GraphIntegrator : public RayIntegrator {
 public:
     // VolPathCustomIntegrator Public Methods
-    GraphIntegrator(float renderRadiusMod, float neighbourRadiusMod, Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
+    GraphIntegrator(Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights)
         : RayIntegrator(std::move(camera), std::move(sampler), std::move(aggregate), lights) {
         light = util::GetLight(lights);
         worldFromRender = camera.GetCameraTransform().WorldFromRender();
         renderFromWorld = camera.GetCameraTransform().RenderFromWorld();
         lightSpectrum = light->GetLEmit();
         mediumData = util::MediumData(aggregate, camera.GetFilm().SampleWavelengths(0));
-
-        squaredSearchRadius = Sqr(GetSameSpotRadius(mediumData) * renderRadiusMod);
-        squaredNeighbourSearchRadius = Sqr(util::GetSameSpotRadius(mediumData) * neighbourRadiusMod);
 
         Initialize();
     }
@@ -61,7 +58,6 @@ protected:
     std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
     float squaredSearchRadius;
-    float squaredNeighbourSearchRadius;
 };
 
 }

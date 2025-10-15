@@ -246,6 +246,9 @@ inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFla
 
     if (flags.useSamples)
         out << data.samples << SEP;
+
+    if (flags.useSearchRangeMod)
+        out << data.searchRangeMod << SEP;
 }
 
 inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
@@ -262,7 +265,11 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
     if (flags.useSamples)
         in >> samples;
 
-    return VertexData{static_cast<RayVertexType>(rayVertexType), lightScalar, samples};
+    float searchRangeMod = -1;
+    if (flags.useSearchRangeMod)
+        in >> searchRangeMod;
+
+    return VertexData{static_cast<RayVertexType>(rayVertexType), lightScalar, samples, searchRangeMod};
 }
 
 inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
@@ -282,7 +289,8 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
     out << (flags.useCoors ? "True" : "False") << SEP
         << (flags.useSamples ? "True" : "False") << SEP
         << (flags.useRayVertexTypes ? "True" : "False") << SEP
-        << (flags.useLighting ? "True" : "False") << NEW;
+        << (flags.useLighting ? "True" : "False") << SEP
+        << (flags.useSearchRangeMod ? "True" : "False") << NEW;
 
     uint64_t numVertices = options.writeVertices ? vertices.size() : 0;
     uint64_t numEdges = options.writeEdges ? edges.size() : 0;
@@ -340,8 +348,8 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
 void Graph::ReadFromStream(std::istream& in) {
     StreamFlags flags;
 
-    std::string useCoors, useSamples, useRayVertexType, useLighting;
-    in >> useCoors >> useSamples >> useRayVertexType >> useLighting;
+    std::string useCoors, useSamples, useRayVertexType, useLighting, useSearchRangeMod;
+    in >> useCoors >> useSamples >> useRayVertexType >> useLighting >> useSearchRangeMod;
     if (useCoors == "True")
         flags.useCoors = true;
     if (useSamples == "True")
@@ -350,6 +358,8 @@ void Graph::ReadFromStream(std::istream& in) {
         flags.useRayVertexTypes = true;
     if (useLighting == "True")
         flags.useLighting = true;
+    if (useSearchRangeMod == "True")
+        flags.useSearchRangeMod = true;
 
     int numVertices, numEdges, numPaths;
     in >> curVertexId >> curEdgeId >> curPathId >> numVertices >> numEdges >> numPaths;
@@ -515,7 +525,7 @@ Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data, b
 
     auto findResult = coorsMap.find(coors);
     if (findResult != coorsMap.end()) {
-        // TODO: merge vertex data (how?)
+        // TODO: merge vertex data
         return GetVertex(findResult->second).value();
     }
 
@@ -609,14 +619,14 @@ UniformGraph FreeGraph::ToUniform(float spacing) const {
 }
 
 void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
-    out << "free" << NEW;
+    out << "free" << SEP << vertexRadius << NEW;
 
     Graph::WriteToStream(out, flags, options);
 }
 
 void FreeGraph::ReadFromStream(std::istream& in) {
     std::string description, name;
-    in >> description >> name;
+    in >> description >> name >> vertexRadius;
 
     Graph::ReadFromStream(in);
 }

@@ -95,7 +95,7 @@ SparseVec LightingCalculator::GetLightVector() {
 
     ThreadLocal<Sampler> samplers([&] { return sampler.Clone(); });
 
-    float sphereRadius = graph.GetVertexRadius().value();
+    float sphereRadius = graph.GetVertexRadius();
     util::SphereMaker sphereMaker(sphereRadius);
 
     int64_t workNeeded = numVertices * config.lightIterations * util::GetDiskPointsSize(config.pointsOnRadiusLight);

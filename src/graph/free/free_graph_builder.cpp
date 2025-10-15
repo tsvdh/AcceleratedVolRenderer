@@ -422,7 +422,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vect
 
         sampler.StartPixelSample(Point2i(0, 0), cycle);
         std::vector<Point3f> spherePoints = util::GetSphereVolumePointsRandom(
-            graph.GetVertexRadius().value(), vertex.point, reinforcementConfig.reinforcementRays, sampler);
+            graph.GetVertexRadius(), vertex.point, reinforcementConfig.reinforcementRays, sampler);
 
         uint64_t startIndex = vertexId * static_cast<int>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {

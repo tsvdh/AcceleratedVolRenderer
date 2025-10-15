@@ -1,11 +1,12 @@
-graph desc  string-description                                                       super class
-extra meta	string-name (float-spacing)
+graph desc  string-description                                                      super class
+extra meta	string-name float-spacing                                               uniform
+                        float-vertexRadius                                          free
 
-flags 		string-useCoors string-useSamples string-useRayVertexTypes               base class
+flags 		string-useCoors string-useSamples string-useRayVertexTypes              base class
                 string-useLighting string-useWeights
 base meta	int-curVertexId,curEdgeId,curPathId,vertices,edges,paths
-vertices	int-id float-x,y,z (int type) (float-lightScalar)
-                (int-samples) (int-x,y,z)
+vertices	int-id float-x,y,z (int-type) (float-lightScalar)
+                (int-samples) (float-searchRangeMod) (int-x,y,z)
 ...
 edges		int-id,from,to (int-samples) (float-weight)
 ...
