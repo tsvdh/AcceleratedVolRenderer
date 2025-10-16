@@ -7,7 +7,6 @@
 #include "pbrt/util/progressreporter.h"
 
 namespace graph {
-
 char SEP(' ');
 char NEW('\n');
 
@@ -247,8 +246,8 @@ inline void WriteVertexData(std::ostream& out, const VertexData& data, StreamFla
     if (flags.useSamples)
         out << data.samples << SEP;
 
-    if (flags.useSearchRangeMod)
-        out << data.searchRangeMod << SEP;
+    if (flags.useRenderSearchRange)
+        out << data.renderSearchRange << SEP;
 }
 
 inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
@@ -257,19 +256,18 @@ inline VertexData ReadVertexData(std::istream& in, StreamFlags flags) {
         in >> rayVertexType;
 
     float lightScalar = -1;
-    if (flags.useLighting) {
+    if (flags.useLighting)
         in >> lightScalar;
-    }
 
     int samples = -1;
     if (flags.useSamples)
         in >> samples;
 
-    float searchRangeMod = -1;
-    if (flags.useSearchRangeMod)
-        in >> searchRangeMod;
+    float renderSearchRange = -1;
+    if (flags.useRenderSearchRange)
+        in >> renderSearchRange;
 
-    return VertexData{static_cast<RayVertexType>(rayVertexType), lightScalar, samples, searchRangeMod};
+    return VertexData{static_cast<RayVertexType>(rayVertexType), lightScalar, samples, renderSearchRange};
 }
 
 inline void WriteEdgeData(std::ostream& out, EdgeData data, StreamFlags flags) {
@@ -285,16 +283,19 @@ inline EdgeData ReadEdgeData(std::istream& in, StreamFlags flags) {
     return EdgeData{samples};
 }
 
-void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
-    out << (flags.useCoors ? "True" : "False") << SEP
-        << (flags.useSamples ? "True" : "False") << SEP
-        << (flags.useRayVertexTypes ? "True" : "False") << SEP
-        << (flags.useLighting ? "True" : "False") << SEP
-        << (flags.useSearchRangeMod ? "True" : "False") << NEW;
+void Graph::WriteToStream(std::ostream& out) const {
+    if (!streamOptions || !streamFlags)
+        ErrorExit("Graph stream options or flags not set");
 
-    uint64_t numVertices = options.writeVertices ? vertices.size() : 0;
-    uint64_t numEdges = options.writeEdges ? edges.size() : 0;
-    uint64_t numPaths = options.writePaths ? paths.size() : 0;
+    out << (streamFlags->useCoors ? "True" : "False") << SEP
+        << (streamFlags->useSamples ? "True" : "False") << SEP
+        << (streamFlags->useRayVertexTypes ? "True" : "False") << SEP
+        << (streamFlags->useLighting ? "True" : "False") << SEP
+        << (streamFlags->useRenderSearchRange ? "True" : "False") << NEW;
+
+    uint64_t numVertices = streamOptions->writeVertices ? vertices.size() : 0;
+    uint64_t numEdges = streamOptions->writeEdges ? edges.size() : 0;
+    uint64_t numPaths = streamOptions->writePaths ? paths.size() : 0;
 
     out << curVertexId << SEP
         << curEdgeId << SEP
@@ -306,13 +307,13 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
     int totalWork = static_cast<int>(numVertices + numEdges + numPaths);
     ProgressReporter progress(totalWork, "Writing graph to stream", false);
 
-    if (options.writeVertices) {
+    if (streamOptions->writeVertices) {
         for (auto& [id, vertex] : vertices) {
             out << vertex.id << SEP << vertex.point;
 
-            WriteVertexData(out, vertex.data, flags);
+            WriteVertexData(out, vertex.data, streamFlags.value());
 
-            if (flags.useCoors)
+            if (streamFlags->useCoors)
                 out << vertex.coors.value();
 
             out << NEW;
@@ -321,17 +322,17 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
         }
     }
 
-    if (options.writeEdges) {
+    if (streamOptions->writeEdges) {
         for (auto& [id, edge] : edges) {
             out << edge.id << SEP << edge.from << SEP << edge.to << SEP;
-            WriteEdgeData(out, edge.data, flags);
+            WriteEdgeData(out, edge.data, streamFlags.value());
             out << NEW;
 
             progress.Update();
         }
     }
 
-    if (options.writePaths) {
+    if (streamOptions->writePaths) {
         for (auto& [id, path] : paths) {
             out << path.id << SEP << path.vertices.size() << SEP;
             for (int vertexId : path.vertices)
@@ -346,20 +347,20 @@ void Graph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions op
 }
 
 void Graph::ReadFromStream(std::istream& in) {
-    StreamFlags flags;
+    std::string useCoors, useSamples, useRayVertexType, useLighting, useSearchRange;
+    in >> useCoors >> useSamples >> useRayVertexType >> useLighting >> useSearchRange;
 
-    std::string useCoors, useSamples, useRayVertexType, useLighting, useSearchRangeMod;
-    in >> useCoors >> useSamples >> useRayVertexType >> useLighting >> useSearchRangeMod;
+    streamFlags = StreamFlags{};
     if (useCoors == "True")
-        flags.useCoors = true;
+        streamFlags->useCoors = true;
     if (useSamples == "True")
-        flags.useSamples = true;
+        streamFlags->useSamples = true;
     if (useRayVertexType == "True")
-        flags.useRayVertexTypes = true;
+        streamFlags->useRayVertexTypes = true;
     if (useLighting == "True")
-        flags.useLighting = true;
-    if (useSearchRangeMod == "True")
-        flags.useSearchRangeMod = true;
+        streamFlags->useLighting = true;
+    if (useSearchRange == "True")
+        streamFlags->useRenderSearchRange = true;
 
     int numVertices, numEdges, numPaths;
     in >> curVertexId >> curEdgeId >> curPathId >> numVertices >> numEdges >> numPaths;
@@ -367,18 +368,19 @@ void Graph::ReadFromStream(std::istream& in) {
     edges.reserve(numEdges);
     paths.reserve(numPaths);
 
-    ProgressReporter progress(numVertices + numEdges + numPaths, "Reading graph from stream", false);
+    streamOptions = StreamOptions{numVertices > 0, numEdges > 0, numPaths > 0};
 
+    ProgressReporter progress(numVertices + numEdges + numPaths, "Reading graph from stream", false);
     for (int i = 0; i < numVertices; ++i) {
         int id;
         Point3f point;
         in >> id >> point;
 
-        VertexData data = ReadVertexData(in, flags);
+        VertexData data = ReadVertexData(in, streamFlags.value());
 
         auto& vertex = AddVertex(id, point, data);
 
-        if (flags.useCoors) {
+        if (streamFlags->useCoors) {
             Point3i coors;
             in >> coors;
             vertex.coors = coors;
@@ -390,7 +392,7 @@ void Graph::ReadFromStream(std::istream& in) {
     for (int i = 0; i < numEdges; ++i) {
         int id, fromId, toId;
         in >> id >> fromId >> toId;
-        EdgeData data = ReadEdgeData(in, flags);
+        EdgeData data = ReadEdgeData(in, streamFlags.value());
 
         AddEdge(id, fromId, toId, data);
 
@@ -412,11 +414,10 @@ void Graph::ReadFromStream(std::istream& in) {
 
         progress.Update();
     }
-
     progress.Done();
 }
 
-void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags, StreamOptions options) {
+void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
     std::string fullPath = util::FileNameToPath(fileName);
     std::string parentPath = fullPath.substr(0, fullPath.find_last_of('/'));
     std::filesystem::create_directories(parentPath);
@@ -427,15 +428,15 @@ void Graph::WriteToDisk(const std::string& fileName, const std::string& desc, St
     auto asUniform = dynamic_cast<UniformGraph*>(this);
     auto asFree = dynamic_cast<FreeGraph*>(this);
     if (asUniform)
-        asUniform->WriteToStream(file, flags, options);
+        asUniform->WriteToStream(file);
     if (asFree)
-        asFree->WriteToStream(file, flags, options);
+        asFree->WriteToStream(file);
 
     file.close();
 }
 
-void Graph::WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags, StreamOptions options) {
-    WriteToDisk(fileName, GetDescriptionName(desc), flags, options);
+void Graph::WriteToDisk(const std::string& fileName, Description desc) {
+    WriteToDisk(fileName, GetDescriptionName(desc));
 }
 
 void Graph::CheckSequentialIds() const {
@@ -540,10 +541,10 @@ Vertex& UniformGraph::AddVertex(int id, Point3i coors, const VertexData& data, b
     return newVertex;
 }
 
-void UniformGraph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
+void UniformGraph::WriteToStream(std::ostream& out) const {
     out << "uniform" << SEP << spacing << NEW;
 
-    Graph::WriteToStream(out, flags, options);
+    Graph::WriteToStream(out);
 }
 
 void UniformGraph::ReadFromStream(std::istream& in) {
@@ -618,10 +619,10 @@ UniformGraph FreeGraph::ToUniform(float spacing) const {
     return uniform;
 }
 
-void FreeGraph::WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const {
+void FreeGraph::WriteToStream(std::ostream& out) const {
     out << "free" << SEP << vertexRadius << NEW;
 
-    Graph::WriteToStream(out, flags, options);
+    Graph::WriteToStream(out);
 }
 
 void FreeGraph::ReadFromStream(std::istream& in) {

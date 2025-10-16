@@ -126,11 +126,14 @@ int main(int argc, char* argv[]) {
     Sampler sampler = scene.GetSampler();
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
-    graph::FreeGraph graph = graphBuilder.TracePaths();
+    graph::FreeGraph graph = graphBuilder.BuildGraph();
 
     graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
     graph::SparseMat transportMat = lighting.GetTransportMatrix();
+
+    graph.streamOptions = graph::StreamOptions{true, false, false};
+    graph.streamFlags = graph::StreamFlags{false, false, false, true, true};
 
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
         int bounces = config.lightingCalculator.bounces[bouncesIndex];
@@ -148,9 +151,8 @@ int main(int argc, char* argv[]) {
 
         std::string graphFileName = std::regex_replace(configName.value(),
             std::regex("\\.json"), StringPrintf("_d%s.txt", depthComputed));
-        graph.WriteToDisk(graphFileName, graph::basic,
-                          graph::StreamFlags{false, true, false, true},
-                          graph::StreamOptions{true, false, false});
+
+        graph.WriteToDisk(graphFileName, graph::basic);
 
         if (depth != depthComputed) {
             std::cout << StringPrintf("Numerical limits reached with depth %s, depth %s not possible", depthComputed, depth) << std::endl;

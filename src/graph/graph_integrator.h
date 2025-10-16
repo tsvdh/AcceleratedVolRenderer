@@ -57,7 +57,9 @@ protected:
     std::optional<FreeGraph> freeGraph;
     std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
-    float squaredSearchRadius;
+    float squaredVertexRadius = -1;
+    std::vector<float> squaredSearchRanges;
+    float maxSquaredSearchRange = -1;
 };
 
 }

@@ -635,6 +635,29 @@ inline std::string formatTime(float totalSeconds) {
         StringPrintf("%.1f", fractional).substr(2, 2));
 }
 
+class TaskTimeTracker {
+public:
+    explicit TaskTimeTracker(std::string taskName, bool quiet) : taskName(std::move(taskName)), quiet(quiet) {}
+
+    void Start() {
+        startTime = std::chrono::steady_clock::now();
+        if (!quiet)
+            std::cout << StringPrintf("%s... ", taskName);
+    }
+
+    void End() {
+        auto endTime = std::chrono::steady_clock::now();
+        float elapsedSeconds = std::chrono::duration<float>(endTime - startTime).count();
+        if (!quiet)
+            std::cout << StringPrintf("done (%s)", formatTime(elapsedSeconds)) << std::endl;
+    }
+
+private:
+    std::string taskName;
+    bool quiet;
+    std::chrono::time_point<std::chrono::steady_clock> startTime;
+};
+
 }
 
 namespace graph {
@@ -694,6 +717,7 @@ struct GraphBuilderConfig {
     // general
     float radiusModifier;
     int maxDepth;
+    int neighboursForRenderSearchRange;
 
     // path tracing
     int dimensionSteps;
@@ -741,6 +765,7 @@ inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderCo
     auto graphBuilder = jsonObject.at("graphBuilder");
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
     graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
+    graphBuilder.at("neighboursForRenderSearchRange").get_to(graphBuilderConfig.neighboursForRenderSearchRange);
 
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);

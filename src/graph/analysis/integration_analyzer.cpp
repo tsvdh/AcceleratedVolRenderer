@@ -53,7 +53,7 @@ void IntegrationAnalyzer::AnalyzeRay(RayDifferential ray, Sampler sampler, const
 
         std::vector<nanoflann::ResultItem<int, float>> resultItems;
 
-        searchTree->radiusSearch(searchPointArray, squaredSearchRadius, resultItems);
+        searchTree->radiusSearch(searchPointArray, squaredVertexRadius, resultItems);
 
         return static_cast<int>(resultItems.size());
     };
@@ -144,13 +144,10 @@ std::unique_ptr<IntegrationAnalyzer> IntegrationAnalyzer::Create(
     const ParameterDictionary& parameters, Camera camera, Sampler sampler,
     Primitive aggregate, std::vector<Light> lights) {
 
-    float renderRadiusMod = parameters.GetOneFloat("renderRadiusMod", 1);
-    float neighbourRadiusMod = parameters.GetOneFloat("neighbourRadiusMod", 1);
-
     int maxDepthFromFile = parameters.GetOneInt("maxdepth", 1); // suppress PBRT warning
     int maxDepth = Options->maxdepth ? Options->maxdepth.value() : maxDepthFromFile;
 
-    return std::make_unique<IntegrationAnalyzer>(renderRadiusMod, neighbourRadiusMod, maxDepth,
+    return std::make_unique<IntegrationAnalyzer>(maxDepth,
         std::move(camera), std::move(sampler), std::move(aggregate), std::move(lights));
 }
 

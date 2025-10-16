@@ -102,14 +102,14 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
         }
 
         Point3f newPoint = optNewInteraction->p();
-        std::optional<std::tuple<int, float>> optResult = GetClosestInRadius(newPoint, squaredSearchRadius);
+        std::optional<nanoflann::ResultItem<int, float>> optResult = GetClosestInRadius(newPoint, squaredSearchRadius);
         std::optional<Point3f> prevPoint = path.vertices.empty()
             ? std::nullopt
             : std::make_optional(graph.GetVertex(path.vertices.back())->get().point);
 
         Vertex* newVertex;
         if (optResult) {
-            newVertex = &graph.GetVertex(std::get<0>(optResult.value()))->get();
+            newVertex = &graph.GetVertex(optResult.value().first)->get();
         }
         else if (prevPoint && DistanceSquared(prevPoint.value(), newPoint) <= squaredSearchRadius) {
             newVertex = &graph.GetVertex(path.vertices.back())->get();
@@ -147,7 +147,7 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
     }
 }
 
-FreeGraph FreeGraphBuilder::TracePaths() {
+FreeGraph FreeGraphBuilder::BuildGraph() {
     Vector3f xVector;
     Vector3f yVector;
     CoordinateSystem(inDirection, &xVector, &yVector);
@@ -215,6 +215,7 @@ FreeGraph FreeGraphBuilder::TracePaths() {
     tracingProgress.Done();
 
     ReinforceSparseVertices(graph);
+    ComputeSearchRanges(graph);
 
     if (!quiet) {
         std::cout << "=== Graph stats ===" << std::endl;
@@ -232,13 +233,19 @@ FreeGraph FreeGraphBuilder::TracePaths() {
             numEdgesMoreThanOnce, numEdges, moreThanOnceRatio == 0 ? "-" : std::to_string(moreThanOnceRatio)) << std::endl;
 
         std::cout << StringPrintf("Path remain length: %s", inNodePathLengthAverager.PrintInfo()) << std::endl;
+
+        util::Averager searchRangeAverager(graph.GetVertices().size());
+        for (auto& [id, vertex] : graph.GetVertices())
+            searchRangeAverager.AddValue(vertex.data.renderSearchRange);
+        std::cout << StringPrintf("Search range modifier: %s", searchRangeAverager.PrintInfo()) << std::endl;
+
         std::cout << "===================" << std::endl;
     }
 
     return graph;
 }
 
-std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius) {
+std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetInRadius(const Point3f& pointRef, float squaredRadius) {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
     nanoflann::RadiusResultSet resultSet(squaredRadius, resultItems);
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
@@ -246,17 +253,11 @@ std::vector<std::tuple<int, float>> FreeGraphBuilder::GetInRadius(const Point3f&
     searchTree->findNeighbors(resultSet, point);
     resultSet.sort();
 
-    std::vector<std::tuple<int, float>> result;
-    result.reserve(resultItems.size());
-
-    for (nanoflann::ResultItem resultItem : resultItems)
-        result.emplace_back(std::tuple{resultItem.first, resultItem.second});
-
-    return result;
+    return resultItems;
 }
 
-std::optional<std::tuple<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius) {
-    std::vector<std::tuple<int, float>> result = GetInRadius(pointRef, squaredRadius);
+std::optional<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetClosestInRadius(const Point3f& pointRef, float squaredRadius) {
+    std::vector<nanoflann::ResultItem<int, float>> result = GetInRadius(pointRef, squaredRadius);
     return result.empty() ? std::nullopt : std::make_optional(result[0]);
 }
 
@@ -303,7 +304,15 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
         graph.RemovePath(pathId);
 }
 
+inline void ClearLine() {
+    std::string blankLine;
+    blankLine.assign(TerminalWidth(), ' ');
+    std::cout << blankLine << "\r";
+}
+
 void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
+    if (!config.edgeReinforcement.active && !config.neighbourReinforcement.active)
+        return;
     if (!quiet)
         std::cout << "--- Graph Reinforcement ---" << std::endl;
 
@@ -332,18 +341,21 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
             std::cout << StringPrintf("Neighbours: %s / %s; %.3f (%s)          ",
                 currentFewNeighbours.size(), initialVertices.size(), neighboursUnsatisfiedRatio, util::formatTime(neighbourDuration)) << std::endl;
     };
-    auto clearLine = []() -> void {
-        std::string blankLine;
-        blankLine.assign(TerminalWidth(), ' ');
-        std::cout << blankLine << "\r";
-    };
 
     auto checkFewEdges = [&]() -> void {
+        ProgressReporter progress(initialVertices.size(), "Checking edges", quiet);
+
         currentFewEdges.clear();
         for (int id : initialVertices) {
             Vertex& vertex = graph.GetVertex(id)->get();
             if (vertex.outEdges.size() < config.edgeReinforcement.edgesForNotSparse)
                 currentFewEdges.push_back(id);
+            progress.Update();
+        }
+        progress.Done();
+        if (!quiet) {
+            std::cout << "\x1b[1A";
+            ClearLine();
         }
 
         edgesUnsatisfiedRatio = static_cast<float>(currentFewEdges.size()) / static_cast<float>(initialVertices.size());
@@ -351,11 +363,19 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     };
 
     auto checkFewNeighbours = [&]() -> void {
+        ProgressReporter progress(initialVertices.size(), "Checking neighbours", quiet);
+
         currentFewNeighbours.clear();
         for (int id : initialVertices) {
             Vertex& vertex = graph.GetVertex(id)->get();
             if (CountInRadius(vertex.point, squaredNeighbourSearchRadius) < config.neighbourReinforcement.neighboursForNotSparse)
                 currentFewNeighbours.push_back(id);
+            progress.Update();
+        }
+        progress.Done();
+        if (!quiet) {
+            std::cout << "\x1b[1A";
+            ClearLine();
         }
 
         neighboursUnsatisfiedRatio = static_cast<float>(currentFewNeighbours.size()) / static_cast<float>(initialVertices.size());
@@ -367,10 +387,10 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
     if (config.edgeReinforcement.active)
         checkFewEdges();
+    printEdgeStatus();
+
     if (config.neighbourReinforcement.active)
         checkFewNeighbours();
-
-    printEdgeStatus();
     printNeighbourStatus();
 
     int cycle = 0;
@@ -382,12 +402,14 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
             ReinforceSparseVertices(graph, currentFewEdges, config.edgeReinforcement, cycle, progress);
             edgeDuration += progress.ElapsedSeconds();
-            checkFewEdges();
 
-            std::cout << "\x1b[3A";
-            printEdgeStatus();
-            printNeighbourStatus();
-            clearLine();
+            if (!quiet) {
+                checkFewEdges();
+
+                std::cout << "\x1b[2A";
+                printEdgeStatus();
+                printNeighbourStatus();
+            }
         }
         if (config.neighbourReinforcement.active && !neighboursSatisfied) {
 
@@ -396,12 +418,14 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
             ReinforceSparseVertices(graph, currentFewNeighbours, config.neighbourReinforcement, cycle, progress);
             neighbourDuration += progress.ElapsedSeconds();
-            checkFewNeighbours();
 
-            std::cout << "\x1b[3A";
-            printEdgeStatus();
-            printNeighbourStatus();
-            clearLine();
+            if (!quiet) {
+                checkFewNeighbours();
+
+                std::cout << "\x1b[2A";
+                printEdgeStatus();
+                printNeighbourStatus();
+            }
         }
         ++cycle;
     }
@@ -457,6 +481,71 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vect
         }
     }
     progress.Done();
+
+    std::cout << "\x1b[1A";
+    ClearLine();
+}
+
+std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetNClosest(const Point3f& pointRef, int nClosest) {
+    std::vector<size_t> indices;
+    std::vector<float> distSqr;
+    indices.resize(nClosest);
+    distSqr.resize(nClosest);
+    nanoflann::KNNResultSet<float> resultSet(nClosest);
+    resultSet.init(indices.data(), distSqr.data());
+
+    float point[3] = {pointRef.x, pointRef.y, pointRef.z};
+
+    searchTree->findNeighbors(resultSet, point);
+
+    std::vector<nanoflann::ResultItem<int, float>> result;
+    result.reserve(nClosest);
+
+    for (int i = 0; i < resultSet.size(); ++i)
+        result.emplace_back(indices[i], distSqr[i]);
+
+    return result;
+}
+
+void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
+    util::TaskTimeTracker tracker("Computing search ranges", quiet);
+    tracker.Start();
+
+    int nClosest = config.neighboursForRenderSearchRange;
+    int numVertices = static_cast<int>(graph.GetVertices().size());
+
+    std::vector<int> avgDistToNeighbours;
+    std::vector<std::vector<int>> neighbours;
+    avgDistToNeighbours.reserve(numVertices);
+    neighbours.reserve(numVertices);
+
+    for (int i = 0; i < numVertices; ++i) {
+        Vertex& vertex = graph.GetVertex(i)->get();
+
+        util::Averager distAverager(nClosest);
+        neighbours.emplace_back(nClosest);
+
+        for (nanoflann::ResultItem resultItem : GetNClosest(vertex.point, nClosest)) {
+            distAverager.AddValue(sqrt(resultItem.second));
+            neighbours.back().push_back(resultItem.first);
+        }
+        avgDistToNeighbours.push_back(distAverager.GetAverage());
+    }
+
+    for (int i = 0; i < numVertices; ++i) {
+        Vertex& vertex = graph.GetVertex(i)->get();
+
+        util::Averager neighbourDistAverager(nClosest);
+        neighbourDistAverager.AddValue(avgDistToNeighbours[i]);
+
+        for (int neighbourId : neighbours[i]) {
+            neighbourDistAverager.AddValue(avgDistToNeighbours[neighbourId]);
+        }
+
+        vertex.data.renderSearchRange = neighbourDistAverager.GetAverage();
+    }
+
+    tracker.End();
 }
 
 }

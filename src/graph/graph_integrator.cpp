@@ -1,7 +1,6 @@
 #include "graph_integrator.h"
 
 #include <fstream>
-#include <iostream>
 
 #include <graph/T_sampler_custom.h>
 #include <pbrt/materials.h>
@@ -31,14 +30,9 @@ void GraphIntegrator::Initialize() {
     std::string description, name;
     file >> description >> name;
 
-    if (name == "uniform")
+    if (name == "uniform") {
         uniformGraph = UniformGraph::ReadFromDisk(graphName);
-    if (name == "free") {
-        freeGraph = FreeGraph::ReadFromDisk(graphName);
-        squaredSearchRadius = Sqr(freeGraph->GetVertexRadius());
-    }
 
-    if (uniformGraph) {
         if (Options->graph.debug) {
             ProgressReporter progress(static_cast<int>(uniformGraph->GetVertices().size()), "Preprocessing voxels", false);
 
@@ -53,11 +47,25 @@ void GraphIntegrator::Initialize() {
             }
         }
     }
-    if (freeGraph) {
-        std::cout << "Building kd-tree... ";
+    if (name == "free") {
+        freeGraph = FreeGraph::ReadFromDisk(graphName);
+
+        squaredVertexRadius = Sqr(freeGraph->GetVertexRadius());
+
+        maxSquaredSearchRange = -1;
+        if (freeGraph->streamFlags->useRenderSearchRange) {
+            for (int id = 0; id < freeGraph->GetVertices().size(); ++id) {
+                Vertex& vertex = freeGraph->GetVertex(id)->get();
+                squaredSearchRanges.push_back(Sqr(vertex.data.renderSearchRange));
+                maxSquaredSearchRange = std::max(maxSquaredSearchRange, squaredSearchRanges.back());
+            }
+        }
+
+        util::TaskTimeTracker kdTreeTracker("Building kd-tree", false);
+        kdTreeTracker.Start();
         vHolder = freeGraph->GetVerticesList();
         searchTree = std::make_unique<StaticTreeType>(3, vHolder);
-        std::cout << "done" << std::endl;
+        kdTreeTracker.End();
     }
 }
 
@@ -233,13 +241,20 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
 
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
 
-    searchTree->radiusSearch(searchPointArray, squaredSearchRadius, resultItems);
+    searchTree->radiusSearch(searchPointArray, squaredVertexRadius, resultItems);
+    if (freeGraph->streamFlags->useRenderSearchRange && resultItems.empty()) {
+        searchTree->radiusSearch(searchPointArray, maxSquaredSearchRange, resultItems);
+
+        resultItems.erase(std::remove_if(resultItems.begin(), resultItems.end(), [&](auto resultItem) {
+            return resultItem.second < squaredSearchRanges[resultItem.first];
+        }), resultItems.end());
+    }
 
     util::Averager lightAverager(static_cast<int>(resultItems.size()));
 
     for (nanoflann::ResultItem resultItem : resultItems) {
         const Vertex& v = freeGraph->GetVertexConst(resultItem.first)->get();
-        lightAverager.AddValue(v.data.lightScalar, 1.f / resultItem.second); // squared distance
+        lightAverager.AddValue(v.data.lightScalar, 1.f / resultItem.second); // squared distance weighing
     }
 
     return lightAverager.GetAverage();

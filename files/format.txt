@@ -6,7 +6,7 @@ flags 		string-useCoors string-useSamples string-useRayVertexTypes              
                 string-useLighting string-useWeights
 base meta	int-curVertexId,curEdgeId,curPathId,vertices,edges,paths
 vertices	int-id float-x,y,z (int-type) (float-lightScalar)
-                (int-samples) (float-searchRangeMod) (int-x,y,z)
+                (int-samples) (float-renderSearchRange) (int-x,y,z)
 ...
 edges		int-id,from,to (int-samples) (float-weight)
 ...

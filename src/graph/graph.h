@@ -47,7 +47,7 @@ struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
     int samples = 0;
-    float searchRangeMod = 1;
+    float renderSearchRange = 1;
 
     void MergeWithDataFrom(const VertexData& otherData);
 };
@@ -110,13 +110,13 @@ struct StreamFlags {
     bool useSamples = false;
     bool useRayVertexTypes = false;
     bool useLighting = false;
-    bool useSearchRangeMod = false;
+    bool useRenderSearchRange = false;
 };
 
 struct StreamOptions {
-    bool writeVertices = true;
-    bool writeEdges = true;
-    bool writePaths = true;
+    bool writeVertices = false;
+    bool writeEdges = false;
+    bool writePaths = false;
 };
 
 static int curGraphId = -1;
@@ -155,8 +155,8 @@ public:
 
     bool AddVertexToPath(int vertexId, int pathId);
 
-    void WriteToDisk(const std::string& fileName, const std::string& desc, StreamFlags flags, StreamOptions options);
-    void WriteToDisk(const std::string& fileName, Description desc, StreamFlags flags, StreamOptions options);
+    void WriteToDisk(const std::string& fileName, const std::string& desc);
+    void WriteToDisk(const std::string& fileName, Description desc);
 
     void CheckSequentialIds() const;
 
@@ -168,11 +168,14 @@ public:
     [[nodiscard]] int GetCurPathId() const { return curPathId; }
     [[nodiscard]] int GetGraphId() const { return graphId; }
 
+    std::optional<StreamOptions> streamOptions;
+    std::optional<StreamFlags> streamFlags;
+
 protected:
     virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) = 0;
     OptRef<Edge> AddEdge(int id, int fromId, int toId, const EdgeData& data, bool incrId);
 
-    virtual void WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const;
+    virtual void WriteToStream(std::ostream& out) const;
     virtual void ReadFromStream(std::istream& in);
 
     std::unordered_map<int, Vertex> vertices; // ID, object
@@ -210,7 +213,7 @@ public:
 
     static UniformGraph ReadFromDisk(const std::string& fileName);
 
-    void WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const override;
+    void WriteToStream(std::ostream& out) const override;
     void ReadFromStream(std::istream& in) override;
 
 protected:
@@ -229,13 +232,13 @@ public:
 
     using Graph::AddVertex;
 
-    float GetVertexRadius() { return vertexRadius; }
+    float GetVertexRadius() const { return vertexRadius; }
 
     [[nodiscard]] UniformGraph ToUniform(float spacing) const;
 
     static FreeGraph ReadFromDisk(const std::string& fileName);
 
-    void WriteToStream(std::ostream& out, StreamFlags flags, StreamOptions options) const override;
+    void WriteToStream(std::ostream& out) const override;
     void ReadFromStream(std::istream& in) override;
 
 protected:
