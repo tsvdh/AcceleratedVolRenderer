@@ -61,6 +61,10 @@ void GraphIntegrator::Initialize() {
             }
         }
 
+        std::vector squaredSearchRangesCopy = squaredSearchRanges;
+        std::sort(squaredSearchRangesCopy.begin(), squaredSearchRangesCopy.end());
+        perc99SquaredSearchRange = squaredSearchRangesCopy[squaredSearchRangesCopy.size() * 99 / 100];
+
         util::TaskTimeTracker kdTreeTracker("Building kd-tree", false);
         kdTreeTracker.Start();
         vHolder = freeGraph->GetVerticesList();
@@ -240,14 +244,21 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
     Float searchPointArray[3] = {searchPoint.x, searchPoint.y, searchPoint.z};
 
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
+    auto filterResultItems = [&]() -> void {
+        resultItems.erase(std::remove_if(resultItems.begin(), resultItems.end(), [&](auto resultItem) {
+            return resultItem.second > squaredSearchRanges[resultItem.first];
+        }), resultItems.end());
+    };
 
     searchTree->radiusSearch(searchPointArray, squaredVertexRadius, resultItems);
     if (freeGraph->streamFlags->useRenderSearchRange && resultItems.empty()) {
-        searchTree->radiusSearch(searchPointArray, maxSquaredSearchRange, resultItems);
+        searchTree->radiusSearch(searchPointArray, perc99SquaredSearchRange, resultItems);
+        filterResultItems();
 
-        resultItems.erase(std::remove_if(resultItems.begin(), resultItems.end(), [&](auto resultItem) {
-            return resultItem.second < squaredSearchRanges[resultItem.first];
-        }), resultItems.end());
+        if (resultItems.empty()) {
+            searchTree->radiusSearch(searchPointArray, maxSquaredSearchRange, resultItems);
+            filterResultItems();
+        }
     }
 
     util::Averager lightAverager(static_cast<int>(resultItems.size()));

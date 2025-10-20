@@ -237,7 +237,7 @@ FreeGraph FreeGraphBuilder::BuildGraph() {
         util::Averager searchRangeAverager(graph.GetVertices().size());
         for (auto& [id, vertex] : graph.GetVertices())
             searchRangeAverager.AddValue(vertex.data.renderSearchRange);
-        std::cout << StringPrintf("Search range modifier: %s", searchRangeAverager.PrintInfo()) << std::endl;
+        std::cout << StringPrintf("Render search range: %s", searchRangeAverager.PrintInfo()) << std::endl;
 
         std::cout << "===================" << std::endl;
     }
@@ -251,7 +251,6 @@ std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetInRadius(con
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
 
     searchTree->findNeighbors(resultSet, point);
-    resultSet.sort();
 
     return resultItems;
 }
@@ -487,6 +486,9 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vect
 }
 
 std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetNClosest(const Point3f& pointRef, int nClosest) {
+    // find this vertex and n closest
+    ++nClosest;
+
     std::vector<size_t> indices;
     std::vector<float> distSqr;
     indices.resize(nClosest);
@@ -497,11 +499,12 @@ std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetNClosest(con
     float point[3] = {pointRef.x, pointRef.y, pointRef.z};
 
     searchTree->findNeighbors(resultSet, point);
+    resultSet.sort();
 
     std::vector<nanoflann::ResultItem<int, float>> result;
-    result.reserve(nClosest);
+    result.reserve(nClosest - 1);
 
-    for (int i = 0; i < resultSet.size(); ++i)
+    for (int i = 1; i < resultSet.size(); ++i)
         result.emplace_back(indices[i], distSqr[i]);
 
     return result;
@@ -514,7 +517,7 @@ void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
     int nClosest = config.neighboursForRenderSearchRange;
     int numVertices = static_cast<int>(graph.GetVertices().size());
 
-    std::vector<int> avgDistToNeighbours;
+    std::vector<float> avgDistToNeighbours;
     std::vector<std::vector<int>> neighbours;
     avgDistToNeighbours.reserve(numVertices);
     neighbours.reserve(numVertices);
@@ -523,7 +526,8 @@ void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
         Vertex& vertex = graph.GetVertex(i)->get();
 
         util::Averager distAverager(nClosest);
-        neighbours.emplace_back(nClosest);
+        neighbours.emplace_back();
+        neighbours.back().reserve(nClosest);
 
         for (nanoflann::ResultItem resultItem : GetNClosest(vertex.point, nClosest)) {
             distAverager.AddValue(sqrt(resultItem.second));

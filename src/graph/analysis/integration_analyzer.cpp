@@ -7,8 +7,9 @@ namespace graph {
 void IntegrationAnalyzer::Render() {
     // {440, 252}, {441, 252}, {727, 395}, {728, 395}, {561, 387}, {562, 387}
     // {500, 389}, {500, 390}, {500, 391}
-    std::vector<Point2i> points{{651, 389}, {533, 340}};
-    std::vector maxDepths{1, 2, 3, 5, 10};
+    // {651, 389}, {533, 340}
+    std::vector<Point2i> points{{410, 260}, {736, 396}};
+    std::vector maxDepths{1};
 
     Sampler sampler = samplerPrototype.Clone();
 
@@ -36,18 +37,25 @@ void IntegrationAnalyzer::Render() {
                 AnalyzeRay(cameraRay.ray, sampler, lambda);
             }
 
-            std::cout << StringPrintf("%s, %s: %s / %s (%s)", pixel, this->maxDepth,
-                nodeScatters, totalScatters, static_cast<float>(nodeScatters) / static_cast<float>(totalScatters)) << std::endl;
+            std::cout << StringPrintf("%s, %s / %s (%s) | %s / %s (%s), %s", pixel,
+                nodeScatters, totalScatters, static_cast<float>(nodeScatters) / static_cast<float>(totalScatters),
+                searchScatters, totalScatters, static_cast<float>(searchScatters) / static_cast<float>(totalScatters),
+                    rangeAverager.GetAverage()
+                ) << std::endl;
 
             totalScatters = 0;
             nodeScatters = 0;
+            searchScatters = 0;
+            rangeAverager = util::Averager{};
         }
         std::cout << std::endl;
     }
 }
 
 void IntegrationAnalyzer::AnalyzeRay(RayDifferential ray, Sampler sampler, const SampledWavelengths& lambda) {
-    auto FindNodes = [&](Point3f searchPoint) -> int {
+    auto Analyze = [&](Point3f searchPoint) -> void {
+        ++totalScatters;
+
         Point3f p = worldFromRender(searchPoint);
         Float searchPointArray[3] = {p.x, p.y, p.z};
 
@@ -55,7 +63,22 @@ void IntegrationAnalyzer::AnalyzeRay(RayDifferential ray, Sampler sampler, const
 
         searchTree->radiusSearch(searchPointArray, squaredVertexRadius, resultItems);
 
-        return static_cast<int>(resultItems.size());
+        if (resultItems.size() > 0)
+            ++nodeScatters;
+
+        searchTree->radiusSearch(searchPointArray, maxSquaredSearchRange, resultItems);
+
+        resultItems.erase(std::remove_if(resultItems.begin(), resultItems.end(), [&](auto resultItem) {
+            return resultItem.second > squaredSearchRanges[resultItem.first];
+        }), resultItems.end());
+
+        if (resultItems.size() > 0) {
+            ++searchScatters;
+
+            for (nanoflann::ResultItem resultItem : resultItems) {
+                rangeAverager.AddValue(sqrt(resultItem.second));
+            }
+        }
     };
 
     int depth = 0;
@@ -99,9 +122,7 @@ void IntegrationAnalyzer::AnalyzeRay(RayDifferential ray, Sampler sampler, const
                             return false;
                         }
 
-                        ++totalScatters;
-                        if (FindNodes(p) > 0)
-                            ++nodeScatters;
+                        Analyze(p);
 
                         MediumInteraction mediumInteraction(p, -ray.d, ray.time, ray.medium, mp.phase);
 

@@ -35,6 +35,8 @@ private:
 
     int totalScatters = 0;
     int nodeScatters = 0;
+    int searchScatters = 0;
+    util::Averager rangeAverager;
 };
 
 }
