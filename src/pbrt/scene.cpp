@@ -856,8 +856,8 @@ std::map<std::string, Medium> BasicScene::CreateMedia() {
 
 std::unique_ptr<Integrator> BasicScene::CreateIntegrator(
     Camera camera, Sampler sampler, Primitive accel, std::vector<Light> lights) const {
-    return Integrator::Create(integrator.name, integrator.parameters, camera, sampler,
-                              accel, lights, filmColorSpace, &integrator.loc);
+    return Integrator::Create(Options->integratorName.value_or(integrator.name),
+        integrator.parameters, camera, sampler, accel, lights, filmColorSpace, &integrator.loc);
 }
 
 BasicScene::BasicScene()

@@ -16,11 +16,12 @@ public:
     FreeGraph BuildGraph();
 
 private:
+    static void UseAndRemovePathInfo(Graph& graph);
+
     void TracePath(RayDifferential ray, FreeGraph& graph, int maxDepth, float firstSegmentTHit, std::optional<int> startingVertex);
     std::vector<nanoflann::ResultItem<int, float>> GetInRadius(const Point3f& pointRef, float squaredRadius);
     std::optional<nanoflann::ResultItem<int, float>> GetClosestInRadius(const Point3f& pointRef, float squaredRadius);
     int CountInRadius(const Point3f& pointRef, float squaredRadius);
-    void UseAndRemovePathInfo(Graph& graph);
     void ReinforceSparseVertices(FreeGraph& graph);
     void ReinforceSparseVertices(FreeGraph& graph, const std::vector<int>& sparseVertices, const ReinforcementConfig& reinforcementConfig, int cycle,
         ProgressReporter& progress);
@@ -37,8 +38,5 @@ private:
     float squaredSearchRadius;
     float squaredNeighbourSearchRadius;
     int sampleIndexOffset;
-
-    // stats
-    util::Averager inNodePathLengthAverager;
 };
 }

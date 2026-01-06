@@ -1162,10 +1162,11 @@ int diff(std::vector<std::string> args) {
 
     Image errorImage;
     ImageChannelValues error(refImage.NChannels());
+    ImageChannelValues errorAbsolute(refImage.NChannels());
     ImageChannelValues errorPositive(refImage.NChannels());
     ImageChannelValues errorNegative(refImage.NChannels());
     if (metric == "ME")
-        std::tie(error, errorPositive, errorNegative) = image.ME(image.AllChannelsDesc(), refImage, &errorImage);
+        std::tie(errorAbsolute, errorPositive, errorNegative) = image.ME(image.AllChannelsDesc(), refImage, &errorImage);
     else if (metric == "MAE")
         error = image.MAE(image.AllChannelsDesc(), refImage, &errorImage);
     else if (metric == "MSE")
@@ -1224,16 +1225,16 @@ int diff(std::vector<std::string> args) {
         Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), %s = %f\n", imageFile,
                referenceFile, imageAverage, refAverage, deltaString, metric, error.Average());
     else
-        Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), ME = %f; PE = %f; NE = %f\n", imageFile,
-               referenceFile, imageAverage, refAverage, deltaString, error.Average(),
-               errorPositive.Average(), errorNegative.Average());
+        Printf("Images differ:\n\t%s %s\n\tavg = %f / %f (%s), AE = %f; PE = %f; NE = %f\n", imageFile,
+               referenceFile, imageAverage, refAverage, deltaString,
+               errorAbsolute.Average(), errorPositive.Average(), errorNegative.Average());
 
     if (!outFile.empty())
         return errorImage.Write(outFile, im.metadata);
 
     if (!diffFile.empty()) {
         std::ofstream file(diffFile);
-        file << StringPrintf("%s\n%s\n%s", error.Average(), errorPositive.Average(), errorNegative.Average()) << std::endl;
+        file << StringPrintf("%s\n%s\n%s", errorAbsolute.Average(), errorPositive.Average(), errorNegative.Average()) << std::endl;
         file.close();
         return 1;
     }

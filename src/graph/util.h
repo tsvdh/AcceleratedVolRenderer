@@ -518,7 +518,7 @@ struct SamplesStore {
         AddSamples({sampleValue, -1});
     }
 
-    void FillWithAverager(Averager& averager);
+    void FillWithAverager(const Averager& averager);
 };
 
 class Averager {
@@ -533,17 +533,17 @@ public:
         weights.push_back(weight);
     }
 
-    const std::vector<float>& GetValues() { return values; }
+    const std::vector<float>& GetValues() const { return values; }
 
-    SamplesStore ToSamplesStore() {
+    SamplesStore ToSamplesStore() const {
         return {GetAverage(), static_cast<float>(values.size())};
     }
 
-    float GetAverage() {
+    float GetAverage() const {
         return GetAverage(true);
     }
 
-    float GetAverage(bool useWeights) {
+    float GetAverage(bool useWeights) const {
         if (values.empty())
             return 0;
 
@@ -562,7 +562,7 @@ public:
         return average;
     }
 
-    std::tuple<float, float, float> GetInfo() {
+    std::tuple<float, float, float> GetInfo() const {
         if (values.empty())
             return {0, 0, 0};
 
@@ -577,12 +577,12 @@ public:
         return {average, std, variance};
     }
 
-    std::string PrintInfo() {
+    std::string PrintInfo() const {
         auto [avg, std, var] = GetInfo();
         return StringPrintf("average %s, std %s, var %s", avg, std, var);
     }
 
-    float GetDenoisedAverage() {
+    float GetDenoisedAverage() const {
         if (values.empty())
             return 0;
 
@@ -608,12 +608,12 @@ private:
     std::vector<float> weights;
 };
 
-inline void SamplesStore::FillWithAverager(Averager& averager) {
+inline void SamplesStore::FillWithAverager(const Averager& averager) {
     this->value = averager.GetAverage();
     this->numSamples = averager.GetValues().size();
 }
 
-inline std::string formatTime(int totalSeconds) {
+inline std::string FormatTime(int totalSeconds) {
     int hours = totalSeconds / 3600;
     int minutes = totalSeconds / 60 - hours * 60;
     int seconds = totalSeconds - hours * 3600 - minutes * 60;
@@ -626,10 +626,10 @@ inline std::string formatTime(int totalSeconds) {
     return StringPrintf("%is", seconds);
 }
 
-inline std::string formatTime(float totalSeconds) {
+inline std::string FormatTime(float totalSeconds) {
     float whole;
     float fractional = std::modf(totalSeconds, &whole);
-    std::string formattedTime = formatTime(static_cast<int>(whole));
+    std::string formattedTime = FormatTime(static_cast<int>(whole));
     return StringPrintf("%s.%ss",
         formattedTime.substr(0, formattedTime.size() - 1),
         StringPrintf("%.1f", fractional).substr(2, 2));
@@ -649,7 +649,7 @@ public:
         auto endTime = std::chrono::steady_clock::now();
         float elapsedSeconds = std::chrono::duration<float>(endTime - startTime).count();
         if (!quiet)
-            std::cout << StringPrintf("done (%s)", formatTime(elapsedSeconds)) << std::endl;
+            std::cout << StringPrintf("done (%s)", FormatTime(elapsedSeconds)) << std::endl;
     }
 
 private:
@@ -689,7 +689,7 @@ inline std::string GetDescriptionName(Description desc) {
     return descriptionNames[desc];
 }
 
-using nlohmann::json;
+using json = nlohmann::basic_json<std::map, std::vector, std::string, bool, std::int64_t, std::uint64_t, float>;
 
 struct Config;
 struct GraphBuilderConfig;

@@ -158,6 +158,9 @@ public:
     void WriteToDisk(const std::string& fileName, const std::string& desc);
     void WriteToDisk(const std::string& fileName, Description desc);
 
+    void WriteStatsToStream(std::ostream& out, int duration = -1) const;
+    void WriteStatsToDisk(const std::string& fileName, int duration = -1) const;
+
     void CheckSequentialIds() const;
 
     [[nodiscard]] util::VerticesHolder GetVerticesList() const;
@@ -170,6 +173,9 @@ public:
 
     std::optional<StreamOptions> streamOptions;
     std::optional<StreamFlags> streamFlags;
+
+    // stats
+    util::Averager inNodePathLengthAverager;
 
 protected:
     virtual Vertex& AddVertex(int id, Point3f p, const VertexData& data, bool incrId) = 0;

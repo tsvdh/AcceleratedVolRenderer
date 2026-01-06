@@ -219,26 +219,7 @@ FreeGraph FreeGraphBuilder::BuildGraph() {
 
     if (!quiet) {
         std::cout << "=== Graph stats ===" << std::endl;
-        std::cout << StringPrintf("Vertices: %s, Edges: %s, Paths: %s",
-            graph.GetVertices().size(), graph.GetEdges().size(), graph.GetPaths().size()) << std::endl;
-
-        size_t numEdges = graph.GetEdges().size();
-        size_t numEdgesMoreThanOnce = 0;
-        for (auto& [id, edge] : graph.GetEdges()) {
-            if (edge.data.samples > 1)
-                ++numEdgesMoreThanOnce;
-        }
-        float moreThanOnceRatio = static_cast<float>(numEdgesMoreThanOnce) / static_cast<float>(numEdges);
-        std::cout << StringPrintf("Edges connected more than once: %s / %s (%s)",
-            numEdgesMoreThanOnce, numEdges, moreThanOnceRatio == 0 ? "-" : std::to_string(moreThanOnceRatio)) << std::endl;
-
-        std::cout << StringPrintf("Path remain length: %s", inNodePathLengthAverager.PrintInfo()) << std::endl;
-
-        util::Averager searchRangeAverager(graph.GetVertices().size());
-        for (auto& [id, vertex] : graph.GetVertices())
-            searchRangeAverager.AddValue(vertex.data.renderSearchRange);
-        std::cout << StringPrintf("Render search range: %s", searchRangeAverager.PrintInfo()) << std::endl;
-
+        graph.WriteStatsToStream(std::cout);
         std::cout << "===================" << std::endl;
     }
 
@@ -281,7 +262,7 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
         }
 
         if (path.Length() == 1 && !path.data.forcedEnd) {
-            inNodePathLengthAverager.AddValue(1);
+            graph.inNodePathLengthAverager.AddValue(1);
             continue;
         }
 
@@ -291,12 +272,12 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
             if (path.vertices[i] == path.vertices[i + 1]) {
                 ++inNodePathLength;
             } else {
-                inNodePathLengthAverager.AddValue(inNodePathLength);
+                graph.inNodePathLengthAverager.AddValue(inNodePathLength);
                 inNodePathLength = 1;
             }
         }
         if (!path.data.forcedEnd)
-            inNodePathLengthAverager.AddValue(inNodePathLength);
+            graph.inNodePathLengthAverager.AddValue(inNodePathLength);
     }
 
     for (int pathId : pathsToRemove)
@@ -329,7 +310,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
             std::cout << "Edges: inactive" << std::endl;
         else
             std::cout << StringPrintf("Edges: %s / %s; %.3f (%s)               ",
-                currentFewEdges.size(), initialVertices.size(), edgesUnsatisfiedRatio, util::formatTime(edgeDuration)) << std::endl;
+                currentFewEdges.size(), initialVertices.size(), edgesUnsatisfiedRatio, util::FormatTime(edgeDuration)) << std::endl;
     };
     auto printNeighbourStatus = [&]() -> void {
         if (quiet)
@@ -338,7 +319,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
             std::cout << "Neighbours: inactive" << std::endl;
         else
             std::cout << StringPrintf("Neighbours: %s / %s; %.3f (%s)          ",
-                currentFewNeighbours.size(), initialVertices.size(), neighboursUnsatisfiedRatio, util::formatTime(neighbourDuration)) << std::endl;
+                currentFewNeighbours.size(), initialVertices.size(), neighboursUnsatisfiedRatio, util::FormatTime(neighbourDuration)) << std::endl;
     };
 
     auto checkFewEdges = [&]() -> void {
@@ -431,7 +412,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
     if (!quiet) {
         std::cout << StringPrintf("Done (%s)                         ",
-            util::formatTime(edgeDuration + neighbourDuration)) << std::endl;
+            util::FormatTime(edgeDuration + neighbourDuration)) << std::endl;
         std::cout << "---------------------------" << std::endl;
     }
 }

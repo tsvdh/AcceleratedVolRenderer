@@ -153,13 +153,13 @@ void ProgressReporter::printBar() {
         int estRemainingRounded = static_cast<int>(std::floor(estRemaining));
 
         if (exitThread)
-            printf("(%s)               ", util::formatTime(*finishTime).c_str());
+            printf("(%s)               ", util::FormatTime(*finishTime).c_str());
         else if (percentDone == 1.f)
-            printf("(%s)               ", util::formatTime(elapsedRounded).c_str());
+            printf("(%s)               ", util::FormatTime(elapsedRounded).c_str());
         else if (!std::isinf(estRemaining))
-            printf("(%s|%s)            ", util::formatTime(elapsedRounded).c_str(), util::formatTime(std::max<int>(0, estRemainingRounded)).c_str());
+            printf("(%s|%s)            ", util::FormatTime(elapsedRounded).c_str(), util::FormatTime(std::max<int>(0, estRemainingRounded)).c_str());
         else
-            printf("(%s|?)             ", util::formatTime(elapsedRounded).c_str());
+            printf("(%s|?)             ", util::FormatTime(elapsedRounded).c_str());
         fflush(stdout);
     }
 }

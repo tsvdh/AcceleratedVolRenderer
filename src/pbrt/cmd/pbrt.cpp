@@ -81,6 +81,7 @@ Rendering options:
   --wavefront                   Use wavefront volumetric path integrator.
   --write-partial-images        Periodically write the current image to disk, rather
                                 than waiting for the end of rendering. Default: disabled.
+  --integrator <integratorName> Use the specified integrator
 
 Logging options:
   --log-file <filename>         Filename to write logging messages to. Default: none;
@@ -207,6 +208,7 @@ int main(int argc, char *argv[]) {
             ParseArg(&iter, args.end(), "wavefront", &options.wavefront, onError) ||
             ParseArg(&iter, args.end(), "write-partial-images",
                      &options.writePartialImages, onError) ||
+            ParseArg(&iter, args.end(), "integrator", &options.integratorName, onError) ||
             ParseArg(&iter, args.end(), "upgrade", &options.upgrade, onError) ||
             ParseArg(&iter, args.end(), "graph-debug", &options.graph.debug, onError) ||
             ParseArg(&iter, args.end(), "graph-data", &options.graph.dataFile, onError)) {

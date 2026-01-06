@@ -116,6 +116,7 @@ int main(int argc, char* argv[]) {
     std::vector<Material> materials;
     scene.CreateMaterials(textures, &namedMaterials, &materials);
     Primitive accel = scene.CreateAggregate(textures, shapeIndexToAreaLights, media, namedMaterials, materials);
+    Sampler sampler = scene.GetSampler();
 
     util::MediumData mediumData(accel, scene.GetCamera().GetFilm().SampleWavelengths(0));
     light->Preprocess(mediumData.primitiveData.bounds);
@@ -123,10 +124,22 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Vertex radius: " << GetSameSpotRadius(mediumData) * config.graphBuilder.radiusModifier << std::endl;
 
-    Sampler sampler = scene.GetSampler();
+    auto processStart = std::chrono::steady_clock::now();
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
     graph::FreeGraph graph = graphBuilder.BuildGraph();
+
+    auto writeStats = [&]() -> void {
+        auto processEnd = std::chrono::steady_clock::now();
+        int processDuration = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(processEnd - processStart).count());
+
+        std::string statsFileName = std::regex_replace(configName.value(),
+                std::regex("\\.json"), "_stats.json");
+        graph.WriteStatsToDisk(statsFileName, processDuration);
+    };
+
+    if (config.lightingCalculator.bounces.size() > 1)
+        writeStats();
 
     graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
     graph::SparseVec lightVec = lighting.GetLightVector();
@@ -135,13 +148,16 @@ int main(int argc, char* argv[]) {
     graph.streamOptions = graph::StreamOptions{true, false, false};
     graph.streamFlags = graph::StreamFlags{false, false, false, true, true};
 
-    for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++ bouncesIndex) {
+    for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++bouncesIndex) {
         int bounces = config.lightingCalculator.bounces[bouncesIndex];
         int depth = bounces + 1;
         std::cout << StringPrintf("-----------\nDepth %s (%s bounces)", depth, bounces) << std::endl;
 
         int bouncesComputed = lighting.ComputeFinalLight(lightVec, transportMat, bouncesIndex);
         int depthComputed = bouncesComputed + 1;
+
+        if (config.lightingCalculator.bounces.size() == 1)
+            writeStats();
 
         util::Averager lightAverager(static_cast<int>(graph.GetVertices().size()));
         for (auto& [id, v] : graph.GetVertices())
@@ -153,6 +169,7 @@ int main(int argc, char* argv[]) {
             std::regex("\\.json"), StringPrintf("_d%s.txt", depthComputed));
 
         graph.WriteToDisk(graphFileName, graph::basic);
+
 
         if (depth != depthComputed) {
             std::cout << StringPrintf("Numerical limits reached with depth %s, depth %s not possible", depthComputed, depth) << std::endl;
