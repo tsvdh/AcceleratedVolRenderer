@@ -83,8 +83,8 @@ int main(int argc, char* argv[]) {
                                     config.graphBuilder.neighbourReinforcement.reinforcementRays);
     int maxRaysPerVertex = std::max(maxDiskPoints, maxSpherePoints);
 
-    int64_t numRays = Sqr(dimensionSteps);
-    int64_t maxNumVertices = numRays * iterationsPerStep * maxDepth;
+    int numRays = Sqr(dimensionSteps);
+    int64_t maxNumVertices = static_cast<int64_t>(numRays) * iterationsPerStep * maxDepth;
     int64_t maxNumRays = maxNumVertices * maxRaysPerVertex;
     int64_t maxSampleDimensionSizeAsLong = std::ceil(std::sqrt(maxNumRays));
     int pixelSamples = RoundUpPow2(maxIterations);

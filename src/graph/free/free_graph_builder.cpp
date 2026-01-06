@@ -201,7 +201,7 @@ FreeGraph FreeGraphBuilder::BuildGraph() {
 
             float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
 
-            uint64_t startIndex = ((y - 1) + (x - 1) * config.dimensionSteps) * config.iterationsPerStep;
+            uint64_t startIndex = ((y - 1) + (x - 1) * static_cast<int64_t>(config.dimensionSteps)) * config.iterationsPerStep;
             for (int i = 0; i < config.iterationsPerStep; ++i) {
                 uint64_t curIndex = startIndex + i;
                 int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);
@@ -434,7 +434,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vect
         std::vector<Point3f> spherePoints = util::GetSphereVolumePointsRandom(
             graph.GetVertexRadius(), vertex.point, reinforcementConfig.reinforcementRays, sampler);
 
-        uint64_t startIndex = vertexId * static_cast<int>(spherePoints.size());
+        uint64_t startIndex = vertexId * static_cast<int64_t>(spherePoints.size());
         for (int pointIndex = 0; pointIndex < spherePoints.size(); ++pointIndex) {
             uint64_t curIndex = startIndex + pointIndex;
             int yCoor = static_cast<int>(curIndex / resolutionDimensionSize);

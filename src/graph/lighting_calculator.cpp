@@ -98,7 +98,7 @@ SparseVec LightingCalculator::GetLightVector() {
     float sphereRadius = graph.GetVertexRadius();
     util::SphereMaker sphereMaker(sphereRadius);
 
-    int64_t workNeeded = numVertices * config.lightIterations * util::GetDiskPointsSize(config.pointsOnRadiusLight);
+    int64_t workNeeded = static_cast<int64_t>(numVertices) * config.lightIterations * util::GetDiskPointsSize(config.pointsOnRadiusLight);
     ProgressReporter progress(workNeeded, "Computing initial lighting", quiet);
 
     ParallelFor(0, numVertices, config.runInParallel, [&](int listIndex) {
@@ -114,7 +114,7 @@ SparseVec LightingCalculator::GetLightVector() {
 
         util::Averager transmittanceAverager;
 
-        uint64_t startIndex = listIndex * diskPoints.size();
+        uint64_t startIndex = static_cast<uint64_t>(listIndex) * diskPoints.size();
         for (int pointIndex = 0; pointIndex < diskPoints.size(); ++pointIndex) {
             uint64_t curIndex = startIndex + pointIndex;
 

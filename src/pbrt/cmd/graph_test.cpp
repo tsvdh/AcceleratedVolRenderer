@@ -3,12 +3,12 @@
 #include <ostream>
 
 #include "graph/deps/json.hpp"
+#include "pbrt/util/math.h"
 #include "pbrt/util/print.h"
 
 int main(int argc, char* argv[]) {
-    int a = 1000000;
+    int64_t a = 1000000;
     int b = 1000000;
-    int c = a * b;
-    int64_t d = a * b;
-    std::cout << c << " " << d << std::endl;
+    int64_t c = static_cast<int64_t>(pbrt::Sqr(b));
+    std::cout << c << std::endl;
 }
