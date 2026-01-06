@@ -47,7 +47,7 @@ struct VertexData {
     RayVertexType type = none;
     float lightScalar = -1;
     int samples = 0;
-    float renderSearchRange = 1;
+    float renderSearchRange = -1;
 
     void MergeWithDataFrom(const VertexData& otherData);
 };
@@ -158,8 +158,7 @@ public:
     void WriteToDisk(const std::string& fileName, const std::string& desc);
     void WriteToDisk(const std::string& fileName, Description desc);
 
-    void WriteStatsToStream(std::ostream& out, int duration = -1) const;
-    void WriteStatsToDisk(const std::string& fileName, int duration = -1) const;
+    void AddStats(json& stats) const;
 
     void CheckSequentialIds() const;
 

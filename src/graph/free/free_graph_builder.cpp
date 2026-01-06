@@ -132,7 +132,10 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
         }
 
         // terminate if max depth reached
-        if (path.vertices.size() == maxDepth) {
+        int newPathVertices = static_cast<int>(path.vertices.size());
+        if (startingVertex.has_value())
+            --newPathVertices;
+        if (newPathVertices >= maxDepth) {
             // pathLengths.push_back(path.size());
             path.data.forcedEnd = true;
             return;
@@ -219,7 +222,10 @@ FreeGraph FreeGraphBuilder::BuildGraph() {
 
     if (!quiet) {
         std::cout << "=== Graph stats ===" << std::endl;
-        graph.WriteStatsToStream(std::cout);
+        json stats;
+        graph.AddStats(stats);
+        stats["node_radius"] = graph.GetVertexRadius();
+        std::cout << std::setw(2) << stats << std::endl;
         std::cout << "===================" << std::endl;
     }
 
@@ -454,7 +460,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vect
 
             float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
 
-            TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
+            TracePath(ray, graph, 1, mediumExitTHit, vertexId);
             UseAndRemovePathInfo(graph);
 
             progress.Update();
@@ -492,30 +498,34 @@ std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetNClosest(con
 }
 
 void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
-    util::TaskTimeTracker tracker("Computing search ranges", quiet);
-    tracker.Start();
-
-    int nClosest = config.neighboursForRenderSearchRange;
+    int nClosest = config.renderSearchRangeConfig.neighboursToUse;
     int numVertices = static_cast<int>(graph.GetVertices().size());
+
+    if (nClosest > numVertices)
+        ErrorExit("Graph does not contain enough vertices");
+
+    int extraWork = static_cast<int>(numVertices * 1.01) - numVertices;
+    ProgressReporter progress(numVertices + extraWork, "Computing search ranges", quiet);
 
     std::vector<float> avgDistToNeighbours;
     std::vector<std::vector<int>> neighbours;
-    avgDistToNeighbours.reserve(numVertices);
-    neighbours.reserve(numVertices);
+    avgDistToNeighbours.assign(numVertices, -1);
+    neighbours.assign(numVertices, std::vector(nClosest, -1));
 
-    for (int i = 0; i < numVertices; ++i) {
-        Vertex& vertex = graph.GetVertex(i)->get();
+    ParallelFor(0, numVertices, config.renderSearchRangeConfig.runInParallel, [&](int index) {
+        Vertex& vertex = graph.GetVertex(index)->get();
 
         util::Averager distAverager(nClosest);
-        neighbours.emplace_back();
-        neighbours.back().reserve(nClosest);
 
-        for (nanoflann::ResultItem resultItem : GetNClosest(vertex.point, nClosest)) {
+        std::vector<nanoflann::ResultItem<int, float>> nClosestVertices = GetNClosest(vertex.point, nClosest);
+        for (int i = 0; i < nClosestVertices.size(); ++i) {
+            nanoflann::ResultItem<int, float> resultItem = nClosestVertices[i];
             distAverager.AddValue(sqrt(resultItem.second));
-            neighbours.back().push_back(resultItem.first);
+            neighbours[index][i] = resultItem.first;
         }
-        avgDistToNeighbours.push_back(distAverager.GetAverage());
-    }
+        avgDistToNeighbours[index] = distAverager.GetAverage();
+        progress.Update();
+    });
 
     for (int i = 0; i < numVertices; ++i) {
         Vertex& vertex = graph.GetVertex(i)->get();
@@ -530,7 +540,8 @@ void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
         vertex.data.renderSearchRange = neighbourDistAverager.GetAverage();
     }
 
-    tracker.End();
+    progress.Update(extraWork);
+    progress.Done();
 }
 
 }

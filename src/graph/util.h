@@ -37,6 +37,11 @@ inline std::string FileNameToPath(const std::string& fileName) {
     return "files/graphs/" + fileName + ".txt";
 }
 
+inline void CreateParentDirectories(const std::string& path) {
+    std::string parentPath = path.substr(0, path.find_last_of('/'));
+    std::filesystem::create_directories(parentPath);
+}
+
 struct PrimitiveData {
     Primitive primitive;
     Bounds3f bounds;
@@ -697,6 +702,7 @@ struct LightingCalculatorConfig;
 struct ReinforcementConfig;
 struct EdgeReinforcementConfig;
 struct NeighbourReinforcementConfig;
+struct RenderSearchRangeConfig;
 
 struct ReinforcementConfig {
     bool active;
@@ -713,11 +719,16 @@ struct NeighbourReinforcementConfig : ReinforcementConfig {
     float neighbourRangeModifier;
 };
 
+struct RenderSearchRangeConfig {
+    int neighboursToUse;
+    bool runInParallel;
+};
+
 struct GraphBuilderConfig {
     // general
     float radiusModifier;
     int maxDepth;
-    int neighboursForRenderSearchRange;
+    RenderSearchRangeConfig renderSearchRangeConfig;
 
     // path tracing
     int dimensionSteps;
@@ -761,11 +772,17 @@ inline void from_json(const json& jsonObject, NeighbourReinforcementConfig& neig
     neighbourReinforcement.at("neighbourRangeModifier").get_to(neighbourReinforcementConfig.neighbourRangeModifier);
 }
 
+inline void from_json(const json& jsonObject, RenderSearchRangeConfig& renderSearchRangeConfig) {
+    auto renderSearchRange = jsonObject.at("renderSearchRange");
+    renderSearchRange.at("neighboursToUse").get_to(renderSearchRangeConfig.neighboursToUse);
+    renderSearchRange.at("runInParallel").get_to(renderSearchRangeConfig.runInParallel);
+}
+
 inline void from_json(const json& jsonObject, GraphBuilderConfig& graphBuilderConfig) {
     auto graphBuilder = jsonObject.at("graphBuilder");
     graphBuilder.at("radiusModifier").get_to(graphBuilderConfig.radiusModifier);
     graphBuilder.at("maxDepth").get_to(graphBuilderConfig.maxDepth);
-    graphBuilder.at("neighboursForRenderSearchRange").get_to(graphBuilderConfig.neighboursForRenderSearchRange);
+    from_json(graphBuilder, graphBuilderConfig.renderSearchRangeConfig);
 
     graphBuilder.at("dimensionSteps").get_to(graphBuilderConfig.dimensionSteps);
     graphBuilder.at("iterationsPerStep").get_to(graphBuilderConfig.iterationsPerStep);

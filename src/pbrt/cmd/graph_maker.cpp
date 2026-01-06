@@ -122,8 +122,6 @@ int main(int argc, char* argv[]) {
     light->Preprocess(mediumData.primitiveData.bounds);
     Vector3f lightDir = -Normalize(light->GetRenderFromLight()(Vector3f(0, 0, 1)));
 
-    std::cout << "Vertex radius: " << GetSameSpotRadius(mediumData) * config.graphBuilder.radiusModifier << std::endl;
-
     auto processStart = std::chrono::steady_clock::now();
 
     graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
@@ -135,7 +133,18 @@ int main(int argc, char* argv[]) {
 
         std::string statsFileName = std::regex_replace(configName.value(),
                 std::regex("\\.json"), "_stats.json");
-        graph.WriteStatsToDisk(statsFileName, processDuration);
+        std::string fullPath = util::FileNameToPath(statsFileName);
+        util::CreateParentDirectories(fullPath);
+
+        graph::json stats;
+        graph.AddStats(stats);
+        stats["duration"] = {{"seconds", processDuration}, {"formatted", util::FormatTime(processDuration)}};
+        stats["sizes"] = {{"node_radius", graph.GetVertexRadius()},
+                             {"scene_radius", mediumData.primitiveData.maxDistToCenter}};
+
+        std::ofstream file(fullPath);
+        file << std::setw(4) << stats << std::endl;
+        file.close();
     };
 
     if (config.lightingCalculator.bounces.size() > 1)

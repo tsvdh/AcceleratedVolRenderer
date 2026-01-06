@@ -417,14 +417,9 @@ void Graph::ReadFromStream(std::istream& in) {
     progress.Done();
 }
 
-inline void CreateParentDirectories(const std::string& path) {
-    std::string parentPath = path.substr(0, path.find_last_of('/'));
-    std::filesystem::create_directories(parentPath);
-}
-
 void Graph::WriteToDisk(const std::string& fileName, const std::string& desc) {
     std::string fullPath = util::FileNameToPath(fileName);
-    CreateParentDirectories(fullPath);
+    util::CreateParentDirectories(fullPath);
 
     std::ofstream file(fullPath);
     file << desc << NEW;
@@ -443,9 +438,8 @@ void Graph::WriteToDisk(const std::string& fileName, Description desc) {
     WriteToDisk(fileName, GetDescriptionName(desc));
 }
 
-void Graph::WriteStatsToStream(std::ostream& out, int duration) const {
-    json stats;
-    stats["sizes"] = {{"vertices", GetVerticesConst().size()}, {"edges", GetEdgesConst().size()}};
+void Graph::AddStats(json& stats) const {
+    stats["amounts"] = {{"vertices", GetVerticesConst().size()}, {"edges", GetEdgesConst().size()}};
 
     size_t numEdges = GetEdgesConst().size();
     size_t numEdgesMoreThanOnce = 0;
@@ -465,22 +459,8 @@ void Graph::WriteStatsToStream(std::ostream& out, int duration) const {
         for (auto& [id, vertex] : GetVerticesConst())
             searchRangeAverager.AddValue(vertex.data.renderSearchRange);
         auto [avg, std, var] = searchRangeAverager.GetInfo();
-        stats["search_range"] = {{"avg", avg}, {"std", std}};
+        stats["render_search_range"] = {{"avg", avg}, {"std", std}};
     }
-    if (duration != -1) {
-        stats["duration"] = {{"seconds", duration}, {"formatted", util::FormatTime(duration)}};
-    }
-
-    out << std::setw(4) << stats << std::endl;
-}
-
-void Graph::WriteStatsToDisk(const std::string& fileName, int duration) const {
-    std::string fullPath = util::FileNameToPath(fileName);
-    CreateParentDirectories(fullPath);
-
-    std::ofstream file(fullPath);
-    WriteStatsToStream(file, duration);
-    file.close();
 }
 
 void Graph::CheckSequentialIds() const {

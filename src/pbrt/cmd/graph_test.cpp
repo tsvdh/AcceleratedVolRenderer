@@ -6,5 +6,9 @@
 #include "pbrt/util/print.h"
 
 int main(int argc, char* argv[]) {
-    using json = nlohmann::basic_json<std::map, std::vector, std::string, bool, std::int64_t, std::uint64_t, float>
+    int a = 1000000;
+    int b = 1000000;
+    int c = a * b;
+    int64_t d = a * b;
+    std::cout << c << " " << d << std::endl;
 }
