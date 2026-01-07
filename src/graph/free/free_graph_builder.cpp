@@ -12,8 +12,8 @@ namespace graph {
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config,
                                    bool quiet, int sampleIndexOffset)
     : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, sampleIndexOffset,
-                       Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier),
-                       Sqr(GetSameSpotRadius(mediumData) * config.neighbourReinforcement.neighbourRangeModifier)) {
+        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier),
+        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier) * config.neighbourReinforcement.neighbourRangeModifier) {
 }
 
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config,
@@ -30,6 +30,9 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
 
     if (startingVertex.has_value())
         graph.AddVertexToPath(startingVertex.value(), path.id);
+
+    if (path.Length() >= maxDepth)
+        return;
 
     auto HandlePotentialPathEnd = [&] {
         if (!path.vertices.empty()) {
@@ -56,7 +59,6 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
 
             if (!optIntersection) {
                 HandlePotentialPathEnd();
-                // pathLengths.push_back(path.size());
                 return;
             }
 
@@ -97,7 +99,6 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
         // Handle terminated, scattered, and unscattered medium rays
         HandlePotentialPathEnd();
         if (!optNewInteraction) {
-            // pathLengths.push_back(path.size());
             return;
         }
 
@@ -123,7 +124,7 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
 
         graph.AddVertexToPath(newVertex->id, path.id);
 
-        if (path.vertices.size() >= 2) {
+        if (path.Length() >= 2) {
             int pathSize = path.Length();
             int from = path.vertices[pathSize - 2];
             int to = path.vertices[pathSize - 1];
@@ -132,11 +133,7 @@ void FreeGraphBuilder::TracePath(RayDifferential ray, FreeGraph& graph, int maxD
         }
 
         // terminate if max depth reached
-        int newPathVertices = static_cast<int>(path.vertices.size());
-        if (startingVertex.has_value())
-            --newPathVertices;
-        if (newPathVertices >= maxDepth) {
-            // pathLengths.push_back(path.size());
+        if (path.Length() == maxDepth) {
             path.data.forcedEnd = true;
             return;
         }
@@ -267,14 +264,15 @@ void FreeGraphBuilder::UseAndRemovePathInfo(Graph& graph) {
             continue;
         }
 
-        if (path.Length() == 1 && !path.data.forcedEnd) {
-            graph.inNodePathLengthAverager.AddValue(1);
+        if (path.Length() == 1) {
+            if (!path.data.forcedEnd)
+                graph.inNodePathLengthAverager.AddValue(1);
             continue;
         }
 
         float inNodePathLength = 1;
 
-        for (int i = 0; i < path.vertices.size() - 1; ++i) {
+        for (int i = 0; i < path.Length() - 1; ++i) {
             if (path.vertices[i] == path.vertices[i + 1]) {
                 ++inNodePathLength;
             } else {
@@ -329,7 +327,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     };
 
     auto checkFewEdges = [&]() -> void {
-        ProgressReporter progress(initialVertices.size(), "Checking edges", quiet);
+        ProgressReporter progress(static_cast<int64_t>(initialVertices.size()), "Checking edges", quiet);
 
         currentFewEdges.clear();
         for (int id : initialVertices) {
@@ -349,7 +347,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     };
 
     auto checkFewNeighbours = [&]() -> void {
-        ProgressReporter progress(initialVertices.size(), "Checking neighbours", quiet);
+        ProgressReporter progress(static_cast<int64_t>(initialVertices.size()), "Checking neighbours", quiet);
 
         currentFewNeighbours.clear();
         for (int id : initialVertices) {
@@ -383,11 +381,11 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     while (!edgesSatisfied || !neighboursSatisfied) {
         if (config.edgeReinforcement.active && !edgesSatisfied) {
 
-            ProgressReporter progress(currentFewEdges.size() * config.edgeReinforcement.reinforcementRays,
+            ProgressReporter progress(static_cast<int64_t>(currentFewEdges.size()) * config.edgeReinforcement.reinforcementRays,
                 "Reinforcing edges", false);
 
             ReinforceSparseVertices(graph, currentFewEdges, config.edgeReinforcement, cycle, progress);
-            edgeDuration += progress.ElapsedSeconds();
+            edgeDuration += static_cast<float>(progress.ElapsedSeconds());
 
             if (!quiet) {
                 checkFewEdges();
@@ -399,11 +397,11 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
         }
         if (config.neighbourReinforcement.active && !neighboursSatisfied) {
 
-            ProgressReporter progress(currentFewNeighbours.size() * config.neighbourReinforcement.reinforcementRays,
+            ProgressReporter progress(static_cast<int64_t>(currentFewNeighbours.size()) * config.neighbourReinforcement.reinforcementRays,
                 "Reinforcing neighbours", false);
 
             ReinforceSparseVertices(graph, currentFewNeighbours, config.neighbourReinforcement, cycle, progress);
-            neighbourDuration += progress.ElapsedSeconds();
+            neighbourDuration += static_cast<float>(progress.ElapsedSeconds());
 
             if (!quiet) {
                 checkFewNeighbours();
@@ -425,6 +423,9 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
 void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vector<int>& sparseVertices, const ReinforcementConfig& reinforcementConfig,
         int cycle, ProgressReporter& progress) {
+    if (config.maxDepth == 1)
+        ErrorExit("Unable to reinforce with max depth of 1");
+
     int resolutionDimensionSize = Options->graph.samplingResolution->x;
 
     for (int vertexId : sparseVertices) {
@@ -460,7 +461,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph, const std::vect
 
             float mediumExitTHit = mediumHits.type == util::OutsideTwoHits ? mediumHits.tHits[1] - mediumHits.tHits[0] : mediumHits.tHits[0];
 
-            TracePath(ray, graph, 1, mediumExitTHit, vertexId);
+            TracePath(ray, graph, config.maxDepth, mediumExitTHit, vertexId);
             UseAndRemovePathInfo(graph);
 
             progress.Update();

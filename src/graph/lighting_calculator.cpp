@@ -69,7 +69,7 @@ SparseMat LightingCalculator::GetTransportMatrix() const {
 
         for (auto& [otherVertexId, edgeId] : vertex.outEdges) {
             int edgeSamples = graph.GetEdge(edgeId)->get().data.samples;
-            entries.emplace_back(otherVertexId, currentVertexId,
+            entries.emplace_back(currentVertexId, otherVertexId,
                 static_cast<float>(edgeSamples) / static_cast<float>(samples));
         }
         progress.Update();
@@ -78,7 +78,6 @@ SparseMat LightingCalculator::GetTransportMatrix() const {
 
     SparseMat transportMatrix(numVertices, numVertices);
     transportMatrix.setFromTriplets(entries.begin(), entries.end());
-    transportMatrix = transportMatrix.transpose();
     return transportMatrix;
 }
 
