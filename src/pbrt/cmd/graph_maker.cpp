@@ -20,6 +20,7 @@ Usage: graph_maker [<options>] <filename.pbrt>
 Graph making options:
 --config <filename>         Specifies a config file not in the default location
 --node-radius <radius>      Absolute node radius, overrides the node radius specified in the config file
+--quiet                     If flag is present, no output is written to std::cout
 )");
 }
 
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> fileNames;
     pstd::optional<std::string> configName;
     pstd::optional<float> nodeRadius;
+    bool quiet = false;
 
     for (auto iter = args.begin(); iter != args.end(); ++iter) {
         if ((*iter)[0] != '-') {
@@ -44,7 +46,8 @@ int main(int argc, char* argv[]) {
         };
 
         if (ParseArg(&iter, args.end(), "config", &configName, onError) ||
-            ParseArg(&iter, args.end(), "node-radius", &nodeRadius, onError)) {
+            ParseArg(&iter, args.end(), "node-radius", &nodeRadius, onError) ||
+            ParseArg(&iter, args.end(), "quiet", &quiet, onError)) {
             // argument parsed
         }
         else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
@@ -129,7 +132,7 @@ int main(int argc, char* argv[]) {
 
     if (nodeRadius.has_value())
         Warning("Use of the 'node-radius' flag is only intended for development purposes");
-    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false, nodeRadius);
+    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, quiet, nodeRadius);
     graph::FreeGraph graph = graphBuilder.BuildGraph();
 
     auto writeStats = [&]() -> void {
@@ -147,6 +150,12 @@ int main(int argc, char* argv[]) {
         stats["sizes"] = {{"node_radius", graph.GetVertexRadius()},
                              {"scene_radius", mediumData.primitiveData.maxDistToCenter}};
 
+        if (!quiet) {
+            std::cout << "=== Graph stats ===" << std::endl;
+            std::cout << std::setw(2) << stats << std::endl;
+            std::cout << "===================" << std::endl;
+        }
+
         std::ofstream file(fullPath);
         file << std::setw(4) << stats << std::endl;
         file.close();
@@ -155,7 +164,7 @@ int main(int argc, char* argv[]) {
     if (config.lightingCalculator.bounces.size() > 1)
         writeStats();
 
-    graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, false);
+    graph::LightingCalculator lighting(graph, mediumData, lightDir, sampler, config.lightingCalculator, quiet);
     graph::SparseVec lightVec = lighting.GetLightVector();
     graph::SparseMat transportMat = lighting.GetTransportMatrix();
 
@@ -173,11 +182,13 @@ int main(int argc, char* argv[]) {
         if (config.lightingCalculator.bounces.size() == 1)
             writeStats();
 
-        util::Averager lightAverager(static_cast<int>(graph.GetVertices().size()));
-        for (auto& [id, v] : graph.GetVertices())
-            lightAverager.AddValue(v.data.lightScalar);
+        if (!quiet) {
+            util::Averager lightAverager(static_cast<int>(graph.GetVertices().size()));
+            for (auto& [id, v] : graph.GetVertices())
+                lightAverager.AddValue(v.data.lightScalar);
 
-        std::cout << StringPrintf("Light: %s", lightAverager.PrintInfo()) << std::endl;
+            std::cout << StringPrintf("Light: %s", lightAverager.PrintInfo()) << std::endl;
+        }
 
         std::string graphFileName = std::regex_replace(configName.value(),
             std::regex("\\.json"), StringPrintf("_d%s.txt", depthComputed));

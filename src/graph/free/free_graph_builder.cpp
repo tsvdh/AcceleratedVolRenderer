@@ -210,15 +210,6 @@ FreeGraph FreeGraphBuilder::BuildGraph() {
     ReinforceSparseVertices(graph);
     ComputeSearchRanges(graph);
 
-    if (!quiet) {
-        std::cout << "=== Graph stats ===" << std::endl;
-        json stats;
-        graph.AddStats(stats);
-        stats["node_radius"] = graph.GetVertexRadius();
-        std::cout << std::setw(2) << stats << std::endl;
-        std::cout << "===================" << std::endl;
-    }
-
     return graph;
 }
 
