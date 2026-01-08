@@ -313,16 +313,20 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     };
 
     auto checkFewEdges = [&]() -> void {
-        ProgressReporter progress(static_cast<int64_t>(initialVertices.size()), "Checking edges", quiet);
+        ProgressReporter progress(static_cast<int64_t>(currentFewEdges.size()), "Checking edges", quiet);
 
-        currentFewEdges.clear();
-        for (int id : initialVertices) {
+        std::vector<int> currentFewEdgesTemp;
+        currentFewEdgesTemp.reserve(currentFewEdgesTemp.size());
+
+        for (int id : currentFewEdges) {
             Vertex& vertex = graph.GetVertex(id)->get();
             if (vertex.outEdges.size() < config.edgeReinforcement.edgesForNotSparse)
-                currentFewEdges.push_back(id);
+                currentFewEdgesTemp.push_back(id);
             progress.Update();
         }
+        currentFewEdges = currentFewEdgesTemp;
         progress.Done();
+
         if (!quiet) {
             std::cout << "\x1b[1A";
             ClearLine();
@@ -333,16 +337,20 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
     };
 
     auto checkFewNeighbours = [&]() -> void {
-        ProgressReporter progress(static_cast<int64_t>(initialVertices.size()), "Checking neighbours", quiet);
+        ProgressReporter progress(static_cast<int64_t>(currentFewNeighbours.size()), "Checking neighbours", quiet);
 
-        currentFewNeighbours.clear();
-        for (int id : initialVertices) {
+        std::vector<int> currentFewNeighboursTemp;
+        currentFewNeighboursTemp.reserve(currentFewNeighbours.size());
+
+        for (int id : currentFewNeighbours) {
             Vertex& vertex = graph.GetVertex(id)->get();
             if (CountInRadius(vertex.point, squaredNeighbourSearchRadius) < config.neighbourReinforcement.neighboursForNotSparse)
-                currentFewNeighbours.push_back(id);
+                currentFewNeighboursTemp.push_back(id);
             progress.Update();
         }
+        currentFewNeighbours = currentFewNeighboursTemp;
         progress.Done();
+
         if (!quiet) {
             std::cout << "\x1b[1A";
             ClearLine();
@@ -354,6 +362,9 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
 
     for (auto& [id, vertex] : graph.GetVertices())
         initialVertices.push_back(id);
+
+    currentFewEdges = initialVertices;
+    currentFewNeighbours = initialVertices;
 
     if (config.edgeReinforcement.active)
         checkFewEdges();
