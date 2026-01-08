@@ -18,7 +18,8 @@ static void usage() {
 Usage: graph_maker [<options>] <filename.pbrt>
 
 Graph making options:
---config <filename>     Specifies a config file not in the default location
+--config <filename>         Specifies a config file not in the default location
+--node-radius <radius>      Absolute node radius, overrides the node radius specified in the config file
 )");
 }
 
@@ -29,6 +30,7 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::string> fileNames;
     pstd::optional<std::string> configName;
+    pstd::optional<float> nodeRadius;
 
     for (auto iter = args.begin(); iter != args.end(); ++iter) {
         if ((*iter)[0] != '-') {
@@ -41,7 +43,8 @@ int main(int argc, char* argv[]) {
             exit(1);
         };
 
-        if (ParseArg(&iter, args.end(), "config", &configName, onError)) {
+        if (ParseArg(&iter, args.end(), "config", &configName, onError) ||
+            ParseArg(&iter, args.end(), "node-radius", &nodeRadius, onError)) {
             // argument parsed
         }
         else if (*iter == "--help" || *iter == "-help" || *iter == "-h") {
@@ -124,7 +127,9 @@ int main(int argc, char* argv[]) {
 
     auto processStart = std::chrono::steady_clock::now();
 
-    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false);
+    if (nodeRadius.has_value())
+        Warning("Use of the 'node-radius' flag is only intended for development purposes");
+    graph::FreeGraphBuilder graphBuilder(mediumData, lightDir, sampler, config.graphBuilder, false, nodeRadius);
     graph::FreeGraph graph = graphBuilder.BuildGraph();
 
     auto writeStats = [&]() -> void {

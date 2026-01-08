@@ -9,9 +9,7 @@ using namespace pbrt;
 class FreeGraphBuilder {
 public:
     FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config, bool quiet,
-                     int sampleIndexOffset = 0);
-    FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config, bool quiet,
-                     int sampleIndexOffset, float squaredSearchRadius, float squaredNeighbourSearchRadius);
+                     const pstd::optional<float>& nodeRadius, int sampleIndexOffset = 0);
 
     FreeGraph BuildGraph();
 
@@ -36,7 +34,6 @@ private:
     GraphBuilderConfig config;
     bool quiet;
     float squaredSearchRadius;
-    float squaredNeighbourSearchRadius;
     int sampleIndexOffset;
 };
 }

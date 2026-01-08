@@ -10,16 +10,9 @@
 
 namespace graph {
 FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config,
-                                   bool quiet, int sampleIndexOffset)
-    : FreeGraphBuilder(mediumData, inDirection, std::move(sampler), config, quiet, sampleIndexOffset,
-        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier),
-        Sqr(GetSameSpotRadius(mediumData) * config.radiusModifier) * config.neighbourReinforcement.neighbourRangeModifier) {
-}
-
-FreeGraphBuilder::FreeGraphBuilder(const util::MediumData& mediumData, Vector3f inDirection, Sampler sampler, const GraphBuilderConfig& config,
-                                   bool quiet, int sampleIndexOffset, float squaredSearchRadius, float squaredNeighbourSearchRadius)
-    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet),
-      squaredSearchRadius(squaredSearchRadius), squaredNeighbourSearchRadius(squaredNeighbourSearchRadius), sampleIndexOffset(sampleIndexOffset) {
+                                   bool quiet, const pstd::optional<float>& nodeRadius, int sampleIndexOffset)
+    : mediumData(mediumData), inDirection(inDirection), sampler(std::move(sampler)), config(config), quiet(quiet), sampleIndexOffset(sampleIndexOffset) {
+    this->squaredSearchRadius = Sqr(nodeRadius.value_or(GetSameSpotRadius(mediumData) * config.radiusModifier));
     searchTree = std::make_unique<DynamicTreeType>(3, vHolder);
 }
 
@@ -299,6 +292,8 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
         return;
     if (!quiet)
         std::cout << "--- Graph Reinforcement ---" << std::endl;
+
+    float squaredNeighbourSearchRadius = Sqr(sqrt(squaredSearchRadius) * config.neighbourReinforcement.neighbourRangeModifier);
 
     bool edgesSatisfied = true, neighboursSatisfied = true;
     float edgesUnsatisfiedRatio = 0, neighboursUnsatisfiedRatio = 0;
