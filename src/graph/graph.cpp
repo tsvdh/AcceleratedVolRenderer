@@ -66,9 +66,7 @@ OptRefConst<Path> Graph::GetPathConst(int id) const { return GetByIdConst(id, pa
 
 template<typename T>
 OptRef<T> GetById(int id,  std::unordered_map<int, T>& collection) {
-
     auto result = collection.find(id);
-
     if (result == collection.end())
         return {};
 

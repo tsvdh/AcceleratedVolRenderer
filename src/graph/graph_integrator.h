@@ -58,7 +58,6 @@ protected:
     std::unique_ptr<StaticTreeType> searchTree;
     util::VerticesHolder vHolder;
     float squaredVertexRadius = -1;
-    std::vector<float> squaredSearchRanges;
     float maxSquaredSearchRange = -1;
     float perc99SquaredSearchRange = -1;
 };

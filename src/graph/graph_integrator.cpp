@@ -52,18 +52,25 @@ void GraphIntegrator::Initialize() {
 
         squaredVertexRadius = Sqr(freeGraph->GetVertexRadius());
 
-        maxSquaredSearchRange = -1;
         if (freeGraph->streamFlags->useRenderSearchRange) {
+            util::TaskTimeTracker squaredSearchRangesTracker("Processing search ranges", false);
+            squaredSearchRangesTracker.Start();
+
+            std::vector<float> squaredSearchRanges;
+            squaredSearchRanges.reserve(freeGraph->GetVertices().size());
+            maxSquaredSearchRange = -1;
+
             for (int id = 0; id < freeGraph->GetVertices().size(); ++id) {
                 Vertex& vertex = freeGraph->GetVertex(id)->get();
                 squaredSearchRanges.push_back(Sqr(vertex.data.renderSearchRange));
-                maxSquaredSearchRange = std::max(maxSquaredSearchRange, squaredSearchRanges.back());
             }
-        }
 
-        std::vector squaredSearchRangesCopy = squaredSearchRanges;
-        std::sort(squaredSearchRangesCopy.begin(), squaredSearchRangesCopy.end());
-        perc99SquaredSearchRange = squaredSearchRangesCopy[squaredSearchRangesCopy.size() * 99 / 100];
+            std::sort(squaredSearchRanges.begin(), squaredSearchRanges.end());
+            maxSquaredSearchRange = squaredSearchRanges.back();
+            perc99SquaredSearchRange = squaredSearchRanges[squaredSearchRanges.size() * 99 / 100];
+
+            squaredSearchRangesTracker.End();
+        }
 
         util::TaskTimeTracker kdTreeTracker("Building kd-tree", false);
         kdTreeTracker.Start();
@@ -246,7 +253,8 @@ float GraphIntegrator::ConnectToGraph(Point3f searchPoint) const {
     std::vector<nanoflann::ResultItem<int, float>> resultItems;
     auto filterResultItems = [&]() -> void {
         resultItems.erase(std::remove_if(resultItems.begin(), resultItems.end(), [&](auto resultItem) {
-            return resultItem.second > squaredSearchRanges[resultItem.first];
+            const Vertex& vertex = freeGraph->GetVertexConst(resultItem.first)->get();
+            return resultItem.second > Sqr(vertex.data.renderSearchRange);
         }), resultItems.end());
     };
 

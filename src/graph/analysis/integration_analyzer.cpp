@@ -69,7 +69,8 @@ void IntegrationAnalyzer::AnalyzeRay(RayDifferential ray, Sampler sampler, const
         searchTree->radiusSearch(searchPointArray, maxSquaredSearchRange, resultItems);
 
         resultItems.erase(std::remove_if(resultItems.begin(), resultItems.end(), [&](auto resultItem) {
-            return resultItem.second > squaredSearchRanges[resultItem.first];
+            const Vertex& vertex = freeGraph->GetVertexConst(resultItem.first)->get();
+            return resultItem.second > Sqr(vertex.data.renderSearchRange);
         }), resultItems.end());
 
         if (resultItems.size() > 0) {

@@ -299,7 +299,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
         if (!config.edgeReinforcement.active)
             std::cout << "Edges: inactive" << std::endl;
         else
-            std::cout << StringPrintf("Edges: %s / %s; %.3f (%s)               ",
+            std::cout << StringPrintf("Edges: %s / %s; %f (%s)               ",
                 currentFewEdges.size(), initialVertices.size(), edgesUnsatisfiedRatio, util::FormatTime(edgeDuration)) << std::endl;
     };
     auto printNeighbourStatus = [&]() -> void {
@@ -308,7 +308,7 @@ void FreeGraphBuilder::ReinforceSparseVertices(FreeGraph& graph) {
         if (!config.neighbourReinforcement.active)
             std::cout << "Neighbours: inactive" << std::endl;
         else
-            std::cout << StringPrintf("Neighbours: %s / %s; %.3f (%s)          ",
+            std::cout << StringPrintf("Neighbours: %s / %s; %f (%s)          ",
                 currentFewNeighbours.size(), initialVertices.size(), neighboursUnsatisfiedRatio, util::FormatTime(neighbourDuration)) << std::endl;
     };
 
@@ -496,7 +496,12 @@ std::vector<nanoflann::ResultItem<int, float>> FreeGraphBuilder::GetNClosest(con
 }
 
 void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
-    int nClosest = config.renderSearchRangeConfig.neighboursToUse;
+    RenderSearchRangeConfig renderSearchRangeConfig = config.renderSearchRangeConfig;
+
+    if (!renderSearchRangeConfig.active)
+        return;
+
+    int nClosest = renderSearchRangeConfig.neighboursToUse;
     int numVertices = static_cast<int>(graph.GetVertices().size());
 
     if (nClosest > numVertices)
@@ -510,7 +515,7 @@ void FreeGraphBuilder::ComputeSearchRanges(FreeGraph& graph) {
     avgDistToNeighbours.assign(numVertices, -1);
     neighbours.assign(numVertices, std::vector(nClosest, -1));
 
-    ParallelFor(0, numVertices, config.renderSearchRangeConfig.runInParallel, [&](int index) {
+    ParallelFor(0, numVertices, renderSearchRangeConfig.runInParallel, [&](int index) {
         Vertex& vertex = graph.GetVertex(index)->get();
 
         util::Averager distAverager(nClosest);

@@ -18,9 +18,9 @@ static void usage() {
 Usage: graph_maker [<options>] <filename.pbrt>
 
 Graph making options:
---config <filename>         Specifies a config file not in the default location
---node-radius <radius>      Absolute node radius, overrides the node radius specified in the config file
---quiet                     If flag is present, no output is written to std::cout
+--config <filename>                 Specifies a config file not in the default location
+--node-radius <radius>              Absolute node radius, overrides the node radius specified in the config file
+--quiet                             Disables writing output to std::cout
 )");
 }
 
@@ -169,7 +169,8 @@ int main(int argc, char* argv[]) {
     graph::SparseMat transportMat = lighting.GetTransportMatrix();
 
     graph.streamOptions = graph::StreamOptions{true, false, false};
-    graph.streamFlags = graph::StreamFlags{false, false, false, true, true};
+    graph.streamFlags = graph::StreamFlags{false, false, false, true,
+        config.graphBuilder.renderSearchRangeConfig.active};
 
     for (int bouncesIndex = 0; bouncesIndex < config.lightingCalculator.bounces.size(); ++bouncesIndex) {
         int bounces = config.lightingCalculator.bounces[bouncesIndex];

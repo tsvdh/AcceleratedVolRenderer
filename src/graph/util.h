@@ -720,6 +720,7 @@ struct NeighbourReinforcementConfig : ReinforcementConfig {
 };
 
 struct RenderSearchRangeConfig {
+    bool active;
     int neighboursToUse;
     bool runInParallel;
 };
@@ -774,6 +775,7 @@ inline void from_json(const json& jsonObject, NeighbourReinforcementConfig& neig
 
 inline void from_json(const json& jsonObject, RenderSearchRangeConfig& renderSearchRangeConfig) {
     auto renderSearchRange = jsonObject.at("renderSearchRange");
+    renderSearchRange.at("active").get_to(renderSearchRangeConfig.active);
     renderSearchRange.at("neighboursToUse").get_to(renderSearchRangeConfig.neighboursToUse);
     renderSearchRange.at("runInParallel").get_to(renderSearchRangeConfig.runInParallel);
 }
